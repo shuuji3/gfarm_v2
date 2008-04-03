@@ -1,0 +1,45 @@
+Release note for Gfarm 2.0.0
+============================
+
+The Gfarm file system is a distributed file system consisting of the
+local storage of commodity PCs.  Many PCs in a local area network,
+compute nodes in a single cluster, multiple clusters in wide area,
+comprise a large-scale, high-performance shared network file system.
+
+Gfarm 2.0.0 (aka Gfarm v2) is a major new release to solve several
+security issues found in Gfarm v1 and to improve performance for small
+files.
+
+[2007.11.28]
+
+Features
+
+ * Gfarm file system metadata daemon (gfmd)
+
+   Gfmd manages file system metadata including locations of file
+   replicas, and monitors file system nodes.
+
+ * Gfarm file system daemon (gfsd)
+
+   Gfsd is an I/O daemon running on every file system node for remote
+   file operations and a file replication.
+
+ * Client commands
+
+   file management - gfls, gfreg, gfrm, gfmv, gfexport, gfstat
+   file replica management - gfwhere, gfrep
+   directory management - gfmkdir, gfrmdir
+   host management - gfhost
+   security - gfkey
+   user/group management - gfuser, gfchmod, gfchown
+   configuration - config-gfarm, config-gfsd
+
+ * GfarmFS-FUSE (gfarm2fs)
+
+   GfarmFS-FUSE enables to mount a Gfarm file system in userspace.
+
+Unsupported features
+
+ * GSI authentication
+
+$Id$
