@@ -24,13 +24,13 @@ CREATE TABLE GfarmUser (
 );
 
 CREATE TABLE GfarmGroup (
-	groupname	TEXT	PRIMARY KEY
+	groupname	VARCHAR(64)	PRIMARY KEY
 );
 
 CREATE TABLE GfarmGroupAssignment (
 	username	VARCHAR(64)
 		REFERENCES GfarmUser(username) ON DELETE CASCADE,
-	groupname	TEXT
+	groupname	VARCHAR(64)
 		REFERENCES GfarmGroup(groupname) ON DELETE CASCADE,
 	PRIMARY KEY(username, groupname)
 );
@@ -43,7 +43,7 @@ CREATE TABLE INode (
 	size		INT8		NOT NULL,
 	mode		INTEGER		NOT NULL,
 	username	VARCHAR(64)	NOT NULL,
-	groupname	TEXT		NOT NULL,
+	groupname	VARCHAR(64)	NOT NULL,
 	atimesec	INT8		NOT NULL,
 	atimensec	INTEGER		NOT NULL,
 	mtimesec	INT8		NOT NULL,
@@ -88,12 +88,4 @@ CREATE INDEX dirEntryByINode ON DirEntry (dirINumber);
 CREATE TABLE Symlink (
 	inumber		INT8		PRIMARY KEY,
 	sourcePath	VARCHAR(1024)	NOT NULL
-);
-
-CREATE TABLE XAttr (
-	inumber		INT8		NOT NULL
-		REFERENCES INode(inumber) ON DELETE CASCADE,
-	attrname	VARCHAR(256)	NOT NULL,
-	attrvalue	BYTEA	NOT NULL,
-	PRIMARY KEY(inumber, attrname)
 );

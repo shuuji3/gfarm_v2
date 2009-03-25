@@ -57,7 +57,6 @@
 #include "fs.h"
 #include "job.h"
 #include "back_channel.h"
-#include "xattr.h"
 
 #include "protocol_state.h"
 
@@ -273,33 +272,6 @@ protocol_switch(struct peer *peer, int from_client, int skip, int level,
 		break;
 	case GFM_PROTO_GETDIRENTSPLUS:
 		e = gfm_server_getdirentsplus(peer, from_client, skip);
-		break;
-	case GFM_PROTO_XATTR_SET:
-		e = gfm_server_setxattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_SET:
-		e = gfm_server_setxattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XATTR_GET:
-		e = gfm_server_getxattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_GET:
-		e = gfm_server_getxattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XATTR_REMOVE:
-		e = gfm_server_removexattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_REMOVE:
-		e = gfm_server_removexattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XATTR_LIST:
-		e = gfm_server_listxattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_LIST:
-		e = gfm_server_listxattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XMLATTR_FIND:
-		e = gfm_server_findxmlattr(peer, from_client, skip);
 		break;
 	case GFM_PROTO_REOPEN:
 		e = gfm_server_reopen(peer, from_client, skip);
@@ -577,10 +549,6 @@ peer_authorize(struct peer *peer)
 			return (GFARM_ERR_NO_MEMORY);
 		}
 	}
-	/*
-	 * XXX gfarm_authorize should be called in a detached thread
-	 * for a client not a thread for the main loop.
-	 */
 	e = gfarm_authorize(peer_get_conn(peer), 0, GFM_SERVICE_TAG,
 	    hostname, &addr,
 	    &id_type, &username, &auth_method);
@@ -732,7 +700,7 @@ sigs_handler(void *p)
 		if (sigwait(sigs, &sig) == -1)
 			gflog_warning("sigs_handler: %s", strerror(errno));
 #ifdef __linux__
-		/*
+		/* 
 		 * On linux-2.6.11 on Fedora Core 4,
 		 * spurious signal sig=8195840 arrives.
 		 * On debian-etch 4.0, signal 0 arrives.
@@ -831,7 +799,7 @@ main(int argc, char **argv)
 		case 'L':
 			syslog_level = gflog_syslog_name_to_priority(optarg);
 			if (syslog_level == -1)
-				gflog_fatal("-L %s: invalid syslog priority",
+				gflog_fatal("-L %s: invalid syslog priority", 
 				    optarg);
 			break;
 		case 'P':

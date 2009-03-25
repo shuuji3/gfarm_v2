@@ -2,8 +2,6 @@ top_builddir = ..
 top_srcdir = $(top_builddir)
 srcdir = .
 
-GFVOMS_SYNC_TARGETS = gfvoms-sync
-
 include $(top_srcdir)/makes/var.mk
 
 SUBDIRS = \
@@ -12,7 +10,6 @@ SUBDIRS = \
 	gfdf \
 	gfdump \
 	gfexport \
-	gffindxmlattr \
 	gfgroup \
 	gfhost \
 	gfkey \
@@ -27,10 +24,8 @@ SUBDIRS = \
 	gfstat \
 	gfstatus \
 	gfuser \
-	$(gfvoms_sync_targets) \
 	gfwhere \
 	gfwhoami \
-	gfxattr \
 	config-gfarm
 
 #	gfexec \

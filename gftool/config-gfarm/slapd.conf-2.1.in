@@ -9,7 +9,6 @@ pidfile		@config_gfarm_run_dir@/gfarm-slapd.pid
 argsfile	@config_gfarm_run_dir@/gfarm-slapd.args
 
 # disable anonymous access
-defaultaccess none
 disallow bind_anon
 require LDAPv3 authc
 
@@ -43,6 +42,10 @@ access to dn.children="@config_gfarm_ldap_base_dn@"
 access to dn="@config_gfarm_ldap_base_dn@" attrs=children
 	by users write
 
+# to make the gfarm_ldap_sanity() function happy
+access to dn="@config_gfarm_ldap_base_dn@"
+	by users read
+
 # Indices to maintain
 index	objectClass	eq
 
@@ -53,4 +56,3 @@ index	groupname	pres,eq
 index	groupusers	pres,eq
 index	inumber		pres,eq
 index	entryName	pres,eq
-index	attrname	pres,eq

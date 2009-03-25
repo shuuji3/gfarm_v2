@@ -979,7 +979,7 @@ fi
 ###### Checks for header files.
 ######
 
-AC_CHECK_HEADERS(inttypes.h shadow.h crypt.h machine/endian.h attr/xattr.h sys/xattr.h sys/loadavg.h)
+AC_CHECK_HEADERS(inttypes.h shadow.h crypt.h machine/endian.h attr/xattr.h sys/loadavg.h)
 
 ######
 ###### Checks for types.
@@ -1234,70 +1234,6 @@ fi
 AC_SUBST(config_gfarm_sysdep_subdir)
 
 ###
-### --enable-voms
-###
-AC_ARG_ENABLE(voms,
-AS_HELP_STRING([--enable-voms],[Enable voms collaboration.[[default=yes]]]),
-[if test "${enable_voms}" = "yes"; then
-  AC_CHECK_PROG(PYTHON_SPECIFIED, python, yes, no)
-  gfvoms_sync_targets=''
-  AC_MSG_CHECKING(voms-collaboration available)
-  voms_available="no"
-  if test "${PYTHON_SPECIFIED}" = "yes" ;then
-    py_ver=`python -V 2>&1 | sed -e 's/Python \([[0-9\.]]*\).*/\1/'`
-    case $py_ver in
-      2.[[3456]].*)
-        imp_path=`python -c "import sys; print sys.path" | sed -e 's/^\[[\(.*\)\]]$/\1/' | sed -e "s/[[,']]//g"`
-        found=0
-        for d in $imp_path
-        do
-          if test -d $d/ZSI ; then
-            found=1
-            break 1
-          fi
-        done
-        if test $found -eq 0 ; then
-          break 1
-        fi
-        found=0
-        for d in $imp_path
-        do
-          if test -d $d/_xmlplus ; then
-            found=1
-            break 1
-          fi
-        done
-        if test $found -eq 0 ; then
-          break 1
-        fi
-        imp_test=`python -c "import ZSI" 2>&1`
-        if test ${#imp_test} == 0; then
-          gfvoms_sync_targets='${GFVOMS_SYNC_TARGETS}'
-          voms_available="yes"
-        fi
-        ;;
-    esac
-  fi
-  AC_MSG_RESULT(${voms_available})
-else
-  gfvoms_sync_targets=''
-fi
-],
-[gfvoms_sync_targets=''
-])
-AC_SUBST(gfvoms_sync_targets)
-
-###
-###  --enable-xmlattr		support XML extended attributs and searching by XPath
-###
-
-AC_ARG_ENABLE(xmlattr,
-AS_HELP_STRING([--enable-xmlattr],[support XML extended attributs and searching by XPath.[[default=yes]]]),
-[if test "${enable_xmlattr}" = "yes"; then
-	AC_DEFINE(ENABLE_XMLATTR, 1, [support XML extended attributs and searching by XPath])
-fi],[])
-
-###
 ### ns
 ###
 
@@ -1324,7 +1260,7 @@ test -d util || mkdir util
 AC_CONFIG_FILES(Makefile makes/config.mk makes/install-doc
 	${ns_makefiles}
 	gftool/config-gfarm/config-gfarm gftool/config-gfarm/config-gfsd
-	gftool/gfdump/gfdump.postgresql
+	gftool/config-gfarm/config-gfarm-update gftool/gfdump/gfdump.postgresql
 	package/solaris/gfmd package/solaris/gfsd
 )
 AC_OUTPUT
