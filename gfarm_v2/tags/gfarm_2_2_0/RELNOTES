@@ -1,0 +1,176 @@
+Release note for Gfarm 2.2.0
+============================
+
+[2009.3.26]
+
+New Feature
+* symbolic link support
+* hundreds of clients support by thread pool
+* directory listing speedup by attribute cache
+
+New Command
+* gfstatus - display Gfarm configuration status
+* gfln - create a hard link or a symbolic link
+
+New Admin Command
+* config-gfarm-update - update the backend database.
+  'config-gfarm-update --update-symlink' updates the backend database
+  to manage symbolic links.  Note that the postgresql backend is only
+  supported for now.
+
+New API
+* gfs_symlink, gfs_readlink - symbolic link support
+* gfs_lstat
+
+New configuration in gfmd.conf
+* metadb_server_stack_size directive to specify a stack size of
+  threads
+* metadb_server_thread_pool_size directive to specify the maximum
+  number of threads in a thread pool
+* metadb_server_job_queue_length directive to specify the length of a
+  job request queue
+* metadb_server_heartbeat_interval directive to specify the interval
+  of heartbeat to each gfsd
+
+Documentation
+* manual pages -  gfchgrp(1), gfchmod(1), gfchown(1), gfgroup(1),
+  gfhost(1), gfln(1), gfls(1), gfmv(1), gfstatus(1), gfuser(1).
+* manual pages in HTML
+
+Updated feature
+* gfls - accomodate attribute caching and support display regarding
+  symlinks and hardlinks
+* gfchmod - display more user friendly error message
+* gfmd - support hundreds of clients by introducing a thread pool
+* gfmd - authorize peers concurrently by making network related
+  functions MT safe
+* gfmd - schedule the local host only when it has enough disk space
+* gfsd - support gfmd reconnection at the start up
+* (GSI) allow to delegate a limited proxy
+* (GSI) disable GSS_C_NT_USER_NAME (spool_server_cred_type user) by
+  default since it is not supported by Globus GSI
+
+Bug fix
+* libgfarm - fix missing intialization of a pointer
+* gfmd - fix race condition
+* gfsd - fix -c and -cc options to check invalid files not only
+  invalid file replicas
+* gfsd - terminate the master process when the back channel process dies
+* (GSI) use distinguished name of delegated credential
+
+Release note for Gfarm 2.1.1
+============================
+
+[2008.9.27]
+
+New Feature
+* on-demand replication
+
+New Command
+* gfdump.postgresql - gfdump for postgresql backend
+
+New API
+* gfs_link - hardlink support
+  [contribution from Rainer Rohmfeld]
+
+Documentation
+* manual pages - gfrep(1)
+
+Updated feature
+* gfgroup - group membership modification support
+* C++ support
+* support Globus 4.2.0
+
+Bug fix
+* segfault when listing a directory that includes a removed user
+  [sf.net tracker bugs #2009543]
+* race condition during authentication
+* LP64 portability problem when using GSI authentication
+* "too many open files" problem when replicating many files
+
+Release note for Gfarm 2.1.0
+============================
+
+[2008.5.27]
+
+New Feature
+* Grid Security Infrastructure (GSI) support
+
+New Command
+* gfgroup - manage groups
+* gfdf - report usage of Gfarm file system
+
+New API
+* gfs_statfs(3)
+* gfs_replicate_to(3), gfs_migrate_to(3), gfs_migrate_from_to(3)
+
+Documentation
+* manual pages - gfdf(1), gfmkdir(1), gfrmdir(1), gfwhere(1), gfwhoami(1),
+  gfkey(1), gfarm2.conf(5), gfsd(8), and gfmd(8).
+* SETUP, Gfarm-FAQ
+
+Performance enhancement
+* enlarge the block size of remote I/O from 256KB to 1MB to improve
+  remote read/write performance from a distant location
+
+Updated feature
+* gfrep - full feature support
+* gfrm - support deletion of a file replica
+* gfsd - support a feature to check a spool directory when starting up
+* config-gfarm - support of a private mode and GSI
+
+Bug fix
+* gfhost - port number cannot be modified
+* gfrep - recover the state when replica creation fails
+  [sf.net tracker bugs #1929840]
+* a security hole of GFS_PROTO_REPLICA_RECV, pointed out by
+  [gfarm-discuss-ja:03295]
+* possible segfault when deleting a user or a host
+* default available capacity is set accidentally to 100GB
+* fix race condition when obtaining all host information
+
+Release note for Gfarm 2.0.0
+============================
+
+The Gfarm file system is a distributed file system consisting of the
+local storage of commodity PCs.  Many PCs in a local area network,
+compute nodes in a single cluster, multiple clusters in wide area,
+comprise a large-scale, high-performance shared network file system.
+
+Gfarm 2.0.0 (aka Gfarm v2) is a major new release to solve several
+security issues found in Gfarm v1 and to improve performance for small
+files.
+
+[2007.11.28]
+
+Features
+
+ * Gfarm file system metadata daemon (gfmd)
+
+   Gfmd manages file system metadata including locations of file
+   replicas, and monitors file system nodes.
+
+ * Gfarm file system daemon (gfsd)
+
+   Gfsd is an I/O daemon running on every file system node for remote
+   file operations and a file replication.
+
+ * Client commands
+
+   file management - gfls, gfreg, gfrm, gfmv, gfexport, gfstat
+   file replica management - gfwhere, gfrep
+   directory management - gfmkdir, gfrmdir
+   host management - gfhost
+   security - gfkey
+   user/group management - gfuser, gfchmod, gfchown
+   configuration - config-gfarm, config-gfsd
+
+ * GfarmFS-FUSE (gfarm2fs)
+
+   GfarmFS-FUSE enables to mount a Gfarm file system in userspace.
+
+Unsupported features
+
+ * GSI authentication
+
+$Id$
