@@ -9,10 +9,9 @@ include $(top_srcdir)/makes/var.mk
 LIBRARY = libgfarmcore.la
 LIBRARY_RESULT = # do not install
 
-GLOBUS_SRCS = auth_client_gsi.c auth_common_gsi.c \
-	auth_server_gsi.c auth_server_uid_gsi.c io_gfsl.c
-GLOBUS_OBJS = auth_client_gsi.lo auth_common_gsi.lo \
-	auth_server_gsi.lo auth_server_uid_gsi.lo io_gfsl.lo
+GLOBUS_SRCS = auth_client_gsi.c auth_common_gsi.c auth_server_gsi.c io_gfsl.c
+GLOBUS_OBJS = auth_client_gsi.lo auth_common_gsi.lo auth_server_gsi.lo \
+	io_gfsl.lo
 GLOBUS_CFLAGS = -I$(GFSL_SRCDIR) $(globus_includes)
 
 SRCS = \
@@ -32,12 +31,11 @@ SRCS = \
 	gfs_proto.c \
 	io_fd.c \
 	metadb_common.c \
+	metadb_server.c \
 	auth_common.c \
 	auth_client.c \
 	auth_server.c \
-	auth_server_uid.c \
 	conn_hash.c \
-	conn_cache.c \
 	gfm_client.c \
 	gfs_client.c \
 	lookup.c \
@@ -66,11 +64,9 @@ SRCS = \
 	gfs_unlink.c \
 	gfs_util.c \
 	gfs_utimes.c \
-	gfs_xattr.c \
 	gfarm_foreach.c \
 	glob.c \
 	schedule.c \
-	sockutil.c \
 	timespec.c \
 	url.c \
 	$(globus_srcs)
@@ -78,6 +74,7 @@ SRCS = \
 #	gfs_pio_global.c \
 #	gfs_pio_misc.c \
 #	gfs_exec.c \
+#	import_help.c \
 
 #	$(ldap_srcs) $(postgresql_srcs) $(globus_srcs)
 
@@ -98,12 +95,11 @@ OBJS = \
 	gfs_proto.lo \
 	io_fd.lo \
 	metadb_common.lo \
+	metadb_server.lo \
 	auth_common.lo \
 	auth_client.lo \
 	auth_server.lo \
-	auth_server_uid.lo \
 	conn_hash.lo \
-	conn_cache.lo \
 	gfm_client.lo \
 	gfs_client.lo \
 	lookup.lo \
@@ -132,11 +128,9 @@ OBJS = \
 	gfs_unlink.lo \
 	gfs_util.lo \
 	gfs_utimes.lo \
-	gfs_xattr.lo \
 	gfarm_foreach.lo \
 	glob.lo \
 	schedule.lo \
-	sockutil.lo \
 	timespec.lo \
 	url.lo \
 	$(globus_objs)
@@ -144,6 +138,7 @@ OBJS = \
 #	gfs_pio_global.lo \
 #	gfs_pio_misc.lo \
 #	gfs_exec.lo \
+#	import_help.lo \
 
 #	$(ldap_srcs) $(postgresql_srcs) $(globus_srcs)
 
@@ -165,41 +160,36 @@ auth_client_gsi.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/gfevent.h $(GFSL_
 auth_common.lo: auth.h
 auth_common_gsi.lo: $(GFUTIL_SRCDIR)/gfutil.h $ $(GFSL_SRCDIR)/gfarm_secure_session.h $(GFSL_SRCDIR)/gfarm_auth.h gfpath.h auth.h auth_gsi.h
 auth_config.lo: hostspec.h auth.h
-auth_server.lo: $(GFUTIL_SRCDIR)/gfutil.h liberror.h hostspec.h auth.h gfp_xdr.h gfs_proto.h
+auth_server.lo: $(GFUTIL_SRCDIR)/gfutil.h hostspec.h auth.h
 auth_server_gsi.lo: $(GFSL_SRCDIR)/gfarm_secure_session.h $(GFSL_SRCDIR)/gfarm_auth.h $(GFUTIL_SRCDIR)/gfutil.h io_fd.h io_gfsl.h auth.h auth_gsi.h
-auth_server_uid.lo: $(GFUTIL_SRCDIR)/gfutil.h auth.h gfm_client.h
-auth_server_uid_gsi.lo: $(GFUTIL_SRCDIR)/gfutil.h auth.h gfm_client.h
 config.lo: $(GFUTIL_SRCDIR)/gfutil.h gfpath.h hostspec.h host.h param.h sockopt.h auth.h config.h gfm_proto.h gfs_proto.h gfs_client.h gfs_pio.h $(GFUTIL_SRCDIR)/timer.h $(top_builddir)/makes/config.mk # $(GFARM_CONFIG) -> $(sysconfdir)
-conn_hash.lo: $(GFUTIL_SRCDIR)/hash.h conn_hash.h
 error.lo: $(GFUTIL_SRCDIR)/hash.h
-conn_cache.lo: $(GFUTIL_SRCDIR)/hash.h $(GFUTIL_SRCDIR)/lru_cache.h conn_hash.h conn_cache.h
-gfm_client.lo: $(GFUTIL_SRCDIR)/hash.h $(GFUTIL_SRCDIR)/gfnetdb.h gfp_xdr.h io_fd.h sockopt.h auth.h config.h conn_cache.h gfm_proto.h gfm_client.h gfj_client.h xattr_info.h gfm_client.h
-gfs_client.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/gfevent.h $(GFUTIL_SRCDIR)/hash.h $(GFUTIL_SRCDIR)/lru_cache.h liberror.h sockutil.h iobuffer.h gfp_xdr.h io_fd.h host.h param.h sockopt.h auth.h config.h conn_cache.h gfs_proto.h gfs_client.h
+gfm_client.lo: $(GFUTIL_SRCDIR)/hash.h io_fd.h sockopt.h auth.h config.h gfm_proto.h gfj_client.h
+gfs_client.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/gfevent.h $(GFUTIL_SRCDIR)/hash.h iobuffer.h io_fd.h host.h param.h sockopt.h auth.h config.h gfs_proto.h gfs_client.h
 gfs_dir.lo: $(GFUTIL_SRCDIR)/timer.h $(GFUTIL_SRCDIR)/gfutil.h gfs_profile.h gfm_client.h config.h lookup.h gfs_io.h gfs_dir.h
 gfs_dirplus.lo: $(GFUTIL_SRCDIR)/gfutil.h config.h gfm_client.h gfs_io.h
 gfs_dircache.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/hash.h config.h gfs_dir.h gfs_dircache.h
 gfs_exec.lo: gfs_pio.h
 gfs_io.lo: gfs_io.h
 gfs_link.lo: $(GFUTIL_SRCDIR)/gfutil.h gfm_client.h config.h lookup.h
-gfs_pio.lo: $(GFUTIL_SRCDIR)/timer.h $(GFUTIL_SRCDIR)/gfutil.h liberror.h gfs_proto.h gfm_client.h gfs_proto.h gfs_io.h gfs_pio.h config.h
+gfs_pio.lo: gfs_proto.h gfs_pio.h $(GFUTIL_SRCDIR)/timer.h
 gfs_pio_global.lo: gfs_proto.h gfs_pio.h
 gfs_pio_local.lo: gfs_proto.h gfs_pio.h
-gfs_pio_misc.lo: gfs_proto.h gfs_misc.h
+gfs_pio_misc.lo: host.h config.h gfs_proto.h gfs_client.h gfs_pio.h gfs_misc.h $(GFUTIL_SRCDIR)/timer.h
 gfs_pio_remote.lo: host.h config.h gfs_proto.h gfs_client.h gfs_pio.h
 gfs_pio_section.lo: gfs_pio.h host.h config.h schedule.h gfs_client.h gfs_proto.h $(GFUTIL_SRCDIR)/timer.h
 gfs_proto.lo: gfs_proto.h
 gfs_readlink.lo: $(GFUTIL_SRCDIR)/gfutil.h gfm_client.h config.h lookup.h
-gfs_replica.lo: $(GFUTIL_SRCDIR)/gfutil.h gfm_client.h host.h config.h lookup.h
-gfs_replicate.lo: config.h host.h gfm_client.h gfs_client.h schedule.h gfs_misc.h
-gfs_stat.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/timer.h gfs_profile.h gfm_client.h config.h lookup.h gfs_misc.h
+gfs_replica.lo: $(GFUTIL_SRCDIR)/gfutil.h gfm_client.h config.h lookup.h
+gfs_replicate.lo: $(GFUTIL_SRCDIR)/gfutil.h config.h gfs_client.h
+gfs_stat.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/timer.h gfs_profile.h gfm_client.h config.h lookup.h
 gfs_statsw.lo: gfs_dircache.h
 gfs_symlink.lo: $(GFUTIL_SRCDIR)/gfutil.h gfm_client.h config.h lookup.h
-gfs_unlink.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/timer.h gfs_profile.h
+gfs_unlink.lo: config.h gfs_client.h gfs_pio.h gfs_misc.h $(GFUTIL_SRCDIR)/timer.h
 gfs_utimes.lo: $(GFUTIL_SRCDIR)/gfutil.h config.h gfm_client.h lookup.h 
-gfs_xattr.lo: $(GFUTIL_SRCDIR)/gfutil.h $(GFUTIL_SRCDIR)/timer.h gfm_client.h lookup.h gfs_io.h gfs_misc.h config.h gfs_profile.h xattr_info.h
 gfarm_foreach.lo: gfarm_foreach.h
 glob.lo:
-host.lo: hostspec.h gfm_client.h host.h
+host.lo: hostspec.h host.h
 hostspec.lo: hostspec.h
 import_help.lo: liberror.h
 io_fd.lo: iobuffer.h io_fd.h
@@ -208,7 +198,6 @@ iobuffer.lo: iobuffer.h
 metadb_common.lo: metadb_common.h
 param.lo: hostspec.h param.h
 schedule.lo: $(GFUTIL_SRCDIR)/gfevent.h $(GFUTIL_SRCDIR)/hash.h host.h auth.h config.h gfs_client.h gfs_profile.h
-sockutil.lo: sockutil.h
 sockopt.lo: hostspec.h param.h sockopt.h
 stringlist.lo:
 timespec.lo: timespec.h

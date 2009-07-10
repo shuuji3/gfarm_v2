@@ -8,7 +8,6 @@
 #include <stdio.h> /* sprintf */
 #include <sys/time.h>
 #include <pthread.h>
-#include <errno.h>
 
 #define GFARM_INTERNAL_USE
 #include <gfarm/error.h>
@@ -27,7 +26,6 @@
 #include "dir.h"
 #include "inode.h"
 #include "process.h" /* struct file_opening */
-#include "xattr_info.h"
 
 #define ROOT_INUMBER			2
 #define INODE_TABLE_SIZE_INITIAL	1000
@@ -43,15 +41,6 @@ struct file_copy {
 	int valid;
 };
 
-struct xattr_entry {
-	struct xattr_entry *prev, *next;
-	char *name;
-};
-
-struct xattrs {
-	struct xattr_entry *head, *tail;
-};
-
 struct inode {
 	gfarm_ino_t i_number;
 	gfarm_uint64_t i_gen;
@@ -63,7 +52,6 @@ struct inode {
 	gfarm_mode_t i_mode;
 	struct gfarm_timespec i_mtimespec;
 	struct gfarm_timespec i_ctimespec;
-	struct xattrs i_xattrs, i_xmlattrs;
 
 	union {
 		struct inode_free_link {
@@ -298,74 +286,6 @@ inode_cksum_get(struct file_opening *fo,
 	return (GFARM_ERR_NO_ERROR);
 }
 
-static void
-xattrs_init(struct xattrs *xattrs)
-{
-	xattrs->head = xattrs->tail =NULL;
-}
-
-static void
-xattrs_free_entries(struct xattrs *xattrs)
-{
-	struct xattr_entry *entry = xattrs->head, *next;
-	while (entry != NULL) {
-		free(entry->name);
-		next = entry->next;
-		free(entry);
-		entry = next;
-	}
-	xattrs->head = NULL;
-	xattrs->tail = NULL;
-}
-
-static void
-inode_xattrs_init(struct inode *inode)
-{
-	xattrs_init(&inode->i_xattrs);
-	xattrs_init(&inode->i_xmlattrs);
-}
-
-static void
-inode_xattrs_clear(struct inode *inode)
-{
-	xattrs_free_entries(&inode->i_xattrs);
-	xattrs_free_entries(&inode->i_xmlattrs);
-}
-
-static void
-remove_all_xattrs(struct inode *inode, int xmlMode)
-{
-	gfarm_error_t e;
-	struct xattrs *xattrs = xmlMode ?
-		&inode->i_xmlattrs : &inode->i_xattrs;
-	struct xattr_entry *entry = NULL;
-
-	if (xattrs->head == NULL)
-		return;
-
-	e = db_xattr_removeall(xmlMode, inode->i_number);
-	if (e != GFARM_ERR_OPERATION_NOT_SUPPORTED)
-		return;
-
-	entry = xattrs->head;
-	while (entry != NULL) {
-		e = db_xattr_remove(xmlMode, inode->i_number, entry->name);
-		if (e != GFARM_ERR_NO_ERROR)
-			gflog_warning("remove xattr: %s",
-				gfarm_error_string(e));
-		entry = entry->next;
-	}
-}
-
-static void
-inode_remove_all_xattrs(struct inode *inode)
-{
-	remove_all_xattrs(inode, 0);
-#ifdef ENABLE_XMLATTR
-	remove_all_xattrs(inode, 1);
-#endif
-}
-
 struct inode_open_state *
 inode_open_state_alloc(void)
 {
@@ -414,7 +334,7 @@ inode_alloc_num(gfarm_ino_t inum)
 		else if (inum < inode_table_size * INODE_TABLE_SIZE_MULTIPLY)
 			new_table_size =
 			    inode_table_size * INODE_TABLE_SIZE_MULTIPLY;
-		else
+		else 
 			new_table_size = inum * INODE_TABLE_SIZE_MULTIPLY;
 		GFARM_REALLOC_ARRAY(p, inode_table, new_table_size);
 		if (p == NULL)
@@ -429,8 +349,6 @@ inode_alloc_num(gfarm_ino_t inum)
 		GFARM_MALLOC(inode);
 		if (inode == NULL)
 			return (NULL); /* no memory */
-		inode_xattrs_init(inode);
-
 		inode->i_number = inum;
 		inode->i_gen = 0;
 		inode_table[inum] = inode;
@@ -481,7 +399,6 @@ inode_clear(struct inode *inode)
 	inode->u.l.next = inode_free_list.u.l.next;
 	inode->u.l.next->u.l.prev = inode;
 	inode_free_list.u.l.next = inode;
-	inode_xattrs_clear(inode);
 	pthread_mutex_lock(&total_num_inodes_mutex);
 	--total_num_inodes;
 	pthread_mutex_unlock(&total_num_inodes_mutex);
@@ -1034,7 +951,7 @@ inode_lookup_basename(struct inode *parent, const char *name, int len,
 	case GFS_DT_REG: e = inode_init_file(n); break;
 	case GFS_DT_LNK: e = inode_init_symlink(n, symlink_src); break;
 	default: assert(0); e = GFARM_ERR_UNKNOWN; break;
-	}
+	}	
 	if (e != GFARM_ERR_NO_ERROR) {
 		dir_remove_entry(parent->u.c.s.d.entries, name, len);
 		inode_free(n);
@@ -1381,7 +1298,6 @@ inode_unlink(struct inode *base, char *name, struct process *process)
 	}
 	if (inode->u.c.state == NULL) {
 		/* no process is opening this file, just remove it */
-		inode_remove_all_xattrs(inode);
 		inode_remove(inode);
 		return (GFARM_ERR_NO_ERROR);
 	} else {
@@ -1770,14 +1686,11 @@ inode_schedule_file_reply(struct inode *inode, struct peer *peer,
 		}
 		if (n > 0) {
 			e_save = host_schedule_reply_n(peer, n, diag);
-			for (fo = ios->openings.opening_next;
-			     fo != &ios->openings; fo = fo->opening_next) {
-				if (fo->u.f.spool_host != NULL) {
-					e = host_schedule_reply(
-					    fo->u.f.spool_host, peer, diag);
-					if (e_save == GFARM_ERR_NO_ERROR)
-						e_save = e;
-				}
+			for (; fo != &ios->openings; fo = fo->opening_next) {
+				e = host_schedule_reply(fo->u.f.spool_host,
+				    peer, diag);
+				if (e_save == GFARM_ERR_NO_ERROR)
+					e_save = e;
 			}
 			return (e_save);
 		}
@@ -2142,197 +2055,6 @@ dir_is_empty(Dir dir)
 	}
 }
 
-static struct xattr_entry *
-xattr_entry_alloc(const char *attrname)
-{
-	struct xattr_entry *entry;
-
-	GFARM_CALLOC_ARRAY(entry, 1);
-	if (entry == NULL)
-		return NULL;
-	if ((entry->name = strdup(attrname)) == NULL) {
-		free(entry);
-		return NULL;
-	}
-	return entry;
-}
-
-static void
-xattr_entry_free(struct xattr_entry *entry)
-{
-	if (entry != NULL) {
-		free(entry->name);
-		free(entry);
-	}
-}
-
-static struct xattr_entry *
-xattr_add(struct xattrs *xattrs, const char *attrname)
-{
-	struct xattr_entry *entry, *tail;
-
-	entry = xattr_entry_alloc(attrname);
-	if (entry == NULL)
-		return NULL;
-
-	if (xattrs->head == NULL) {
-		xattrs->head = xattrs->tail = entry;
-		entry->prev = NULL;
-	} else {
-		tail = xattrs->tail;
-		entry->prev = tail;
-		tail->next = entry;
-		xattrs->tail = entry;
-	}
-	return entry;
-}
-
-void
-xattr_add_one(void *closure, struct xattr_info *info)
-{
-	struct inode *inode = inode_lookup(info->inum);
-	struct xattrs *xattrs;
-
-	if (inode == NULL)
-		gflog_error("xattr_add_one: no file %" GFARM_PRId64,
-			info->inum);
-	else {
-		int xmlMode = (closure != NULL) ? *(int*)closure : 0;
-		xattrs = (xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs);
-		if (xattr_add(xattrs, info->attrname) == NULL)
-			gflog_error("xattr_add_one: "
-				"cannot add attrname %s to %"
-				GFARM_PRId64, info->attrname, info->inum);
-	}
-}
-
-void
-xattr_init(void)
-{
-	gfarm_error_t e;
-	int xmlMode;
-
-	xmlMode = 0;
-	e = db_xattr_load(&xmlMode, xattr_add_one);
-	if (e != GFARM_ERR_NO_ERROR)
-		gflog_error("loading xattr: %s", gfarm_error_string(e));
-#ifdef ENABLE_XMLATTR
-	xmlMode = 1;
-	e = db_xattr_load(&xmlMode, xattr_add_one);
-	if (e != GFARM_ERR_NO_ERROR)
-		gflog_error("loading xmlattr: %s", gfarm_error_string(e));
-#endif
-}
-
-static struct xattr_entry *
-xattr_find(struct xattrs *xattrs, const char *attrname)
-{
-	struct xattr_entry *entry;
-
-	entry = xattrs->head;
-	while (entry != NULL) {
-		if (strcmp(entry->name, attrname) == 0) {
-			return entry;
-		}
-		entry = entry->next;
-	}
-	return NULL;
-}
-
-gfarm_error_t
-inode_xattr_add(struct inode *inode, int xmlMode, const char *attrname)
-{
-	gfarm_error_t e;
-	struct xattrs *xattrs = xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs;
-
-	if (xattr_find(xattrs, attrname) != NULL)
-		e = GFARM_ERR_ALREADY_EXISTS;
-	else if (xattr_add(xattrs, attrname) != NULL) {
-		e = GFARM_ERR_NO_ERROR;
-	} else
-		e = GFARM_ERR_NO_MEMORY;
-
-	return e;
-}
-
-int
-inode_xattr_isexists(struct inode *inode, int xmlMode,
-		const char *attrname)
-{
-	struct xattrs *xattrs = xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs;
-	struct xattr_entry *entry;
-
-	entry = xattr_find(xattrs, attrname);
-	return (entry != NULL);
-}
-
-int
-inode_xattr_has_xmlattrs(struct inode *inode)
-{
-#ifdef ENABLE_XMLATTR
-	return (inode->i_xmlattrs.head != NULL);
-#else
-	return 0;
-#endif
-}
-
-gfarm_error_t
-inode_xattr_remove(struct inode *inode, int xmlMode, const char *attrname)
-{
-	struct xattrs *xattrs = xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs;
-	struct xattr_entry *entry, *prev, *next;
-
-	entry = xattr_find(xattrs, attrname);
-	if (entry != NULL) {
-		prev = entry->prev; // NULL if entry is head
-		next = entry->next; // NULL if entry is tail
-		if (entry == xattrs->head)
-			xattrs->head = next;
-		else
-			prev->next = next;
-		if (entry == xattrs->tail)
-			xattrs->tail = prev;
-		else
-			next->prev = prev;
-		xattr_entry_free(entry);
-		return GFARM_ERR_NO_ERROR;
-	} else
-		return GFARM_ERR_NO_SUCH_OBJECT;
-}
-
-gfarm_error_t
-inode_xattr_list(struct inode *inode, int xmlMode, char **namesp, size_t *sizep)
-{
-	struct xattrs *xattrs = xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs;
-	struct xattr_entry *entry = NULL;
-	char *names, *p;
-	int size = 0, len;
-
-	*namesp = NULL;
-	*sizep = 0;
-
-	entry = xattrs->head;
-	while (entry != NULL) {
-		size += (strlen(entry->name) + 1);
-		entry = entry->next;
-	}
-	if (size == 0)
-		return GFARM_ERR_NO_ERROR;
-	if (GFARM_MALLOC_ARRAY(names, size) == NULL)
-		return GFARM_ERR_NO_MEMORY;
-
-	entry = xattrs->head;
-	p = names;
-	while (entry != NULL) {
-		len = strlen(entry->name) + 1; // +1 is '\0'
-		memcpy(p, entry->name, len);
-		p += len;
-		entry = entry->next;
-	}
-	*namesp = names;
-	*sizep = size;
-	return GFARM_ERR_NO_ERROR;
-}
 #if 1 /* DEBUG */
 void
 dir_dump(gfarm_ino_t i_number)

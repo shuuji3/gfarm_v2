@@ -3,7 +3,6 @@ void dir_entry_init(void);
 void file_copy_init(void);
 void dead_file_copy_init(void);
 void symlink_init(void);
-void xattr_init(void);
 
 gfarm_uint64_t inode_total_num(void);
 
@@ -92,12 +91,6 @@ gfarm_error_t inode_schedule_file_reply(struct inode *, struct peer *,
 
 gfarm_error_t inode_replica_list_by_name(struct inode *,
 	gfarm_int32_t *, char ***);
-
-gfarm_error_t inode_xattr_add(struct inode *, int, const char *);
-int inode_xattr_isexists(struct inode *, int, const char *);
-int inode_xattr_has_xmlattrs(struct inode *);
-gfarm_error_t inode_xattr_remove(struct inode *, int, const char *);
-gfarm_error_t inode_xattr_list(struct inode *, int, char **, size_t *);
 
 /* debug */
 void dir_dump(gfarm_ino_t);

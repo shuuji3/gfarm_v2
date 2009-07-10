@@ -11,6 +11,8 @@ SUBDIRS = \
 	gfcombine \
 	gfcp \
 	gfgrep \
+	gfrepbe_client \
+	gfrepbe_server \
 	gfsplck \
 	$(mpi_targets) \
 	util \

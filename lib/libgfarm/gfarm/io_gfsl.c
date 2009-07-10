@@ -66,8 +66,7 @@ gfarm_iobuffer_read_secsession_op(struct gfarm_iobuffer *b,
 
 		if (rv <= 0) {
 			/* XXX - interpret io->session->gssLastStat */
-			/* XXX - set GFARM_ERR_BROKEN_PIPE to reconnect */
-			gfarm_iobuffer_set_error(b, GFARM_ERR_BROKEN_PIPE);
+			gfarm_iobuffer_set_error(b, GFARM_ERR_UNKNOWN);
 			return (rv);
 		}
 		io->p = 0;
@@ -105,8 +104,7 @@ gfarm_iobuffer_write_secsession_op(struct gfarm_iobuffer *b,
 
 	if (rv <= 0) {
 		/* XXX - interpret io->session->gssLastStat */
-		/* XXX - set GFARM_ERR_BROKEN_PIPE to reconnect */
-		gfarm_iobuffer_set_error(b, GFARM_ERR_BROKEN_PIPE);
+		gfarm_iobuffer_set_error(b, GFARM_ERR_UNKNOWN);
 	}
 
 	return (rv);
@@ -232,7 +230,6 @@ gfp_xdr_reset_secsession(struct gfp_xdr *conn)
 /*
  * an option for gfarm_iobuffer_set_write_close()
  */
-#if 0 /* currently not used */
 void
 gfarm_iobuffer_write_close_secsession_op(struct gfarm_iobuffer *b,
 	void *cookie, int fd)
@@ -243,7 +240,6 @@ gfarm_iobuffer_write_close_secsession_op(struct gfarm_iobuffer *b,
 	if (e != GFARM_ERR_NO_ERROR && gfarm_iobuffer_get_error(b) == 0)
 		gfarm_iobuffer_set_error(b, e);
 }
-#endif /* currently not used */
 
 /*
  * for "gsi_auth" method

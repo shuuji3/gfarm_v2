@@ -55,6 +55,7 @@
 #include <gfarm/gfarm_misc.h>
 #include <gfarm/gfs.h>
 #include <gfarm/host_info.h>
+#include <gfarm/user_info.h>
 
 #define GFLOG_USE_STDARG
 #include "gfutil.h"
@@ -72,6 +73,7 @@
 #include "gfs_client.h"
 #include "gfm_proto.h"
 #include "gfm_client.h"
+#include "metadb_server.h"
 
 #include "gfsd_subr.h"
 
@@ -1271,8 +1273,7 @@ gfs_server_replica_add_from(struct gfp_xdr *client)
 		goto adding_cancel;
 	}
 
-	e = gfs_client_connection_acquire_by_host(gfm_server, host, port,
-	    &server);
+	e = gfs_client_connection_acquire_by_host(host, port, &server);
 	if (e != GFARM_ERR_NO_ERROR) {
 		mtime_sec = mtime_nsec = 0; /* invalidate */
 		goto close;
@@ -2854,7 +2855,7 @@ gfm_client_connect_with_reconnection()
 	unsigned int sleep_interval = 10;	/* 10 sec */
 	unsigned int sleep_max_interval = 640;	/* about 10 min */
 
-	e = gfm_client_connect(gfarm_metadb_server_name,
+	e = gfm_client_connection_acquire(gfarm_metadb_server_name,
 	    gfarm_metadb_server_port, &gfm_server);
 	while (e != GFARM_ERR_NO_ERROR) {
 		/* suppress excessive log */
@@ -2864,12 +2865,12 @@ gfm_client_connect_with_reconnection()
 			    gfarm_metadb_server_port, sleep_interval,
 			    gfarm_error_string(e));
 		sleep(sleep_interval);
-		e = gfm_client_connect(gfarm_metadb_server_name,
+		e = gfm_client_connection_acquire(gfarm_metadb_server_name,
 			gfarm_metadb_server_port, &gfm_server);
 		if (sleep_interval < sleep_max_interval)
 			sleep_interval *= 2;
 	}
-
+	gfarm_metadb_set_server(gfm_server);
 	/*
 	 * If canonical_self_name is specified (by the command-line
 	 * argument), send the hostname to identify myself.  If not
@@ -2894,6 +2895,7 @@ server(int client_fd, char *client_name, struct sockaddr *client_addr)
 	char *aux, addr_string[GFARM_SOCKADDR_STRLEN];
 	enum gfarm_auth_id_type peer_type;
 	enum gfarm_auth_method auth_method;
+	struct gfarm_user_info user;
 
 	gfm_client_connect_with_reconnection();
 
@@ -2911,8 +2913,7 @@ server(int client_fd, char *client_name, struct sockaddr *client_addr)
 			if (client_name == NULL)
 				fatal("%s: no memory", addr_string);
 		}
-		e = gfm_host_get_canonical_name(gfm_server, client_name,
-		    &s, &port);
+		e = gfarm_host_get_canonical_name(client_name, &s, &port);
 		if (e == GFARM_ERR_NO_ERROR) {
 			free(client_name);
 			client_name = s;
@@ -2941,9 +2942,23 @@ server(int client_fd, char *client_name, struct sockaddr *client_addr)
 	}
 
 	e = gfarm_authorize(client, 0, GFS_SERVICE_TAG,
-	    client_name, client_addr,
-	    gfarm_auth_uid_to_global_username, gfm_server,
-	    &peer_type, &username, &auth_method);
+	    client_name, client_addr, &peer_type, &username, &auth_method);
+	/*
+	 * In GSI, username will be a DN, which needs to be mapped to
+	 * a global user name.
+	 */
+	if (e == GFARM_ERR_NO_ERROR && peer_type == GFARM_AUTH_ID_TYPE_USER &&
+	    GFARM_IS_AUTH_GSI(auth_method)) {
+		e = gfm_client_user_info_get_by_gsi_dn(gfm_server,
+			username, &user);
+		if (e == GFARM_ERR_NO_ERROR) {
+			free(username);
+			username = strdup(user.username);
+			if (username == NULL)
+				e = GFARM_ERR_NO_MEMORY;
+			gfarm_user_info_free(&user);
+		}
+	}
 	if (e != GFARM_ERR_NO_ERROR)
 		fatal("%s: gfarm_authorize: %s",
 		    client_name, gfarm_error_string(e));
@@ -3504,8 +3519,8 @@ main(int argc, char **argv)
 	 * cannot be used because host_get_self_name() may not be registered.
 	 */
 	if (canonical_self_name == NULL &&
-	    (e = gfm_host_get_canonical_self_name(gfm_server,
-	    &canonical_self_name, &p)) != GFARM_ERR_NO_ERROR) {
+	    (e = gfarm_host_get_canonical_self_name(&canonical_self_name, &p))
+	    != GFARM_ERR_NO_ERROR) {
 		gflog_fatal(
 		    "cannot get canonical hostname of %s, ask admin to "
 		    "register this node in Gfarm metadata server, died: %s\n",

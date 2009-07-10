@@ -61,7 +61,6 @@
 
 #include "config.h"
 #include "metadb_common.h"
-#include "xattr_info.h"
 
 #include "db_access.h"
 #include "db_ops.h"
@@ -281,7 +280,7 @@ gfarm_ldap_set_ssl_context(void)
 {
 	gfarm_error_t e;
 	int rv;
-
+	
 	if (ldap_ssl_context == NULL) {
 		e = gfarm_ldap_new_default_ctx(&ldap_ssl_context);
 		if (e != GFARM_ERR_NO_ERROR)
@@ -541,31 +540,6 @@ set_string_mod(
 	storage->mod.mod_op = op;
 	storage->mod.mod_type = type;
 	storage->mod.mod_vals.modv_strvals = storage->str;
-	*modp = &storage->mod;
-}
-
-struct ldap_binary_modify {
-	LDAPMod mod;
-	struct berval *val[2];
-	struct berval v;
-};
-
-static void
-set_binary_mod(
-	LDAPMod **modp,
-	int op,
-	char *type,
-	void *value,
-	int size,
-	struct ldap_binary_modify *storage)
-{
-	storage->v.bv_val = value;
-	storage->v.bv_len = size;
-	storage->val[0] = &storage->v;
-	storage->val[1] = NULL;
-	storage->mod.mod_op = op | LDAP_MOD_BVALUES;
-	storage->mod.mod_type = type;
-	storage->mod.mod_vals.modv_bvals = storage->val;
 	*modp = &storage->mod;
 }
 
@@ -898,15 +872,14 @@ msgfree:
 #endif /* not used */
 
 static gfarm_error_t
-gfarm_ldap_generic_info_get_foreach_withattrs(
+gfarm_ldap_generic_info_get_foreach(
 	char *dn,
 	int scope, /* LDAP_SCOPE_ONELEVEL or LDAP_SCOPE_SUBTREE */
 	char *query,
 	void *tmp_info, /* just used as a work area */
 	void (*callback)(void *, void *),
 	void *closure,
-	const struct gfarm_ldap_generic_info_ops *ops,
-	char *attrs[])
+	const struct gfarm_ldap_generic_info_ops *ops)
 {
 	LDAPMessage *res, *e;
 	int i, msgid, rv;
@@ -915,7 +888,7 @@ gfarm_ldap_generic_info_get_foreach_withattrs(
 	char **vals;
 
 	/* search for entries asynchronously */
-	msgid = ldap_search(gfarm_ldap_server, dn, scope, query, attrs, 0);
+	msgid = ldap_search(gfarm_ldap_server, dn, scope, query, NULL, 0);
 	if (msgid == -1) {
 		gflog_error("ldap_search(%s) - for each", dn);
 		return (GFARM_ERR_UNKNOWN);
@@ -953,9 +926,8 @@ gfarm_ldap_generic_info_get_foreach_withattrs(
 				ops->gen_ops->free(tmp_info);
 				continue;
 			}
-			if (callback != NULL)
-				(*callback)(closure, tmp_info);
-#if 0		/* the (*callback)() routine frees this memory */
+			(*callback)(closure, tmp_info);
+#if 0			/* the (*callback)() routine frees this memory */
 			ops->gen_ops->free(tmp_info);
 #endif
 			i++;
@@ -974,21 +946,6 @@ gfarm_ldap_generic_info_get_foreach_withattrs(
 	if (i == 0)
 		return (GFARM_ERR_NO_SUCH_OBJECT);
 	return (GFARM_ERR_NO_ERROR);
-}
-
-static gfarm_error_t
-gfarm_ldap_generic_info_get_foreach(
-	char *dn,
-	int scope, /* LDAP_SCOPE_ONELEVEL or LDAP_SCOPE_SUBTREE */
-	char *query,
-	void *tmp_info, /* just used as a work area */
-	void (*callback)(void *, void *),
-	void *closure,
-	const struct gfarm_ldap_generic_info_ops *ops)
-{
-	return gfarm_ldap_generic_info_get_foreach_withattrs(
-		dn, scope, query, tmp_info,
-		callback, closure, ops, NULL);
 }
 
 /**********************************************************************/
@@ -1108,39 +1065,33 @@ gfarm_ldap_host_info_update(
 	return ((*update_op)(&key, modv, &gfarm_ldap_host_info_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_host_add(struct gfarm_host_info *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_host_info_update(info,
+	gfarm_ldap_host_info_update(info,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
 	free(info);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_host_modify(struct db_host_modify_arg *arg)
 {
-	gfarm_error_t e;
 	/* XXX FIXME: should use modflags, add_aliases and del_aliases */
 
-	e = gfarm_ldap_host_info_update(&arg->hi,
+	gfarm_ldap_host_info_update(&arg->hi,
 	    LDAP_MOD_REPLACE, gfarm_ldap_generic_info_modify);
 	free(arg);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_host_remove(char *hostname)
 {
-	gfarm_error_t e;
 	struct gfarm_ldap_host_info_key key;
 
 	key.hostname = hostname;
 
-	e = gfarm_ldap_generic_info_remove(&key, &gfarm_ldap_host_info_ops);
+	gfarm_ldap_generic_info_remove(&key, &gfarm_ldap_host_info_ops);
 	free(hostname);
-	return e;
 }
 
 static gfarm_error_t
@@ -1259,37 +1210,31 @@ gfarm_ldap_user_info_update(
 	return ((*update_op)(&key, modv, &gfarm_ldap_user_info_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_user_add(struct gfarm_user_info *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_user_info_update(info,
+	gfarm_ldap_user_info_update(info,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
 	free(info);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_user_modify(struct db_user_modify_arg *arg)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_user_info_update(&arg->ui,
+	gfarm_ldap_user_info_update(&arg->ui,
 	    LDAP_MOD_REPLACE, gfarm_ldap_generic_info_modify);
 	free(arg);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_user_remove(char *username)
 {
-	gfarm_error_t e;
 	struct gfarm_ldap_user_info_key key;
 
 	key.username = username;
 
-	e = gfarm_ldap_generic_info_remove(&key, &gfarm_ldap_user_info_ops);
+	gfarm_ldap_generic_info_remove(&key, &gfarm_ldap_user_info_ops);
 	free(username);
-	return e;
 }
 
 static gfarm_error_t
@@ -1394,37 +1339,31 @@ gfarm_ldap_group_info_update(
 	return ((*update_op)(&key, modv, &gfarm_ldap_group_info_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_group_add(struct gfarm_group_info *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_group_info_update(info,
+	gfarm_ldap_group_info_update(info,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
 	free(info);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_group_modify(struct db_group_modify_arg *arg)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_group_info_update(&arg->gi,
+	gfarm_ldap_group_info_update(&arg->gi,
 	    LDAP_MOD_REPLACE, gfarm_ldap_generic_info_modify);
 	free(arg);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_group_remove(char *groupname)
 {
-	gfarm_error_t e;
 	struct gfarm_ldap_group_info_key key;
 
 	key.groupname = groupname;
 
-	e = gfarm_ldap_generic_info_remove(&key, &gfarm_ldap_group_info_ops);
+	gfarm_ldap_generic_info_remove(&key, &gfarm_ldap_group_info_ops);
 	free(groupname);
-	return e;
 }
 
 static gfarm_error_t
@@ -1598,24 +1537,20 @@ gfarm_ldap_gfs_stat_update(
 	return ((*update_op)(&key, modv, &gfarm_ldap_gfs_stat_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_add(struct gfs_stat *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_gfs_stat_update(info,
+	gfarm_ldap_gfs_stat_update(info,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
 	free(info);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_modify(struct gfs_stat *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_gfs_stat_update(info,
+	gfarm_ldap_gfs_stat_update(info,
 	    LDAP_MOD_REPLACE, gfarm_ldap_generic_info_modify);
 	free(info);
-	return e;
 }
 
 static gfarm_error_t
@@ -1721,19 +1656,19 @@ ldap_inode_timespec_modify(struct db_inode_timespec_modify_arg *arg,
 	return (e);
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_nlink_modify(struct db_inode_uint64_modify_arg *arg)
 {
-	return ldap_inode_uint64_modify(arg, "nlink");
+	ldap_inode_uint64_modify(arg, "nlink");
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_size_modify(struct db_inode_uint64_modify_arg *arg)
 {
-	return ldap_inode_uint64_modify(arg, "size");
+	ldap_inode_uint64_modify(arg, "size");
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_mode_modify(struct db_inode_uint32_modify_arg *arg)
 {
 	gfarm_error_t e;
@@ -1763,37 +1698,36 @@ gfarm_ldap_inode_mode_modify(struct db_inode_uint32_modify_arg *arg)
 	    &gfarm_ldap_gfs_stat_ops);
 
 	free(arg);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_user_modify(struct db_inode_string_modify_arg *arg)
 {
-	return ldap_inode_string_modify(arg, "username");
+	ldap_inode_string_modify(arg, "username");
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_group_modify(struct db_inode_string_modify_arg *arg)
 {
-	return ldap_inode_string_modify(arg, "groupname");
+	ldap_inode_string_modify(arg, "groupname");
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_atime_modify(struct db_inode_timespec_modify_arg *arg)
 {
-	return ldap_inode_timespec_modify(arg, "atimesec", "atimensec");
+	ldap_inode_timespec_modify(arg, "atimesec", "atimensec");
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_mtime_modify(struct db_inode_timespec_modify_arg *arg)
 {
-	return ldap_inode_timespec_modify(arg, "mtimesec", "mtimensec");
+	ldap_inode_timespec_modify(arg, "mtimesec", "mtimensec");
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_ctime_modify(struct db_inode_timespec_modify_arg *arg)
 {
-	return ldap_inode_timespec_modify(arg, "ctimesec", "ctimensec");
+	ldap_inode_timespec_modify(arg, "ctimesec", "ctimensec");
 }
 
 
@@ -1870,27 +1804,23 @@ gfarm_ldap_inode_cksum_update(
 	return ((*update_op)(&key, modv, &gfarm_ldap_inode_cksum_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_cksum_add(struct db_inode_cksum_arg *arg)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_inode_cksum_update(arg,
+	gfarm_ldap_inode_cksum_update(arg,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_modify);
 	free(arg);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_cksum_modify(struct db_inode_cksum_arg *arg)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_inode_cksum_update(arg,
+	gfarm_ldap_inode_cksum_update(arg,
 	    LDAP_MOD_REPLACE, gfarm_ldap_generic_info_modify);
 	free(arg);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_inode_cksum_remove(struct db_inode_inum_arg *arg)
 {
 	gfarm_error_t e;
@@ -1910,7 +1840,6 @@ gfarm_ldap_inode_cksum_remove(struct db_inode_inum_arg *arg)
 	    &gfarm_ldap_inode_cksum_ops);
 
 	free(arg);
-	return e;
 }
 
 static gfarm_error_t
@@ -2006,23 +1935,19 @@ gfarm_ldap_db_filecopy_update(
 	return ((*update_op)(info, modv, &gfarm_ldap_db_filecopy_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_filecopy_add(struct db_filecopy_arg *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_db_filecopy_update(info,
+	gfarm_ldap_db_filecopy_update(info,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
 	free(info);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_filecopy_remove(struct db_filecopy_arg *arg)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_generic_info_remove(arg, &gfarm_ldap_db_filecopy_ops);
+	gfarm_ldap_generic_info_remove(arg, &gfarm_ldap_db_filecopy_ops);
 	free(arg);
-	return e;
 }
 
 static gfarm_error_t
@@ -2129,23 +2054,19 @@ gfarm_ldap_db_deadfilecopy_update(
 	return ((*update_op)(info, modv, &gfarm_ldap_db_deadfilecopy_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_deadfilecopy_add(struct db_deadfilecopy_arg *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_db_deadfilecopy_update(info,
+	gfarm_ldap_db_deadfilecopy_update(info,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
 	free(info);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_deadfilecopy_remove(struct db_deadfilecopy_arg *arg)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_generic_info_remove(arg, &gfarm_ldap_db_deadfilecopy_ops);
+	gfarm_ldap_generic_info_remove(arg, &gfarm_ldap_db_deadfilecopy_ops);
 	free(arg);
-	return e;
 }
 
 static gfarm_error_t
@@ -2309,23 +2230,19 @@ gfarm_ldap_db_direntry_update(
 	return ((*update_op)(&key, modv, &gfarm_ldap_db_direntry_ops));
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_direntry_add(struct db_direntry_arg *info)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_db_direntry_update(info,
+	gfarm_ldap_db_direntry_update(info,
 	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
 	free(info);
-	return e;
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_direntry_remove(struct db_direntry_arg *arg)
 {
-	gfarm_error_t e;
-	e = gfarm_ldap_generic_info_remove(arg, &gfarm_ldap_db_direntry_ops);
+	gfarm_ldap_generic_info_remove(arg, &gfarm_ldap_db_direntry_ops);
 	free(arg);
-	return e;
 }
 
 static gfarm_error_t
@@ -2374,10 +2291,9 @@ gfarm_ldap_db_symlink_set_field(
 	}
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_symlink_add(struct db_symlink_arg *info)
 {
-	gfarm_error_t e;
 	int i;
 	LDAPMod *modv[3];
 	LDAPMod objectclass_modify;
@@ -2405,17 +2321,15 @@ gfarm_ldap_symlink_add(struct db_symlink_arg *info)
 	assert(i == ARRAY_LENGTH(modv));
 
 	/* use "modify" instead of "add", since this is an AUXILIARY object */
-	e = gfarm_ldap_generic_info_modify(&key, modv,
+	gfarm_ldap_generic_info_modify(&key, modv,
 	    &gfarm_ldap_db_symlink_ops);
 
 	free(info);
-	return (e);
 }
 
-static gfarm_error_t
+static void
 gfarm_ldap_symlink_remove(struct db_inode_inum_arg *arg)
 {
-	gfarm_error_t e;
 	int i;
 	LDAPMod *modv[3];
 	struct ldap_string_modify objectclass_storage;
@@ -2434,14 +2348,11 @@ gfarm_ldap_symlink_remove(struct db_inode_inum_arg *arg)
 	modv[i++] = NULL;
 	assert(i == ARRAY_LENGTH(modv));
 
-	/*
-	 * use "modify" instead of "remove", since this is an AUXILIARY object
-	 */
-	e = gfarm_ldap_generic_info_modify(&key, modv,
+	/* use "modify" instead of "add", since this is an AUXILIARY object */
+	gfarm_ldap_generic_info_modify(&key, modv,
 	    &gfarm_ldap_db_symlink_ops);
 
 	free(arg);
-	return (e);
 }
 
 static gfarm_error_t
@@ -2459,233 +2370,6 @@ gfarm_ldap_symlink_load(
 	    LDAP_SCOPE_ONELEVEL, gfarm_ldap_db_symlink_ops.query_type,
 	    &tmp_info, db_symlink_callback_trampoline, &c,
 	    &gfarm_ldap_db_symlink_ops));
-}
-
-/**********************************************************************/
-
-static char *gfarm_ldap_xattr_info_make_dn(void *vkey);
-static void gfarm_ldap_db_xattr_set_field(void *vinfo,
-	char *attribute, char **vals);
-
-static const struct gfarm_ldap_generic_info_ops gfarm_ldap_xattr_info_ops = {
-	&gfarm_base_xattr_info_ops,
-	"(objectclass=XAttr)",
-	"attrname=%s, inumber=%" GFARM_PRId64 ", %s",
-	gfarm_ldap_xattr_info_make_dn,
-	gfarm_ldap_db_xattr_set_field,
-};
-
-struct gfarm_ldap_xattr_get_info_key {
-	gfarm_ino_t inumber;
-	const char *attrname;
-};
-
-static char *
-gfarm_ldap_xattr_info_make_dn(void *vkey)
-{
-	struct gfarm_ldap_xattr_get_info_key *key = vkey;
-	char *dn;
-
-	GFARM_MALLOC_ARRAY(dn, strlen(gfarm_ldap_xattr_info_ops.dn_template) +
-		strlen(key->attrname) + INT64STRLEN
-		+ strlen(gfarm_ldap_base_dn) + 1);
-	if (dn == NULL)
-		return (NULL);
-	sprintf(dn, gfarm_ldap_xattr_info_ops.dn_template,
-	    key->attrname, key->inumber, gfarm_ldap_base_dn);
-	return (dn);
-}
-
-static void
-gfarm_ldap_db_xattr_set_field(void *vinfo, char *attribute, char **vals)
-{
-	struct xattr_info *info = vinfo;
-
-	if (strcasecmp(attribute, "inumber") == 0) {
-		info->inum = gfarm_strtoi64(vals[0], NULL);
-	} else if (strcasecmp(attribute, "attrname") == 0) {
-		info->attrname = strdup(vals[0]);
-		info->namelen = strlen(info->attrname) + 1; // include '\0'
-	}
-}
-
-static gfarm_error_t
-gfarm_ldap_xattr_update(
-	struct db_xattr_arg *arg,
-	int mod_op,
-	gfarm_error_t (*update_op)(void *, LDAPMod **,
-	    const struct gfarm_ldap_generic_info_ops *))
-{
-	gfarm_error_t e;
-	int i;
-	LDAPMod *modv[5];
-	struct ldap_string_modify storage[ARRAY_LENGTH(modv) - 1];
-	struct ldap_binary_modify binstorage;
-	char ino_string[INT64STRLEN + 1];
-	struct gfarm_ldap_xattr_get_info_key key;
-
-	if (arg->xmlMode)
-		return GFARM_ERR_OPERATION_NOT_SUPPORTED;
-
-	key.inumber = arg->inum;
-	key.attrname = arg->attrname;
-
-	sprintf(ino_string, "%" GFARM_PRId64, arg->inum);
-
-	i = 0;
-	set_string_mod(&modv[i], mod_op,
-		"objectclass", "XAttr", &storage[i]);
-	i++;
-	set_string_mod(&modv[i], mod_op,
-	    "inumber", ino_string, &storage[i]);
-	i++;
-	set_string_mod(&modv[i], mod_op,
-	    "attrname", (char *)arg->attrname, &storage[i]);
-	i++;
-	set_binary_mod(&modv[i], mod_op,
-		"attrvalue", (void *)arg->value, arg->size, &binstorage);
-	i++;
-	modv[i++] = NULL;
-	assert(i == ARRAY_LENGTH(modv));
-
-	e = ((*update_op)(&key, modv, &gfarm_ldap_xattr_info_ops));
-	return e;
-}
-
-static gfarm_error_t
-gfarm_ldap_xattr_add(struct db_xattr_arg *arg)
-{
-	gfarm_error_t e;
-	e = gfarm_ldap_xattr_update(arg,
-	    LDAP_MOD_ADD, gfarm_ldap_generic_info_add);
-	free(arg);
-	return e;
-}
-
-static gfarm_error_t
-gfarm_ldap_xattr_modify(struct db_xattr_arg *arg)
-{
-	gfarm_error_t e;
-	e = gfarm_ldap_xattr_update(arg,
-		LDAP_MOD_REPLACE, gfarm_ldap_generic_info_modify);
-	free(arg);
-	return e;
-}
-
-static gfarm_error_t
-gfarm_ldap_xattr_remove(struct db_xattr_arg *arg)
-{
-	gfarm_error_t e;
-	struct gfarm_ldap_xattr_get_info_key key;
-
-	if (arg->xmlMode)
-		return GFARM_ERR_OPERATION_NOT_SUPPORTED;
-
-	key.inumber = arg->inum;
-	key.attrname = arg->attrname;
-
-	e = gfarm_ldap_generic_info_remove(&key, &gfarm_ldap_xattr_info_ops);
-	free(arg);
-	return e;
-}
-
-static gfarm_error_t
-gfarm_ldap_xattr_get(struct db_xattr_arg *arg)
-{
-	gfarm_error_t e;
-	char *query_type;
-	char *attrs[2] = { "attrvalue", NULL };
-	struct timeval tout = { 10, 0 };
-	int cnt, rv;
-	LDAPMessage  *res = NULL, *m;
-	struct berval **vals;
-	void *p;
-
-	if (arg->xmlMode) {
-		e = GFARM_ERR_OPERATION_NOT_SUPPORTED;
-		goto quit;
-	}
-
-	GFARM_MALLOC_ARRAY(query_type, 64+INT64STRLEN+strlen(arg->attrname));
-	if (query_type == NULL) {
-		e = GFARM_ERR_NO_MEMORY;
-		goto quit;
-	}
-
-	sprintf(query_type,
-		"(&(objectclass=XAttr)(inumber=%"GFARM_PRId64")(attrname=%s))",
-		arg->inum, arg->attrname);
-	rv = ldap_search_st(gfarm_ldap_server, gfarm_ldap_base_dn,
-			LDAP_SCOPE_SUB, query_type, attrs, 0, &tout, &res);
-	free(query_type);
-	if (rv == LDAP_NO_SUCH_OBJECT) {
-		e = GFARM_ERR_NO_SUCH_OBJECT;
-		goto quit;
-	} else if ((rv != LDAP_SUCCESS) || (res == NULL)) {
-		e = GFARM_ERR_UNKNOWN;
-		goto quit;
-	}
-
-	cnt = ldap_count_messages(gfarm_ldap_server, res);
-	if (cnt <= 1) {
-		// NOTE: cnt==1 means res have a NULL message only.
-		e = GFARM_ERR_NO_SUCH_OBJECT;
-	} else if (cnt != 2) {
-		// NOTE: res must have a valid message and a NULL message.
-		e =  GFARM_ERR_UNKNOWN;
-	} else {
-		m = ldap_first_message(gfarm_ldap_server, res);
-		vals = ldap_get_values_len(gfarm_ldap_server, m, attrs[0]);
-		if ((vals[0] != NULL) && (vals[1] == NULL)) {
-			e = GFARM_ERR_NO_ERROR;
-			*arg->sizep = vals[0]->bv_len;
-			if (vals[0]->bv_len > 0) {
-				p = malloc(vals[0]->bv_len);
-				if (p != NULL) {
-					memcpy(p, vals[0]->bv_val,
-						vals[0]->bv_len);
-					*arg->valuep = p;
-				} else
-					e = GFARM_ERR_NO_MEMORY;
-			} else
-				*arg->valuep = NULL;
-		} else
-			e = GFARM_ERR_UNKNOWN;
-		ldap_value_free_len(vals);
-	}
-	ldap_msgfree(res);
-quit:
-	free(arg);
-	return e;
-}
-
-gfarm_error_t
-gfarm_ldap_xattr_load(void *closure,
-		void (*callback)(void *, struct xattr_info *))
-{
-	int xmlMode = (closure != NULL) ? *(int*)closure : 0;
-	struct xattr_info tmp_info;
-	char *attrs[] = { "inumber", "attrname", NULL };
-
-	if (xmlMode)
-		return GFARM_ERR_OPERATION_NOT_SUPPORTED;
-
-	/*
-	 * NOTE: Without attrs, attrvalue will be loaded also.
-	 * It's needless for initial loading.
-	 */
-	return (gfarm_ldap_generic_info_get_foreach_withattrs(
-		gfarm_ldap_base_dn,
-		LDAP_SCOPE_SUBTREE, gfarm_ldap_xattr_info_ops.query_type,
-		&tmp_info, (void (*)(void *, void *))callback, &xmlMode,
-		&gfarm_ldap_xattr_info_ops, attrs));
-}
-
-static gfarm_error_t
-gfarm_ldap_xmlattr_find(struct db_xmlattr_find_arg *arg)
-{
-	free(arg);
-	return GFARM_ERR_OPERATION_NOT_SUPPORTED;
 }
 
 /**********************************************************************/
@@ -2743,12 +2427,4 @@ const struct db_ops db_ldap_ops = {
 	gfarm_ldap_symlink_add,
 	gfarm_ldap_symlink_remove,
 	gfarm_ldap_symlink_load,
-
-	gfarm_ldap_xattr_add,
-	gfarm_ldap_xattr_modify,
-	gfarm_ldap_xattr_remove,
-	NULL, // gfarm_ldap_xattr_removeall not supported
-	gfarm_ldap_xattr_get,
-	gfarm_ldap_xattr_load,
-	gfarm_ldap_xmlattr_find,
 };

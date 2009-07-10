@@ -59,7 +59,7 @@ gfp_conn_hash_port(struct gfarm_hash_entry *entry)
 	return (id->port);
 }
 
-gfarm_error_t
+static gfarm_error_t
 gfp_conn_hash_table_init(
 	struct gfarm_hash_table **hashtabp, int hashtabsize)
 {

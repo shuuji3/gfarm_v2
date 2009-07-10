@@ -23,7 +23,7 @@
 
 #include "liberror.h"
 
-#include "host.h" /* gfm_host_info_address_get() */
+#include "host.h" /* gfarm_host_info_address_get() */
 #include "auth.h"
 #include "config.h"
 #include "gfm_client.h"
@@ -103,8 +103,7 @@ check_hostname(char *hostname)
 	char *n;
 	int p;
 
-	e = gfm_host_get_canonical_name(gfarm_metadb_server, hostname,
-	    &n, &p);
+	e = gfarm_host_get_canonical_name(hostname, &n, &p);
 	if (e == GFARM_ERR_NO_ERROR) {
 		free(n);
 		return (APP_ERR_HOSTNAME_IS_ALREADY_REGISERED);
@@ -716,7 +715,7 @@ gfarm_paraccess_connect_finish(void *closure)
 		return;
 	}
 	gfarm_paraccess_callback(a->pa, a, &a->load, gfs_server, e);
-	gfs_client_connection_free(gfs_server);
+	gfs_client_disconnect(gfs_server);
 }
 
 static void
@@ -1075,8 +1074,7 @@ list(int nhosts, char **hosts,
 	struct gfarm_host_info hi;
 
 	for (i = 0; i < nhosts; i++) {
-		e = gfm_host_info_get_by_name_alias(gfarm_metadb_server,
-		    hosts[i], &hi);
+		e = gfarm_host_info_get_by_if_hostname(hosts[i], &hi);
 		if (e != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr, "%s: %s\n", hosts[i],
 		    	    gfarm_error_string(e));

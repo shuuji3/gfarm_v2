@@ -116,7 +116,17 @@ int gfarm_host_is_in_domain(const char *, const char *);
 /*
  * host
  */
+struct gfarm_host_info;
+gfarm_error_t gfarm_host_info_get_by_if_hostname(const char *,
+	struct gfarm_host_info *);
 char *gfarm_host_get_self_name(void);
+gfarm_error_t gfarm_host_get_canonical_name(const char *, char **, int *);
+gfarm_error_t gfarm_host_get_canonical_names(int, char **, char ***, int **);
+gfarm_error_t gfarm_host_get_canonical_self_name(char **, int *);
+gfarm_error_t gfarm_host_get_self_architecture(char **);
+struct sockaddr;
+gfarm_error_t gfarm_host_address_get(const char *,
+	int, struct sockaddr *, char **);
 
 /*
  * Miscellaneous

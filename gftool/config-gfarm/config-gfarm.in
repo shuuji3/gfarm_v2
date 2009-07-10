@@ -146,7 +146,7 @@ usage()
 	echo >&2 "	[-l metadata_directory] [-L metadata_logging_directory]"
 	echo >&2 "  $BACKEND_TYPE backend options: (must be specified after -b <backend_type>)"
 	usage_$BACKEND_TYPE ||
-		echo >&2 "	no option for backend=$BACKEND_TYPE"
+		echo >&2 "	no such option with backend=$BACKEND_TYPE"
 	echo >&2 "  available metadata_backend: $backend_candidates (default is $backend_default)"
 
 	exit 1
@@ -333,7 +333,7 @@ done
 # search default $BACKEND_PREFIX
 #
 
-set_default_backend_prefix_$BACKEND_TYPE
+set_default_backend_perfix_$BACKEND_TYPE
 
 . $config_dir/config-gfarm.sysdep
 
@@ -366,7 +366,6 @@ fi
 : ${GFMD_CONF:="$GFARM_CONF_DIR/gfmd.conf"}
 
 : ${METADATA_ADMIN_USER:=`who am i | awk '{print $1}'`}
-: ${METADATA_ADMIN_USER_GSI_DN:=}
 
 : ${AUTH_TYPE:="sharedsecret"}
 

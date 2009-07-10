@@ -16,7 +16,6 @@ SRCS =	alloc.c \
 	hash.c \
 	limit.c \
 	logutil.c \
-	lru_cache.c \
 	send_no_sigpipe.c \
 	timer.c \
 	timeval.c
@@ -27,7 +26,6 @@ OBJS =	alloc.lo \
 	hash.lo \
 	limit.lo \
 	logutil.lo \
-	lru_cache.lo \
 	send_no_sigpipe.lo \
 	timer.lo \
 	timeval.lo
@@ -47,6 +45,5 @@ gfnetdb.lo: gfnetdb.h
 hash.lo: gfutil.h hash.h
 limit.lo: gfutil.h
 logutil.lo: gfutil.h
-lru_cache.lo: lru_cache.h
 timer.lo: timer.h
 timeval.lo: gfutil.h

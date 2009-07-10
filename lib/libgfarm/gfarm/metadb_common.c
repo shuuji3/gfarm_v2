@@ -10,7 +10,6 @@
 #include <gfarm/gfs.h>
 
 #include "metadb_common.h"
-#include "xattr_info.h"
 
 /**********************************************************************/
 
@@ -276,51 +275,3 @@ gfs_stat_copy(struct gfs_stat *d, const struct gfs_stat *s)
 	d->st_group = group;
 	return (GFARM_ERR_NO_ERROR);
 }
-
-/**********************************************************************/
-
-static void
-xattr_info_free(void *vinfo)
-{
-	struct xattr_info *info = vinfo;
-
-	free(info->attrname);
-	free(info->attrvalue);
-}
-
-void
-gfarm_base_xattr_info_free_array(int n, void *vinfo)
-{
-	int i;
-	struct xattr_info *info = vinfo;
-
-	for (i = 0; i < n; i++) {
-		xattr_info_free(&info[i]);
-	}
-	free(info);
-}
-
-static void
-xattr_info_clear(void *vinfo)
-{
-	struct xattr_info *info = vinfo;
-
-	info->inum = 0;
-	info->attrname = NULL;
-	info->namelen = 0;
-	info->attrvalue = NULL;
-	info->attrsize = 0;
-}
-
-static int
-xattr_info_validate(void *vinfo)
-{
-	return 1;
-}
-
-const struct gfarm_base_generic_info_ops gfarm_base_xattr_info_ops = {
-	sizeof(struct xattr_info),
-	xattr_info_free,
-	xattr_info_clear,
-	xattr_info_validate
-};

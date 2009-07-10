@@ -5,30 +5,30 @@
 ${DEBUG:="false"} && set -xu
 PROGNAME=`basename $0`
 
-# LANG may cause trouble to access database
-unset LANG
-
 # Gfarm installation directory
 prefix="@prefix@"
 sysconfdir="@sysconfdir@"
 config_dir="@datadir@/gfarm/config"
 
-PATH="${prefix}/bin:${prefix}/sbin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/ucb:/usr/pkg/bin:/usr/pkg/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
-export PATH
-search_path="$PATH"
+# backend initialization
+BACKEND_TYPE=postgresql
+backend_all="postgresql"
+backend_candidates="postgresql"
 
-awk=awk
-if [ -f /usr/bin/nawk ]; then awk=/usr/bin/nawk; fi
+# load backend-dependent functions.
+for i in $backend_all
+do
+  . $config_dir/config-gfarm.$i
+  . $config_dir/config-gfarm-update.$i
+done
 
-status=1
-admin_password=/tmp/ap$$
-password=/tmp/up$$
-rm -f $password $admin_password
-trap 'rm -f $password $admin_password; stty echo 2>/dev/null; exit $status' 0 1 2 15
-
-getvalue()
+usage()
 {
-	$awk '$1 == "'"$1"'" { print $2 }' $GFMD_CONF
+	echo >&2 "usage: $PROGNAME [--help] [--prefix prefix] [-t]"
+	echo >&2 "	[--update_symlink] [-P backend_prefix]"
+	echo >&2 "	[-l metadata_directory] [-p metadata_backend_port]"
+	echo >&2 "	[-f backend_file]"
+	exit 1
 }
 
 ABORT()
@@ -38,31 +38,14 @@ ABORT()
 	exit 1
 }
 
-update_usage_()
-{
-	return 1
-}
-
-usage()
-{
-	echo >&2 "usage: $PROGNAME [--help] [-t] [--update]"
-	echo >&2 "	[-N]			- do not restart the server processes"
-	echo >&2 "	[--prefix prefix]	- directory specified in config-gfarm"
-	echo >&2 "	[-P backend_prefix]	- installation prefix of the backend program"
-	echo >&2 "	[-l metadata_directory]	- backend database data directory"
-	echo >&2 "	[-f backend_file]"
-	update_usage_$BACKEND_TYPE ||
-		echo >&2 "	no option for backend=$BACKEND_TYPE"
-	exit 1
-}
-
-update_sanity_()
-{
-	return 0
-}
-
 update_sanity()
 {
+	if [ ! -f $GFMD_CONF ]
+	then
+		echo "$GFMD_CONF: no such file" >&2
+		return 1
+	fi
+
 	update_sanity_$BACKEND_TYPE
 }
 
@@ -72,16 +55,16 @@ display_backend_data_dir_param()
 {
     echo     "metadata     directory    [-l]: $BACKEND_DATA_DIR"
 }
-
 display_backend_log_dir_param()
 {
-    return 0
+    echo     "metadata log directory    [-L]: $BACKEND_LOG_DIR"
 }
 
 display_params()
 {
     echo     "prefix [--prefix]: $CONFIG_PREFIX"
     echo     "metadata backend    [-b]: $BACKEND_TYPE"
+    echo     "(available backend: $backend_candidates)"
 
     display_backend_params_$BACKEND_TYPE
     display_backend_port_params_$BACKEND_TYPE
@@ -104,11 +87,17 @@ while [ $# -gt 0 ] ; do
 	  --prefix) shift; [ $# -ge 1 ] || usage
 		CONFIG_PREFIX=$1
 		;;
+	  -U) shift; [ $# -ge 1 ] || usage
+		BACKEND_ADMIN_USER=$1
+		;;
 	  -P) shift; [ $# -ge 1 ] || usage
 		BACKEND_PREFIX=$1
 		;;
 	  -l) shift; [ $# -ge 1 ] || usage
 		BACKEND_DATA_DIR=$1
+		;;
+	  -p) shift; [ $# -ge 1 ] || usage
+		BACKEND_PORT=$1
 		;;
 	  -f) shift; [ $# -ge 1 ] || usage
 		BACKEND_OPTIONS="$BACKEND_OPTIONS -f $1"
@@ -118,19 +107,11 @@ while [ $# -gt 0 ] ; do
 	  --help)
 		usage
 		;;
-	  -N)
-		START_SERVICE=false
-		;;
 	  -t)
 		DISPLAY_PARAMS=true
 		;;
-	  --update|--update-symlink) 
-		UPDATE=true
-		;;
-
-	# XXX postgresql backend dependent option
-	  -X)
-		SUPPORT_XML_TYPE=yes
+	  --update-symlink) 
+		UPDATE_SYMLINK=true
 		;;
 	  *)
 		usage
@@ -139,52 +120,27 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
+#
+# default values
+#
+
+PATH="${prefix}/bin:${prefix}/sbin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/ucb:/usr/pkg/bin:/usr/pkg/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
+export PATH
+search_path="$PATH"
+
+set_default_backend_perfix_$BACKEND_TYPE
 : ${CONFIG_PREFIX:=}
+set_first_defaults_$BACKEND_TYPE
+
+: ${DISPLAY_PARAMS:=false}
+: ${UPDATE_SYMLINK:=false}
 if [ X"$CONFIG_PREFIX" != X ]; then
 	: ${GFARM_CONF_DIR:="$CONFIG_PREFIX/etc"}
 else
 	: ${GFARM_CONF_DIR:="$sysconfdir"}
 fi
+: ${GFARM_CONF:="$GFARM_CONF_DIR/gfarm2.conf"}
 : ${GFMD_CONF:="$GFARM_CONF_DIR/gfmd.conf"}
-
-# sanity check
-if [ ! -f ${GFMD_CONF} ]; then
-	ABORT "${PROGNAME}: cannot find ${GFMD_CONF}, --prefix option required"
-fi
-
-# determine a backend database type
-if grep '^[ 	]*postgresql_server_host[ 	]' ${GFMD_CONF} >/dev/null
-then
-	BACKEND_TYPE=postgresql
-elif grep '^[ 	]*ldap_server_host[ 	]' ${GFMD_CONF} >/dev/null
-then
-	BACKEND_TYPE=ldap
-else
-	echo >&2 "${PROGNAME}: cannot determine the backend type"
-	exit 1
-fi
-
-# load backend-dependent functions
-. $config_dir/config-gfarm.$BACKEND_TYPE
-. $config_dir/config-gfarm-update.$BACKEND_TYPE
-
-#
-# search default $BACKEND_PREFIX
-#
-
-set_default_backend_prefix_$BACKEND_TYPE
-. $config_dir/config-gfarm.sysdep
-
-#
-# default values
-#
-
-set_first_defaults_$BACKEND_TYPE
-sysdep_defaults
-
-: ${DISPLAY_PARAMS:=false}
-: ${START_SERVICE:=true}
-: ${UPDATE:=false}
 
 update_first_set_param_$BACKEND_TYPE
 set_last_defaults_$BACKEND_TYPE
@@ -198,11 +154,8 @@ $DISPLAY_PARAMS && display_params
 update_postprocess_$BACKEND_TYPE || ABORT "aborted"
 
 #
-if $UPDATE; then
-	update_$BACKEND_TYPE
+if $UPDATE_SYMLINK; then
+	update_symlink_$BACKEND_TYPE
 else
-	update_access_db_$BACKEND_TYPE $BACKEND_OPTIONS
+	access_db_postgresql $BACKEND_OPTIONS
 fi
-
-status=0
-# trap action automatically returns this $status as exit code

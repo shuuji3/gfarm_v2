@@ -57,7 +57,6 @@
 #include "fs.h"
 #include "job.h"
 #include "back_channel.h"
-#include "xattr.h"
 
 #include "protocol_state.h"
 
@@ -381,33 +380,6 @@ protocol_switch(struct peer *peer, int from_client, int skip, int level,
 		e = gfj_server_info(peer, from_client, skip); break;
 	case GFJ_PROTO_HOSTINFO:
 		e = gfj_server_hostinfo(peer, from_client, skip); break;
-	case GFM_PROTO_XATTR_SET:
-		e = gfm_server_setxattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_SET:
-		e = gfm_server_setxattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XATTR_GET:
-		e = gfm_server_getxattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_GET:
-		e = gfm_server_getxattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XATTR_REMOVE:
-		e = gfm_server_removexattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_REMOVE:
-		e = gfm_server_removexattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XATTR_LIST:
-		e = gfm_server_listxattr(peer, from_client, skip, 0);
-		break;
-	case GFM_PROTO_XMLATTR_LIST:
-		e = gfm_server_listxattr(peer, from_client, skip, 1);
-		break;
-	case GFM_PROTO_XMLATTR_FIND:
-		e = gfm_server_findxmlattr(peer, from_client, skip);
-		break;
 	default:
 		gflog_warning("unknown request: %d", request);
 		e = GFARM_ERR_PROTOCOL;
@@ -541,40 +513,6 @@ protocol_main(void *arg)
 	return (NULL);
 }
 
-/* only called in case of gfarm_auth_id_type == GFARM_AUTH_ID_TYPE_USER */
-gfarm_error_t
-auth_uid_to_global_username(void *closure,
-	enum gfarm_auth_method auth_method,
-	const char *auth_user_id,
-	char **global_usernamep)
-{
-	char *global_username;
-	struct user *u;
-
-	giant_lock();
-	if (GFARM_IS_AUTH_GSI(auth_method)) { /* auth_user_id is a DN */
-		u = user_lookup_gsi_dn(auth_user_id);
-	} else { /* auth_user_id is a gfarm global user name */
-		u = user_lookup(auth_user_id);
-	}
-	giant_unlock();
-
-	if (u == NULL) {
-		/*
-		 * do not return GFARM_ERR_NO_SUCH_USER
-		 * to prevent information leak
-		 */
-		return (GFARM_ERR_AUTHENTICATION);
-	}
-	if (global_usernamep == NULL)
-		return (GFARM_ERR_NO_ERROR);
-	global_username = strdup(user_name(u));
-	if (global_username == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-	*global_usernamep = global_username;
-	return (GFARM_ERR_NO_ERROR);
-}
-
 gfarm_error_t
 peer_authorize(struct peer *peer)
 {
@@ -586,6 +524,7 @@ peer_authorize(struct peer *peer)
 	struct sockaddr addr;
 	socklen_t addrlen = sizeof(addr);
 	char addr_string[GFARM_SOCKADDR_STRLEN];
+	struct user *u;
 
 	/* without TCP_NODELAY, gfmd is too slow at least on NetBSD-3.0 */
 	rv = 1;
@@ -611,8 +550,25 @@ peer_authorize(struct peer *peer)
 		}
 	}
 	e = gfarm_authorize(peer_get_conn(peer), 0, GFM_SERVICE_TAG,
-	    hostname, &addr, auth_uid_to_global_username, NULL,
+	    hostname, &addr,
 	    &id_type, &username, &auth_method);
+	/*
+	 * In GSI, username will be a DN, which needs to be mapped to
+	 * a global user name.
+	 */
+	if (e == GFARM_ERR_NO_ERROR && id_type == GFARM_AUTH_ID_TYPE_USER &&
+	    GFARM_IS_AUTH_GSI(auth_method)) {
+		giant_lock();
+		if ((u = user_lookup_gsi_dn(username)) == NULL)
+			e = GFARM_ERR_NO_SUCH_USER;
+		else {
+			free(username);
+			username = strdup(user_name(u));
+			if (username == NULL)
+				e = GFARM_ERR_NO_MEMORY;
+		}
+		giant_unlock();
+	}
 	if (e == GFARM_ERR_NO_ERROR) {
 		protocol_state_init(peer_get_protocol_state(peer));
 
@@ -744,7 +700,7 @@ sigs_handler(void *p)
 		if (sigwait(sigs, &sig) == -1)
 			gflog_warning("sigs_handler: %s", strerror(errno));
 #ifdef __linux__
-		/*
+		/* 
 		 * On linux-2.6.11 on Fedora Core 4,
 		 * spurious signal sig=8195840 arrives.
 		 * On debian-etch 4.0, signal 0 arrives.
@@ -843,7 +799,7 @@ main(int argc, char **argv)
 		case 'L':
 			syslog_level = gflog_syslog_name_to_priority(optarg);
 			if (syslog_level == -1)
-				gflog_fatal("-L %s: invalid syslog priority",
+				gflog_fatal("-L %s: invalid syslog priority", 
 				    optarg);
 			break;
 		case 'P':
@@ -961,7 +917,6 @@ main(int argc, char **argv)
 	file_copy_init();
 	dead_file_copy_init();
 	symlink_init();
-	xattr_init();
 
 	peer_init(table_size, protocol_main);
 	job_table_init(table_size);

@@ -51,12 +51,6 @@ call_pg_ctl()
 start()
 {
 	echo -n "Starting $FILE: "
-	checkstatus > /dev/null
-	if [ $? -eq 0 ]; then
-		success
-		echo
-		return 0
-	fi
 
 	# increase the maximum number of open file descriptors
 	ulimit -n 16384 2> /dev/null
@@ -70,13 +64,6 @@ start()
 stop()
 {
 	echo -n "Stopping $FILE: "
-	checkstatus > /dev/null
-	if [ $? -eq 3 ]; then
-		success
-		echo
-		return 0
-	fi
-
 	call_pg_ctl stop && success || failure
 	RETVAL=$?
 	[ $RETVAL -eq 0 ] && rm -f "$LOCKFILE"
@@ -87,9 +74,6 @@ stop()
 checkstatus()
 {
 	call_pg_ctl status
-	RETVAL=$?
-	[ $RETVAL -eq 1 ] && RETVAL=3
-	return $RETVAL
 }
 
 usage()

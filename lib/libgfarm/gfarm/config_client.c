@@ -20,25 +20,15 @@
 #define GFARM_USE_STDIO
 #include "config.h"
 #include "gfm_client.h"
+#include "metadb_server.h" /* XXX FIXME this shouldn't be needed here */
 #include "gfs_proto.h"
 #include "gfs_client.h"
 
 /*
- * XXX FIXME this shouldn't be necessary,
- * if multiple metadata servers are supported.
+ * XXX FIXME this shouldn't be necessary here
+ * to support multiple metadata server.
  */
 struct gfm_connection *gfarm_metadb_server;
-
-/*
- * XXX FIXME this shouldn't be necessary,
- * if multiple metadata servers are supported.
- */
-gfarm_error_t
-gfarm_metadb_connection_acquire(struct gfm_connection **gfm_serverp)
-{
-	return (gfm_client_connection_and_process_acquire(
-	    gfarm_metadb_server_name, gfarm_metadb_server_port, gfm_serverp));
-}
 
 static gfarm_error_t
 gfarm_set_global_user_for_sharedsecret(void)
@@ -370,6 +360,12 @@ gfarm_debug_initialize(char *command)
 	signal(SIGSEGV, gfarm_sig_debug);
 }
 
+
+gfarm_pid_t gfarm_client_pid;
+gfarm_int32_t gfarm_client_pid_key_type = 1; /* XXX FIXME */
+char gfarm_client_pid_key[32];
+size_t gfarm_client_pid_key_len = sizeof(gfarm_client_pid_key);
+
 /*
  * the following function is for client,
  * server/daemon process shouldn't call it.
@@ -408,16 +404,18 @@ gfarm_initialize(int *argcp, char ***argvp)
 	 * XXX FIXME this shouldn't be necessary here
 	 * to support multiple metadata server
 	 */
-	e = gfarm_metadb_connection_acquire(&gfarm_metadb_server);
+	e = gfm_client_connection_acquire(gfarm_metadb_server_name,
+	    gfarm_metadb_server_port, &gfarm_metadb_server);
 #ifdef HAVE_GSI
 	(void)gflog_auth_set_verbose(saved_auth_verb);
 #endif
 	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_error("connecting to gfmd at %s:%d: %s\n",
+		fprintf(stderr, "connecting gfmd at %s:%d: %s\n",
 		    gfarm_metadb_server_name, gfarm_metadb_server_port,
 		    gfarm_error_string(e));
-		return (e);
+		exit(1);
 	}
+	gfarm_metadb_set_server(gfarm_metadb_server);
 
 	/* metadb access is required to obtain a global user name by GSI */
 	auth_method = gfm_client_connection_auth_method(gfarm_metadb_server);
@@ -438,6 +436,14 @@ gfarm_initialize(int *argcp, char ***argvp)
 #endif /* not yet in gfarm v2 */
 	}
 
+	gfarm_auth_random(gfarm_client_pid_key, gfarm_client_pid_key_len);
+	e = gfm_client_process_alloc(gfarm_metadb_server,
+	    gfarm_client_pid_key_type,
+	    gfarm_client_pid_key, gfarm_client_pid_key_len, &gfarm_client_pid);
+	if (e != GFARM_ERR_NO_ERROR)
+		gflog_fatal("failed to allocate gfarm PID: %s",
+		    gfarm_error_string(e));
+			
 #if 0 /* not yet in gfarm v2 */
 	gfarm_initialized = 1;
 #endif /* not yet in gfarm v2 */
@@ -446,20 +452,12 @@ gfarm_initialize(int *argcp, char ***argvp)
 }
 
 gfarm_error_t
-gfarm_client_process_set(struct gfs_connection *gfs_server,
-	struct gfm_connection *gfm_server)
+gfarm_client_process_set(struct gfs_connection *gfs_server)
 {
-	gfarm_int32_t key_type;
-	const char *key;
-	size_t key_size;
-	gfarm_pid_t pid;
-	gfarm_error_t e = gfm_client_process_get(gfm_server,
-	    &key_type, &key, &key_size, &pid);
-
-	if (e != GFARM_ERR_NO_ERROR)
-		return (e);
 	return (gfs_client_process_set(gfs_server,
-	    key_type, key, key_size, pid));
+	    gfarm_client_pid_key_type,
+	    gfarm_client_pid_key_len, gfarm_client_pid_key,
+	    gfarm_client_pid));
 }
 
 /*
@@ -494,7 +492,6 @@ gfarm_terminate(void)
 	gfarm_free_user_map();
 	gfs_client_terminate();
 	gfm_client_connection_free(gfarm_metadb_server);
-	gfm_client_terminate();
 
 	return (GFARM_ERR_NO_ERROR);
 }

@@ -29,30 +29,20 @@
 #include "gfnetdb.h"
 
 #include "hostspec.h"
-#include "gfm_client.h"
 #include "host.h"
 
-static gfarm_error_t
-host_info_get_by_name_alias(struct gfm_connection *gfm_server,
-	const char *hostname, struct gfarm_host_info *info)
-{
-	gfarm_error_t e, e2;
-
-	e = gfm_client_host_info_get_by_namealiases(gfm_server,
-	    1, &hostname, &e2, info);
-	return (e != GFARM_ERR_NO_ERROR ? e : e2);
-}
+#include "metadb_server.h" /* XXX FIXME this shouldn't be needed here */
 
 gfarm_error_t
-gfm_host_info_get_by_name_alias(struct gfm_connection *gfm_server,
-	const char *if_hostname, struct gfarm_host_info *info)
+gfarm_host_info_get_by_if_hostname(const char *if_hostname,
+	struct gfarm_host_info *info)
 {
 	gfarm_error_t e;
 	struct hostent *hp;
 	int i;
 	char *n;
 
-	e = host_info_get_by_name_alias(gfm_server, if_hostname, info);
+	e = gfarm_host_info_get_by_name_alias(if_hostname, info);
 	if (e == GFARM_ERR_NO_ERROR)
 		return (GFARM_ERR_NO_ERROR);
 
@@ -69,7 +59,7 @@ gfm_host_info_get_by_name_alias(struct gfm_connection *gfm_server,
 	if (hp == NULL || hp->h_addrtype != AF_INET)
 		return (GFARM_ERR_UNKNOWN_HOST);
 	for (i = 0, n = hp->h_name; n != NULL; n = hp->h_aliases[i++]){
-		if (host_info_get_by_name_alias(gfm_server, n, info) ==
+		if (gfarm_host_info_get_by_name_alias(n, info) ==
 		    GFARM_ERR_NO_ERROR)
 			return (GFARM_ERR_NO_ERROR);
 	}
@@ -80,15 +70,15 @@ gfm_host_info_get_by_name_alias(struct gfm_connection *gfm_server,
  * The value returned to `*canonical_hostnamep' should be freed.
  */
 gfarm_error_t
-gfm_host_get_canonical_name(struct gfm_connection *gfm_server,
-	const char *hostname, char **canonical_hostnamep, int *portp)
+gfarm_host_get_canonical_name(const char *hostname,
+	char **canonical_hostnamep, int *portp)
 {
 	gfarm_error_t e;
 	struct gfarm_host_info info;
 	int port;
 	char *n;
 
-	e = gfm_host_info_get_by_name_alias(gfm_server, hostname, &info);
+	e = gfarm_host_info_get_by_if_hostname(hostname, &info);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 
@@ -99,6 +89,39 @@ gfm_host_get_canonical_name(struct gfm_connection *gfm_server,
 		return (GFARM_ERR_NO_MEMORY);
 	*canonical_hostnamep = n;
 	*portp = port;
+	return (GFARM_ERR_NO_ERROR);
+}
+
+gfarm_error_t
+gfarm_host_get_canonical_names(int nhosts, char **hosts,
+	char ***canonical_hostnamesp, int **portsp)
+{
+	gfarm_error_t e;
+	int i;
+	char **canonical_hostnames;
+	int *ports;
+
+	GFARM_MALLOC_ARRAY(canonical_hostnames, nhosts);
+	if (canonical_hostnames == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+	GFARM_MALLOC_ARRAY(ports, nhosts);
+	if (ports == NULL) {
+		free(canonical_hostnames);
+		return (GFARM_ERR_NO_MEMORY);
+	}
+	for (i = 0; i < nhosts; i++) {
+		e = gfarm_host_get_canonical_name(hosts[i],
+		    &canonical_hostnames[i], &ports[i]);
+		if (e != GFARM_ERR_NO_ERROR) {
+			while (--i >= 0)
+				free(canonical_hostnames[i]);
+			free(canonical_hostnames);
+			free(ports);
+			return (e);
+		}
+	}
+	*canonical_hostnamesp = canonical_hostnames;
+	*portsp = ports;
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -127,8 +150,7 @@ gfarm_host_get_self_name(void)
  *	should be called before this function.
  */
 gfarm_error_t
-gfm_host_get_canonical_self_name(struct gfm_connection *gfm_server,
-	char **canonical_hostnamep, int *portp)
+gfarm_host_get_canonical_self_name(char **canonical_hostnamep, int *portp)
 {
 	gfarm_error_t e;
 	static char *canonical_self_name = NULL;
@@ -138,8 +160,8 @@ gfm_host_get_canonical_self_name(struct gfm_connection *gfm_server,
 	if (canonical_self_name == NULL) {
 		if (error_save != GFARM_ERR_NO_ERROR)
 			return (error_save);
-		e = gfm_host_get_canonical_name(gfm_server,
-		    gfarm_host_get_self_name(), &canonical_self_name, &port);
+		e = gfarm_host_get_canonical_name(gfarm_host_get_self_name(),
+		    &canonical_self_name, &port);
 		if (e != GFARM_ERR_NO_ERROR) {
 			error_save = e;
 			return (e);
@@ -284,31 +306,29 @@ gfarm_host_get_self_architecture(char **architecture)
 
 #endif /* not yet in gfarm v2 */
 
-static int
-gfm_canonical_hostname_is_local(struct gfm_connection *gfm_server,
-	const char *canonical_hostname)
+int
+gfarm_canonical_hostname_is_local(const char *canonical_hostname)
 {
 	gfarm_error_t e;
 	char *self_name;
 	int port;
 
-	e = gfm_host_get_canonical_self_name(gfm_server, &self_name, &port);
+	e = gfarm_host_get_canonical_self_name(&self_name, &port);
 	if (e != GFARM_ERR_NO_ERROR)
 		self_name = gfarm_host_get_self_name();
 	return (strcasecmp(canonical_hostname, self_name) == 0);
 }
 
 int
-gfm_host_is_local(struct gfm_connection *gfm_server, const char *hostname)
+gfarm_host_is_local(const char *hostname)
 {
 	gfarm_error_t e;
 	char *canonical_hostname;
 	int is_local, port;
 
-	e = gfm_host_get_canonical_name(gfm_server, hostname,
-	    &canonical_hostname, &port);
-	is_local = gfm_canonical_hostname_is_local(gfm_server,
-	    canonical_hostname);
+	e = gfarm_host_get_canonical_name(hostname,
+		&canonical_hostname, &port);
+	is_local = gfarm_canonical_hostname_is_local(canonical_hostname);
 	if (e == GFARM_ERR_NO_ERROR)
 		free(canonical_hostname);
 	return (is_local);
@@ -418,8 +438,6 @@ err:
 	return (e);
 }
 
-#if 0 /* "address_use" directive is disabled for now */
-
 struct gfarm_host_address_use_config {
 	struct gfarm_host_address_use_config *next;
 
@@ -447,8 +465,6 @@ gfarm_host_address_use(struct gfarm_hostspec *hsp)
 	gfarm_host_address_use_config_last = &haucp->next;
 	return (GFARM_ERR_NO_ERROR);
 }
-
-#endif /* "address_use" directive is disabled for now */
 
 static int
 always_match(struct gfarm_hostspec *hostspecp,
@@ -540,8 +556,7 @@ struct host_info_rec {
 };
 
 static gfarm_error_t
-address_get_matched(struct gfm_connection *gfm_server,
-	const char *name, struct host_info_rec *hir, int port,
+address_get_matched(const char *name, struct host_info_rec *hir, int port,
 	struct gfarm_hostspec *hostspec,
 	struct sockaddr *peer_addr, char **if_hostnamep)
 {
@@ -553,8 +568,8 @@ address_get_matched(struct gfm_connection *gfm_server,
 		return (GFARM_ERR_NO_ERROR);
 	if (!hir->tried) {
 		hir->tried = 1;
-		if (gfm_host_info_get_by_name_alias(gfm_server,
-		    name, hir->info) == GFARM_ERR_NO_ERROR)
+		if (gfarm_host_info_get_by_if_hostname(name, hir->info) ==
+		    GFARM_ERR_NO_ERROR)
 			hir->got = 1;
 	}
 	if (hir->got) {
@@ -565,30 +580,26 @@ address_get_matched(struct gfm_connection *gfm_server,
 }
 
 static gfarm_error_t
-address_get(struct gfm_connection *gfm_server, const char *name,
-	struct host_info_rec *hir, int port,
+address_get(const char *name, struct host_info_rec *hir, int port,
 	struct sockaddr *peer_addr, char **if_hostnamep)
 {
-#if 0 /* "address_use" directive is disabled for now */
 	if (gfarm_host_address_use_config_list != NULL) {
 		struct gfarm_host_address_use_config *config;
 
 		for (config = gfarm_host_address_use_config_list;
 		    config != NULL; config = config->next) {
-			if (address_get_matched(gfm_server,
+			if (address_get_matched(
 			    name, hir, port, config->hostspec,
 			    peer_addr, if_hostnamep) == GFARM_ERR_NO_ERROR)
 				return (GFARM_ERR_NO_ERROR);
 		}
 	}
-#endif /* "address_use" directive is disabled for now */
-	return (address_get_matched(gfm_server, name, hir, port, NULL,
+	return (address_get_matched(name, hir, port, NULL,
 	    peer_addr, if_hostnamep));
 }
 
 gfarm_error_t
-gfm_host_info_address_get(struct gfm_connection *gfm_server,
-	const char *host, int port,
+gfarm_host_info_address_get(const char *host, int port,
 	struct gfarm_host_info *info,
 	struct sockaddr *peer_addr, char **if_hostnamep)
 {
@@ -596,13 +607,11 @@ gfm_host_info_address_get(struct gfm_connection *gfm_server,
 
 	hir.info = info;
 	hir.tried = hir.got = 1;
-	return (address_get(gfm_server, host, &hir, port, peer_addr, 
-	    if_hostnamep));
+	return (address_get(host, &hir, port, peer_addr, if_hostnamep));
 }
 
 gfarm_error_t
-gfm_host_address_get(struct gfm_connection *gfm_server,
-	const char *host, int port,
+gfarm_host_address_get(const char *host, int port,
 	struct sockaddr *peer_addr, char **if_hostnamep)
 {
 	gfarm_error_t e;
@@ -611,7 +620,7 @@ gfm_host_address_get(struct gfm_connection *gfm_server,
 
 	hir.info = &info;
 	hir.tried = hir.got = 0;
-	e = address_get(gfm_server, host, &hir, port, peer_addr, if_hostnamep);
+	e = address_get(host, &hir, port, peer_addr, if_hostnamep);
 	if (hir.got)
 		gfarm_host_info_free(&info);
 	return (e);

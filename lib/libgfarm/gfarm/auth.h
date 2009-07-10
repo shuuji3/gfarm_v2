@@ -91,14 +91,8 @@ gfarm_error_t gfarm_auth_request_multiplexed(struct gfarm_eventqueue *,
 gfarm_error_t gfarm_auth_result_multiplexed(struct gfarm_auth_request_state *,
 	enum gfarm_auth_method *);
 gfarm_error_t gfarm_authorize(struct gfp_xdr *, int, char *,
-	char *, struct sockaddr *,
-	gfarm_error_t (*)(void *, enum gfarm_auth_method, const char *,
-		char **), void *,
+	char *, struct sockaddr *, 
 	enum gfarm_auth_id_type *, char **, enum gfarm_auth_method *);
-
-/* default implementation of 6th argument of gfarm_authorize() */
-gfarm_error_t gfarm_auth_uid_to_global_username(void *,
-	enum gfarm_auth_method, const char *, char **);
 
 /* client side configuration */
 gfarm_error_t gfarm_set_auth_id_type(enum gfarm_auth_id_type);
@@ -159,27 +153,12 @@ gfarm_error_t gfarm_auth_result_gsi_auth_multiplexed(void *);
 
 /* auth_server_sharedsecret */
 gfarm_error_t gfarm_authorize_sharedsecret(struct gfp_xdr *,
-	int, char *, char *,
-	gfarm_error_t (*)(void *, enum gfarm_auth_method, const char *,
-	    char **), void *,
-	enum gfarm_auth_id_type *, char **);
+	int, char *, char *, enum gfarm_auth_id_type *, char **);
 
 /* auth_server_gsi */
 gfarm_error_t gfarm_authorize_gsi(struct gfp_xdr *, int, char *, char *,
-	gfarm_error_t (*)(void *, enum gfarm_auth_method, const char *,
-	    char **), void *,
 	enum gfarm_auth_id_type *, char **);
 
 /* auth_server_gsi_auth */
 gfarm_error_t gfarm_authorize_gsi_auth(struct gfp_xdr *, int, char *, char *,
-	gfarm_error_t (*)(void *, enum gfarm_auth_method, const char *,
-	    char **), void *,
 	enum gfarm_auth_id_type *, char **);
-
-/* auth_server_uid / sharedsecret */
-gfarm_error_t gfarm_auth_uid_to_global_username_sharedsecret(void *,
-	const char *, char **);
-
-/* auth_server_uid_gsi */
-gfarm_error_t gfarm_auth_uid_to_global_username_gsi(void *,
-	const char *, char **);

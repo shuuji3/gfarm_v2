@@ -12,31 +12,23 @@ struct gfs_client_connect_state;
 
 void gfs_client_terminate(void);
 
-void gfs_client_add_hook_for_connection_error(
-	gfarm_error_t (*)(struct gfs_connection *));
+void gfs_client_add_hook_for_connection_error(gfarm_error_t (*)(const char *));
 int gfs_client_is_connection_error(gfarm_error_t);
 
 int gfs_client_connection_fd(struct gfs_connection *);
 enum gfarm_auth_method gfs_client_connection_auth_method(
 	struct gfs_connection *);
 const char *gfs_client_hostname(struct gfs_connection *);
-const char *gfs_client_username(struct gfs_connection *);
-int gfs_client_port(struct gfs_connection *);
 gfarm_pid_t gfs_client_pid(struct gfs_connection *);
 
 gfarm_error_t gfs_client_connection_acquire(const char *, struct sockaddr *,
 	struct gfs_connection **);
-struct gfm_connection; /* XXX */
-gfarm_error_t gfs_client_connection_acquire_by_host(
-	struct gfm_connection *, /* XXX */
-	const char *, int, struct gfs_connection **);
 void gfs_client_connection_free(struct gfs_connection *);
 gfarm_error_t gfs_client_connect(const char *, struct sockaddr *,
 	struct gfs_connection **);
+gfarm_error_t gfs_client_disconnect(struct gfs_connection *);
 void gfs_client_connection_gc(void);
 int gfs_client_connection_is_local(struct gfs_connection *);
-
-gfarm_error_t gfs_client_connection_enter_cache(struct gfs_connection *);
 
 gfarm_error_t gfs_client_connect_request_multiplexed(
 	struct gfarm_eventqueue *, const char *, struct sockaddr *,
@@ -49,7 +41,7 @@ gfarm_error_t gfs_client_connect_result_multiplexed(
 /* from client */
 
 gfarm_error_t gfs_client_process_set(struct gfs_connection *,
-	gfarm_int32_t, const char *, size_t, gfarm_pid_t);
+	gfarm_int32_t, size_t, const char *, gfarm_pid_t);
 gfarm_error_t gfs_client_open(struct gfs_connection *, gfarm_int32_t);
 gfarm_error_t gfs_client_open_local(struct gfs_connection *, gfarm_int32_t,
 	int *);
@@ -119,6 +111,26 @@ gfarm_error_t gfs_client_command(struct gfs_connection *,
 gfarm_error_t gfs_client_fhstat(struct gfs_connection *, gfarm_ino_t,
 	struct gfs_stat *);
 gfarm_error_t gfs_client_fhremove(struct gfs_connection *, gfarm_ino_t);
+
+/*
+ * functions which try to reconnect the server
+ * when the cached connection is dead.
+ */
+
+gfarm_error_t gfs_client_connection_acquire_by_host(const char *, int,
+	struct gfs_connection **);
+gfarm_error_t gfs_client_open_with_reconnection(
+	const char *, int, gfarm_int32_t,
+	struct gfs_connection **, gfarm_error_t *);
+gfarm_error_t gfs_client_open_local_with_reconnection(
+	const char *, int, gfarm_int32_t,
+	struct gfs_connection **, gfarm_error_t *, gfarm_int32_t *);
+gfarm_error_t gfs_client_statfs_with_reconnection(
+	const char *, int, char *,
+	struct gfs_connection **, gfarm_error_t *,
+	gfarm_int32_t *,
+	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *,
+	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);
 
 /*
  * gfsd service on UDP port.
