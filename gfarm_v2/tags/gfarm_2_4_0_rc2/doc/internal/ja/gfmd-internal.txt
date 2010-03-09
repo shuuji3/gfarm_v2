@@ -1,0 +1,255 @@
+■ 設計指針
+
+○ giant_lock 保持中は休眠してはいけない。XXX 要解説
+当然、I/O も行なってはいけない。
+唯一の例外は、dbq 待ちの休眠。これは仕方ない。
+
+手抜きで、ネットワーク送信を、giant_lock を保持したままやっている
+ところがある。出力は nonblocking モードで行なっている(筈?)なので、
+出力内容がバッファよりも小さければ、休眠しない筈。
+一応、/* XXX FIXME too long giant lock */ というコメントで、
+全ての箇所をマークしてある筈だが…
+
+○ 全メタデータを、メモリにキャッシュする。
+性能優先＋コーディングを簡単にするのが目的。
+データは gfmd起動時に全てメモリに読み込み、更新のたびに dbq 経由で DB に
+書き出す。初期化を除くと、起動中に DB から読み込みを行なうことはない。
+
+ただし、xattr だけは例外。
+理由は、
+・xattr としてかなり大きなデータを想定していた
+・設計者が他の部分とは別
+であるため。
+逆に、データとして小さな xattr へのアクセスが、全くキャッシュされておらず、
+非常に遅いという制限事項がある。
+
+■ mutex 一覧
+
+mutex 間の依存関係にループがあってはいけない。デッドロックする。★重要★
+
+同時に複数の mutex の獲得を行なう場合の獲得順序は、すべて文書化が必要。
+
+mutex 獲得順序は、server/gfmd/README 参照
+XXX 保守されてない。要更新
+
+・giant_lock -> struct host::replication_mutex -> dbq.mutex
+	cf. host_peer_set()
+
+・giant_lock -> dfc_allq.mutex
+・giant_lock -> busyq.mutex -> removeq.mutex
+	以下の条件の複合による。
+	giant_lock -> removeq.mutex
+	busyq.mutex -> removeq.mutex
+
+○ giant_lock を保持したまま、休眠して良いスレッド
+
+  以下のスレッドのみ、giant_lock を保持したまま休眠しては良い。
+  これ以外のスレッドが休眠するのは、依存関係のループを生じる危険があるため
+  禁止。
+
+  ・sync_protocol_thread_pool に属するスレッド
+
+○ leaf routine のみで獲得している mutex
+
+   これらの mutex を保持したまま、他の mutex を獲得することはないし、
+   してはいけない。
+
+  ・callout_module.mutex
+
+■ スレッド一覧
+
+スレッド間の依存関係にループがあってはいけない。デッドロックする。★重要★
+
+thrpool_add_job() する場合、
+thrpool_add_job() を呼び出すスレッドは、
+thrpool_add_job() されるスレッドプールに、
+依存してしまう。
+すなわち、thrpool_add_job() されるスレッドプールが満杯の場合、
+thrpool_add_job() するスレッドは休眠する。
+
+スレッドプールに属するスレッドが、
+自身のスレッドプールに対して thrpool_add_job() するのも駄目。★重要★
+そのスレッドプールの全スレッドが、
+たまたま全て同時に自スレッドプールに対して thrpool_add_job() すると、
+プールに空きがないので、全て休眠し、そのまま寝たきりになる。
+もっとも通常の負荷であれば、gfarm_metadb_job_queue_length の長さがある
+キューによって緩衝されるため、このデッドロックは発生しない。高負荷で
+キューが一杯の時に上記の状況が発生するとまずい。
+
+スレッドプール間の依存関係にループがあるのも駄目。★重要★
+back_channel_send_thread_pool は、通信を解して暗に, 
+back_channel_recv_thread_pool に依存しているので要注意。★重要★
+
+依存関係の図は
+doc/internal/png/gfmd-thread-dependency.png
+にあるが、この図で、
+・矢印を丸(スレッド)を辿った時、スレッド間がループになっていてはいけない。
+・矢印で箱(スレッドプール)を辿った時、プール間がループになっていてはいけない。
+・同一の箱(同一のスレッドプール)の中にあるスレッド間に、
+  thrpool_add_job()の矢印関係があってはいけない。
+
+○ main スレッド: accepting_loop() 
+
+   TCP 接続待ちを行なうのが役割。
+
+○ create_detached_thread() で作成される、独立したスレッド。
+
+　・シグナル監視用 sigs_handler()
+
+　・callout 時刻監視用 callout_main() × CALLOUT_NTHREADS
+
+    callout_main() が thrpool_add_job() するスレッドプールの数だけ
+    callout_main() スレッドを用意した方が良い。さもないと、あるスレッド
+    プールが満杯となったとき、関係ないスレッドの処理まで遅延してしまう。
+    現在は、back_channel_send_thread_pool のみであるため、CALLOUT_NTHREADS == 1
+
+    callout_reset() しているのは、back_channel_recv_thread_pool に属する
+    gfs_async_client_status_result() だが、callout_reset() は
+    cond_signal() しているだけなので、callout_reset() では依存は起きない。
+
+  ・db_thread()
+
+　・ネットワーク受信監視用 peer_watcher() × 1
+
+    peer_watcher() が thrpool_add_job() するスレッドプールの数だけ、
+    peer_watcher() スレッドを用意した方が良い。さもないと、あるスレッド
+    プールが満杯となったとき、関係ないスレッドの処理まで遅延してしまう。
+    現在、sync_protocol_thread_pool と back_channel_recv_thread_pool の 2つ
+    あるため peer_watcher() スレッドも 2つにしたいが、現行の peer_watcher() の
+    実装がそれを許してなさそうなため、1つのまま。
+	→ peer_watcher() を 2スレッドで動かせるように変更する予定。XXX
+
+    XXX DEADLOCK
+    現状、以下の理由で、deadlock の危険がある。
+
+    peer_watcher() が呼び出す 2つのスレッドプール、sync_protocol_thread_pool
+    および back_channel_recv_thread_pool は、back_channel_send_thread_pool の
+    ように、非同期に大量の送信を一度に行なって詰まる心配はない。しかし、
+    sync_protocol_thread_pool は back_channel_send_thread_pool に依存し
+    ているため、back_channel_send_thread_pool の側の問題で、peer_watcher() に
+    よる sync_protocol_thread_pool に対する thrpool_add_job() が詰まる
+    可能性は残る。
+    peer_watcher() が 1スレッドのみだと、peer_watcher() 自体が止まって
+    しまうため、back_channel_recv_thread_pool も巻き添えをくって、止まる。
+    その結果、back_channel_recv_thread_pool に依存している
+    back_channel_send_thread_pool も動かなくなり、依存関係のループとなって、
+    deadlock する。
+
+  ・peer_closer()
+
+  ・旧backend_protocolの場合、各filesystem nodeに対し remover() × 大量
+
+    廃止して、back_channel_recv_thread_pool を使うようにする予定。
+
+○ スレッドプール
+
+プール中の各スレッドの実体は、thrpool_worker()。
+
+　− authentication_thread_pool
+
+    このプールを用いて起動されるのは、以下のスレッド。
+
+    ・try_auth()
+      accepting_loop() が thrpool_add_job() する。
+
+　− sync_protocol_thread_pool
+
+    このプールを用いて起動されるのは、以下のスレッド。
+
+    ・protocol_main()
+      - try_auth() が、peer_authorized() 経由で、thrpool_add_job() する。
+      - peer_watcher() が、thrpool_add_job() する。
+
+　− back_channel_send_thread_pool
+  
+    このプールを用いて起動されるのは、以下のスレッド。
+
+    ・gfs_async_client_status_request()
+      - protocol_main() が、gfm_server_switch_async_back_channel() 経由で、
+        thrpool_add_job() する。
+      - callout_main() が、thrpool_add_job() する。
+	callout に起床を依頼しているのは、back_channel_recv_thread_pool に属する
+	gfs_async_client_status_result() だが、callout_reset() を使っているので
+	依存は起きない。
+
+    ・gfs_async_client_replication_request_request()
+      - protocol_main() が、async_back_channel_replication_request() 経由で、
+        thrpool_add_job() する。
+
+　− back_channel_recv_thread_pool
+
+    このプールを用いて起動されるのは、以下のスレッド。
+
+    ・async_back_channel_main()
+      - protocol_main() が、gfm_server_switch_async_back_channel() 経由で、
+        thrpool_add_job() する。
+      - peer_watcher() が、thrpool_add_job() する。
+	これが発生するのは、gfsd からの async RPC request か、あるいは、
+	gfmd からの async RPC request に対して gfsd が reply した場合。
+	後者の gfmd→gfsd の async RPC request は、back_channel_send_thread_pool
+	を用いて行なわれる。このため、async_back_channel_main() の処理が
+	詰まると、結果として、back_channel_send_thread_pool までも詰まる
+	可能性がある。
+	このため、back_channel_recv_thread_pool に属するスレッドは、
+	以下のプールに属する資源を待ってはいけない。★重要★
+	 * authentication_thread_pool
+	 * sync_protocol_thread_pool
+	 * back_channel_send_thread_pool
+	もし行なうと、依存関係がループを構成し、deadlock の危険が生じる。
+	当然、上記のプールに thrpool_add_job() してもいけない。
+	また、上記のプールに属する資源待ちの mutex を待ってもいけない。
+	したがって、giant_lock() を行なっても駄目。
+	ただし、上記のプールと競合するが、それ自身では cond_wait() 等を
+	行なわない、リーフの mutex を待つだけなら問題ない。
+	また、gfm_async_server_replication_result() は、直接、以下を
+	行なってはいけない。
+		・結果の処理のための host_replicated()
+		・結果の送信 peer_sender_lock() を待つことがある。
+				→ 送信側を待つことがある。XXX DEADLOCK
+
+■ back_channel に関する設計
+
+○ back_channel に必要な資源 (callout など) を、
+   (1) peer に帰属させるか
+   (2) host に帰属させるか
+   (3) back_channel 通信のための構造体を作成し、そこに帰属させるか
+  という選択肢がある。
+  back_channel 通信終了時の同期処理を考えると、その生存区間が gfmd 起動中
+  である (1) か (2) の方が、データ構造自体が消えてしまうため同期用に別領域
+  の確保が必要となる (3) よりもプログラムの作りが簡単になる。
+  また以下のように peer の方が、host よりも数が多く
+	(peer の数 == クライアントの数× 2 ＋ host の数)
+  メモリ消費的には (2) の方が有利なので、host に帰属させることにした。
+  ただし async については、conn と同様な通信処理時に必要なデータであり、
+  back_channel が新しいコネクションに切り替わっているが、
+  古いコネクションもまだ残っている場合に使われる可能性を考慮して (1) とする。
+
+・host_receiver_lock() が必要な理由
+  受信は peer_watch() から呼び出され、同一 peer なら同一スレッドで動作
+  するため、peer 間の受信競合は発生しない。
+  host_receiver_lock() している理由は、peer_free_request() との競合回避
+  のため。
+
+・host_sender_lock()/_trylock() が必要な理由
+  - host_receiver_lock() と同様 peer_free_request() との競合回避
+  - 送信の場合は同一 peer でも複数スレッドで競合するのでその回避
+  - 送信側が詰まった場合に、同一 peer 宛のスレッドで、スレッドプールが
+    埋め尽くされるのを防ぐために host_sender_trylock() で事前検査する。
+    gfm_async_server_replication_result() のみは _trylock() ではなく
+    _lock() を使っているので、複数のスレッドプールを占有してしまう
+    可能性があるが、これは返答であるため、実質的な危険性はかなり低い。
+
+・ホスト down 対策
+  - ・gfs_client_status_request() で、前回からまだ答がなかった
+    場合、すなわち host_status_reply_is_waiting() が成り立っていた
+    時には、コネクションを切断する。(down 状態となる)
+  - 送信処理の時に host_sender_try_lock() で送信可能かどうかを
+    確認し、送信が滞留していた場合には、host_peer_busy() で
+    コネクションを切断する
+
+■ XXX 未記載 TO-DO
+
+・protocol_main() で受けた処理は resuming_thread() での返答待ちになる
+  ものがあるが、resume が callback で実現されているため、スレッドプー
+  ル資源待ちのデッドロックにはならない。
+
