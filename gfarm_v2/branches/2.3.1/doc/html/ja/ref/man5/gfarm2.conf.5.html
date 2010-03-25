@@ -1,0 +1,1652 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<HTML
+><HEAD
+><TITLE
+>gfarm2.conf</TITLE
+><META
+NAME="GENERATOR"
+CONTENT="Modular DocBook HTML Stylesheet Version 1.79"></HEAD
+><BODY
+CLASS="REFENTRY"
+BGCOLOR="#FFFFFF"
+TEXT="#000000"
+LINK="#0000FF"
+VLINK="#840084"
+ALINK="#0000FF"
+><H1
+><A
+NAME="GFARM2.CONF.5"
+></A
+>gfarm2.conf</H1
+><DIV
+CLASS="REFNAMEDIV"
+><A
+NAME="NAME"
+></A
+><H2
+>Name</H2
+>gfarm2.conf&nbsp;--&nbsp;GfarmÀßÄê¥Õ¥¡¥¤¥ë</DIV
+><DIV
+CLASS="REFSECT1"
+><A
+NAME="DESCRIPTION"
+></A
+><H2
+>DESCRIPTION</H2
+><P
+>gfarm2.conf¥Õ¥¡¥¤¥ë¤Ï¡¢gfarm¥×¥í¥°¥é¥à¤ÎÀßÄê¥Õ¥¡¥¤¥ë¤Ç¤¹¡£
+¥µ¡¼¥Ğ¡¼¡¦¥×¥í¥»¥¹¤Ç¤¢¤ëgfsd¤Ï¡¢¥Ç¥Õ¥©¥ë¥È¤Ç¤Ï¡¢
+¤³¤Î%%SYSCONFDIR%%/gfarm2.conf¤òÀßÄê¥Õ¥¡¥¤¥ë¤È¤·¤Æ»²¾È¤·¤Ş¤¹¡£
+¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğ¡¼¡¦¥×¥í¥»¥¹¤Ç¤¢¤ëgfmd¤Ï¡¢%%SYSCONFDIR%%/gfmd.conf¤ò
+ÆÉ¤ß¹ş¤ß¤Ş¤¹¡£gfmd.conf¤Î·Á¼°¤Ï¡¢gfarm2.conf¤ÈÆ±°ì¤Ç¤¹¡£
+¤Ê¤ª¡¢ÀßÄêÆâÍÆ¤¬ÆÉ¤ß¹ş¤Ş¤ì¤ë¤Î¤Ïµ¯Æ°»ş¤À¤±¤Ê¤Î¤Ç¡¢
+ÀßÄêÆâÍÆ¤òÊÑ¹¹¤·¤¿¾ì¹ç¡¢¥µ¡¼¥Ğ¡¼¤òºÆµ¯Æ°¤¹¤ëÉ¬Í×¤¬¤¢¤ê¤Ş¤¹¡£</P
+><P
+>¥¢¥×¥ê¥±¡¼¥·¥ç¥ó¥×¥í¥°¥é¥à¤Ï¡¢´Ä¶­ÊÑ¿ôGFARM_CONFIG_FILE¤Ç
+»ØÄê¤·¤¿¥Õ¥¡¥¤¥ë¤È¡¢%%SYSCONFDIR%%/gfarm2.conf¤ò¡¢ÀßÄê¥Õ¥¡¥¤¥ë
+¤È¤·¤Æ»²¾È¤·¤Ş¤¹¡£¤³¤ÎÆó¤Ä¤Î¥Õ¥¡¥¤¥ë¤Ç¤Ï¡¢´Ä¶­ÊÑ¿ôGFARM_CONFIG_FILE¤Ç
+»ØÄê¤·¤¿¥Õ¥¡¥¤¥ë¤ÎÀßÄê¤ÎÊı¤¬Àè¤ËÆÉ¤ß¹ş¤Ş¤ì¤Ş¤¹¡£
+¤É¤Á¤é¤ÎÀßÄê¥Õ¥¡¥¤¥ë¤â¡¢Æ±°ì¤ÎÊ¸Ë¡¤Çµ­½Ò¤·¤Ş¤¹¡£
+Æ±°ì¤Î»ØÄêÊ¸¤¬Ê£¿ô¤¢¤Ã¤¿¾ì¹ç¤Ë¤Ï¡¢Àè¤Ë»ØÄê¤µ¤ì¤Æ¤¤¤¿Êı¤¬Í¥Àè¤µ¤ì¤Ş¤¹¡£
+´Ä¶­ÊÑ¿ôGFARM_CONFIG_FILE¤¬ÀßÄê¤µ¤ì¤Æ¤Ê¤¤¾ì¹ç¡¢Âå¤ï¤ê¤Ë
+¥æ¡¼¥¶¡¼¤Î¥Û¡¼¥à¥Ç¥£¥ì¥¯¥È¥ê¤Ë¤¢¤ë.gfarm2rc¥Õ¥¡¥¤¥ë¤ò»ÈÍÑ¤·¤Ş¤¹¡£</P
+><P
+>gfarm2.conf¤Ï¡¢°ì¹Ô¤Ë°ìÊ¸¤Î·Á¼°¤ÇÀßÄê¤·¤Ş¤¹¡£
+¤¿¤À¤·¡¢¹ÔËö¤ËÊ¸»ú``\''¤òµ­½Ò¤¹¤ë¤³¤È¤Ë¤è¤Ã¤Æ¡¢¹Ô¤ò·ÑÂ³¤µ¤»¤ë¤³¤È¤¬
+¤Ç¤­¤Ş¤¹¡£¤Ş¤¿¡¢Ê¸»ú``#''¤«¤é¹ÔËö¤Ş¤Ç¤Ï¡¢¥³¥á¥ó¥È¤È¤·¤Æ°·¤ï¤ì¡¢Ìµ»ë
+¤µ¤ì¤Ş¤¹¡£</P
+></DIV
+><DIV
+CLASS="REFSECT1"
+><A
+NAME="HOSTSPECIFICATION"
+></A
+><H2
+>¥Û¥¹¥È»ØÄê</H2
+><P
+>°ú¿ô¤È¤·¤Æ¡¢<TT
+CLASS="PARAMETER"
+><I
+>¥Û¥¹¥È»ØÄê</I
+></TT
+>¤òµ­½Ò¤Ç¤­¤ëÊ¸¤¬¤¤¤¯¤Ä¤«¤¢¤ê¤Ş¤¹¤¬¡¢
+¤³¤Î¾ì¹ç¡¢¥Û¥¹¥È»ØÄê¤Ë¤Ï¡¢²¼µ­¤Î¤¤¤º¤ì¤«¤òµ­½Ò¤Ç¤­¤Ş¤¹¡£</P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+><TT
+CLASS="PARAMETER"
+><I
+>III.JJJ.KKK.LLL</I
+></TT
+></DT
+><DD
+><P
+>"."¤Ç¶èÀÚ¤é¤ì¤¿0¡Á255¤Ş¤Ç¤Î¿ô»ú4¤Ä¤Ç¡¢IP¥¢¥É¥ì¥¹¤ò»ØÄê¤·¤Ş¤¹¡£</P
+></DD
+><DT
+><TT
+CLASS="PARAMETER"
+><I
+>III.JJJ.KKK.LLL</I
+></TT
+>/<TT
+CLASS="PARAMETER"
+><I
+>MM</I
+></TT
+></DT
+><DD
+><P
+>IP¥¢¥É¥ì¥¹¤È¡¢"/"¤Ç¶èÀÚ¤é¤ì¤¿0¡Á31¤Ş¤Ç¤Î¿ô»ú¤Ç¡¢¥Í¥Ã¥È¥ï¡¼¥¯¤ò
+»ØÄê¤·¤Ş¤¹¡£"/"°Ê¹ß¤Î¿ô»ú¤Ïnetmask¤Î¥Ó¥Ã¥ÈÄ¹¤Ç¤¹¡£</P
+></DD
+><DT
+><TT
+CLASS="PARAMETER"
+><I
+>domain.name</I
+></TT
+></DT
+><DD
+><P
+>¥Û¥¹¥ÈÌ¾¤ò¥É¥á¥¤¥óÌ¾¤Ç»ØÄê¤·¤Ş¤¹¡£</P
+></DD
+><DT
+><I
+CLASS="EMPHASIS"
+>.</I
+><TT
+CLASS="PARAMETER"
+><I
+>domain.name</I
+></TT
+></DT
+><DD
+><P
+>¥É¥á¥¤¥óÌ¾¤ÎÀèÆ¬¤¬"."¤Ç¤Ï¤¸¤Ş¤ë¾ì¹ç¡¢¤³¤Î¥É¥á¥¤¥óÌ¾¤Ë½êÂ°¤¹¤ëÁ´¤Æ¤Î
+¥Û¥¹¥È¤ò°ÕÌ£¤·¤Ş¤¹¡£</P
+></DD
+><DT
+><I
+CLASS="EMPHASIS"
+>*</I
+></DT
+><DD
+><P
+>"*"¤Èµ­½Ò¤µ¤ì¤Æ¤¤¤ë¾ì¹ç¡¢Á´¤Æ¤Î¥Û¥¹¥È¤ò°ÕÌ£¤·¤Ş¤¹¡£</P
+></DD
+><DT
+><I
+CLASS="EMPHASIS"
+>LISTENER</I
+></DT
+><DD
+><P
+>Á´¤ÆÂçÊ¸»ú¤Ç"LISTENER"¤Èµ­½Ò¤¹¤ë¤È¡¢ÄÌ¿®¤¹¤ëÁê¼ê¤Ë´Ø·¸¤Ê¤¯¡¢
+¥µ¡¼¥Ğ¡¼Â¦(Ãå¸ÆÂ¦)¤Î¥½¥±¥Ã¥È¤ò°ÕÌ£¤·¤Ş¤¹¡£</P
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="REFSECT1"
+><A
+NAME="STATEMENT"
+></A
+><H2
+>Ê¸</H2
+><P
+>Ê¸¤Ë¤Ï¡¢²¼µ­¤Î¼ïÎà¤¬¤¢¤ê¤Ş¤¹¡£</P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+><SPAN
+CLASS="TOKEN"
+>spool</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>gfsd¥¹¥×¡¼¥ë¡¦¥Ç¥£¥ì¥¯¥È¥ê</I
+></TT
+></DT
+><DD
+><P
+>gfsd¤¬¡¢gfarm¥Õ¥¡¥¤¥ë¤Î¼ÂÂÎ¤òÊİ»ı¤¹¤ë¥Ç¥£¥ì¥¯¥È¥êÌ¾¤ò
+»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	spool&nbsp;/var/spool/gfarm</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>spool_server_listen_address</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>IP¥¢¥É¥ì¥¹</I
+></TT
+></DT
+><DD
+><P
+>gfsd¤¬TCP¤ª¤è¤ÓUDP¤ÎÍ×µá¤ò¼õ¤±ÉÕ¤±¤ëIP¥¢¥É¥ì¥¹¤ò»ØÄê¤·¤Ş¤¹¡£
+¾ÊÎ¬»ş¤Ï¡¢¤½¤Î¥Û¥¹¥È¤ÎÁ´¤Æ¤ÎIP¥¢¥É¥ì¥¹¤Ç¼õ¤±ÉÕ¤±¤Ş¤¹¡£
+¤³¤Î¥ª¥×¥·¥ç¥ó¤Ï¡¢°ì¤Ä¤Î¥Î¡¼¥É¤ÇÊ£¿ô¤Î¥¹¥×¡¼¥ë¤òÄó¶¡¤¹¤ë¾ì¹ç¤Ë¡¢
+¤½¤ì¤¾¤ì¤Î¥¹¥×¡¼¥ë¤´¤È¤Ë¡¢ÊÌ¡¹¤ÎIP¥¢¥É¥ì¥¹¤ò»È¤Ã¤Ægfsd¤òµ¯Æ°¤¹¤ë
+¤¿¤á¤ËÍÑ¤¤¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	spool_server_listen_address&nbsp;192.168.121.1</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>cred_type</I
+></TT
+></DT
+><DD
+><P
+>GSIÇ§¾Ú¤Ë¤ª¤¤¤Æ¡¢gfsd¤¬ÍÑ¤¤¤ë¾ÚÌÀ½ñ¤Î¼ïÎà¤ò»ØÄê¤·¤Ş¤¹¡£
+<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>ÍøÍÑ»ş¤Ë¤Ï¡¢¤³¤Î»ØÄê¤ÏÃ±¤ËÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
+><P
+>¥µ¡¼¥ĞÂ¦¤Ç¤³¤Î»ØÄê¤ò¾ÊÎ¬¤·¤¿¾ì¹ç¡¢¥µ¡¼¥Ğ¤òroot¸¢¸Â¤Çµ¯Æ°¤·¤¿¾ì¹ç¤Ï
+¥Û¥¹¥È¾ÚÌÀ½ñ¤òÍÑ¤¤¤Ş¤¹¡£¤Ş¤¿¥µ¡¼¥Ğ¤ò°ìÈÌ¥æ¡¼¥¶¸¢¸Â¤Çµ¯Æ°¤·¤¿¾ì¹ç¤Ï
+¥æ¡¼¥¶¾ÚÌÀ½ñ¤òÍÑ¤¤¤Ş¤¹¡£</P
+><P
+>¥¯¥é¥¤¥¢¥ó¥ÈÂ¦¤Ç¤³¤Î»ØÄê¤ò¾ÊÎ¬¤·¤¿¾ì¹ç¡¢¥µ¡¼¥Ğ¤¬¥Û¥¹¥È¾ÚÌÀ½ñ¤òÍøÍÑ¤·¤Æ¤¤¤ë
+¤È²¾Äê¤·¤Æ¥µ¡¼¥ĞÇ§¾Ú¤ò¹Ô¤¤¤Ş¤¹¡£¤³¤Î¤¿¤á¥µ¡¼¥Ğ¤ò¥¯¥é¥¤¥¢¥ó¥È¤ÈÆ±¤¸¥æ¡¼¥¶
+¸¢¸Â¤Çµ¯Æ°¤·¤Æ¤¤¤ë¾ì¹ç¡¢¥¯¥é¥¤¥¢¥ó¥ÈÂ¦¤Ç¤Ï¡¢²¼µ­¤Î°ì¹Ô¤òÀßÄê¤·¤Æ
+¤ª¤¯É¬Í×¤¬¤¢¤ê¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	spool_server_cred_type&nbsp;self</P
+><P
+>»ØÄê²ÄÇ½¤Ê<TT
+CLASS="PARAMETER"
+><I
+>cred_type</I
+></TT
+>¤È¤·¤Æ¤Ï¡¢
+¡Ö<SPAN
+CLASS="TOKEN"
+>self</SPAN
+>¡×¡¢
+¡Ö<SPAN
+CLASS="TOKEN"
+>host</SPAN
+>¡×¡¢¡Ö<SPAN
+CLASS="TOKEN"
+>user</SPAN
+>¡×¡¢
+¡Ö<SPAN
+CLASS="TOKEN"
+>mechanism-specific</SPAN
+>¡×¤¬¤¢¤ê¡¢
+<SPAN
+CLASS="TOKEN"
+>spool_server_cred_service</SPAN
+>¤ª¤è¤Ó
+<SPAN
+CLASS="TOKEN"
+>spool_server_cred_name</SPAN
+>¤ÈÁÈ¤ß¹ç¤ï¤»¤Æ
+²¼µ­¤Î¤è¤¦¤ËÍÑ¤¤¤Ş¤¹¡£</P
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+><SPAN
+CLASS="TOKEN"
+>self</SPAN
+></DT
+><DD
+><P
+>¤½¤Î¥æ¡¼¥¶¤¬¸½ºß½ê»ı¤·¤Æ¤¤¤ë¥æ¡¼¥¶¾ÚÌÀ½ñ¤òÍÑ¤¤¤ë¤³¤È¤ò¼¨¤·¤Ş¤¹¡£
+¤³¤Î»ØÄê¤òÍøÍÑ¤¹¤ëºİ¤Ë¤Ï¡¢
+<SPAN
+CLASS="TOKEN"
+>spool_server_cred_service</SPAN
+>¤ª¤è¤Ó
+<SPAN
+CLASS="TOKEN"
+>spool_server_cred_name</SPAN
+>¤Î
+»ØÄê¤ò¹Ô¤Ã¤Æ¤Ï¤¤¤±¤Ş¤»¤ó¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>host</SPAN
+></DT
+><DD
+><P
+>¥Û¥¹¥È¾ÚÌÀ½ñ¤¢¤ë¤¤¤Ï¥µ¡¼¥Ó¥¹¾ÚÌÀ½ñ¤òÍÑ¤¤¤ë¤³¤È¤ò¼¨¤·¤Ş¤¹¡£
+¥µ¡¼¥Ó¥¹¾ÚÌÀ½ñ¤òÍÑ¤¤¤ë¾ì¹ç¡¢¤½¤Î¥µ¡¼¥Ó¥¹¤ÎÌ¾Á°¤ò
+<SPAN
+CLASS="TOKEN"
+>spool_server_cred_service</SPAN
+>¤Ç»ØÄê¤·¤Ş¤¹¡£
+¥µ¡¼¥Ó¥¹Ì¾¤Ë¡Ö<SPAN
+CLASS="TOKEN"
+>host</SPAN
+>¡×¤ò»ØÄê¤·¤¿¾ì¹ç¡¢
+¥Õ¥¡¥¤¥ë``<TT
+CLASS="FILENAME"
+>/etc/grid-security/hostcert.pem</TT
+>''¤Ë
+¤¢¤ë¥Û¥¹¥È¾ÚÌÀ½ñ¤òÍÑ¤¤¤Ş¤¹¡£
+¤½¤ì°Ê³°¤Î¥µ¡¼¥Ó¥¹Ì¾¤ò»ØÄê¤·¤¿¾ì¹ç¡¢
+¥Õ¥¡¥¤¥ë``<TT
+CLASS="FILENAME"
+>/etc/grid-security/¥µ¡¼¥Ó¥¹/¥µ¡¼¥Ó¥¹cert.pem</TT
+>''
+¤Ë¤¢¤ë¥µ¡¼¥Ó¥¹¾ÚÌÀ½ñ¤òÍÑ¤¤¤Ş¤¹¡£
+¥µ¡¼¥Ó¥¹Ì¾¤ò¾ÊÎ¬¤·¤¿¾ì¹ç¡¢¡Ö<SPAN
+CLASS="TOKEN"
+>host</SPAN
+>¡×¤¬»ØÄê¤µ¤ì¤¿¤È¤ß¤Ê¤·¤Ş¤¹¡£
+¥Û¥¹¥È¾ÚÌÀ½ñ¤ª¤è¤Ó¥µ¡¼¥Ó¥¹¾ÚÌÀ½ñ¤Î¾ì¹ç¡¢¾ÚÌÀ½ñ¤ÎCommon NameÍó¤Î¤ß¤ò
+Èæ³Ó¤·¤Ş¤¹¡£Common Name¤Ï¡¢¡ÖCN=¥µ¡¼¥Ó¥¹Ì¾/¥Û¥¹¥ÈÌ¾¡×¤Î·Á¼°¤Ç¤¢¤ëÉ¬Í×¤¬
+¤¢¤ê¤Ş¤¹¡£¤Ş¤¿¡¢¥Û¥¹¥ÈÌ¾¤Ï¡¢<B
+CLASS="COMMAND"
+>gfhost</B
+>¥³¥Ş¥ó¥É¤Ç»ØÄê¤·¤¿
+Àµ¼°Ì¾¤ÈÀµ³Î¤Ë°ìÃ×¤·¤Æ¤¤¤ëÉ¬Í×¤¬¤¢¤ê¤Ş¤¹¡£¥Û¥¹¥ÈÊÌÌ¾¤Ïµö¤µ¤ì¤Ş¤»¤ó¡£</P
+><P
+>¤³¤ì¤Ï¡¢GSSAPI (RFC2743/RFC2744)¤ÎGSS_C_NT_HOSTBASED_SERVICE¤Ë
+ÂĞ±ş¤¹¤ëµ¡Ç½¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	spool_server_cred_type&nbsp;host<br>
+	spool_server_cred_service&nbsp;host</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>user</SPAN
+></DT
+><DD
+><P
+>¥æ¡¼¥¶¾ÚÌÀ½ñ¤òÍÑ¤¤¤ë¤³¤È¤ò¼¨¤·¤Ş¤¹¡£
+¥æ¡¼¥¶¤Î¥¢¥«¥¦¥ó¥ÈÌ¾¤ò<SPAN
+CLASS="TOKEN"
+>spool_server_cred_name</SPAN
+>¤Ç»ØÄê¤·¤Ş¤¹¡£
+¥¢¥«¥¦¥ó¥ÈÌ¾¤ò¾ÊÎ¬¤·¤¿¾ì¹ç¤Ë¤Ï¡¢¤½¤Î¥³¥Ş¥ó¥É¤òµ¯Æ°¤·¤¿¥æ¡¼¥¶Ì¾¤¬»È¤ï¤ì¤Ş¤¹¡£
+¤³¤Î»ØÄê¤òÍøÍÑ¤¹¤ëºİ¤Ë¤Ï¡¢<SPAN
+CLASS="TOKEN"
+>spool_server_cred_service</SPAN
+>¤Î
+»ØÄê¤ò¹Ô¤Ã¤Æ¤Ï¤¤¤±¤Ş¤»¤ó¡£</P
+><P
+>¥æ¡¼¥¶Ì¾¤È¾ÚÌÀ½ñ¤ÎDistinguished Name¤ÎÂĞ±ş¤ò¤È¤ë¤¿¤á¡¢
+``<TT
+CLASS="FILENAME"
+>/etc/grid-security/grid-mapfile</TT
+>''¤òÍÑ¤¤¤Ş¤¹¡£
+¤³¤Î¤¿¤á¡¢¤³¤Î¥Õ¥¡¥¤¥ë¤¬Â¸ºß¤·¤Ê¤«¤Ã¤¿¤ê¡¢¤¢¤ë¤¤¤Ï¤³¤Î¥Õ¥¡¥¤¥ë¤ËÅĞÏ¿
+¤µ¤ì¤Æ¤Ê¤¤¥æ¡¼¥¶¤Ï¡¢¤³¤Îµ¡Ç½¤òÍÑ¤¤¤ë¤³¤È¤¬¤Ç¤­¤Ş¤»¤ó¡£</P
+><P
+>¤³¤ì¤Ï¡¢GSSAPI (RFC2743/RFC2744)¤ÎGSS_C_NT_USER_NAME¤ËÂĞ±ş¤¹¤ëµ¡Ç½¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	spool_server_cred_type&nbsp;user<br>
+	spool_server_cred_name&nbsp;guest</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>mechanism-specific</SPAN
+></DT
+><DD
+><P
+>¥µ¡¼¥Ğ¤ÎX.509 Distinguished Name¤ò<SPAN
+CLASS="TOKEN"
+>spool_server_cred_name</SPAN
+>¤Ç
+Ä¾ÀÜ»ØÄê¤·¤Ş¤¹¡£
+¤³¤Î»ØÄê¤òÍøÍÑ¤¹¤ëºİ¤Ë¤Ï¡¢<SPAN
+CLASS="TOKEN"
+>spool_server_cred_service</SPAN
+>¤Î
+»ØÄê¤ò¹Ô¤Ã¤Æ¤Ï¤¤¤±¤Ş¤»¤ó¡£</P
+><P
+>¤³¤ì¤Ï¡¢GSSAPI (RFC2743/RFC2744)¤ÇName Type¤È¤·¤ÆGSS_C_NO_OID¤ò
+»ØÄê¤·¤¿¾ì¹ç¤ËÂĞ±ş¤¹¤ëµ¡Ç½¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	spool_server_cred_type&nbsp;mechanism-specific<br>
+	spool_server_cred_name&nbsp;"/O=Grid/O=Globus/OU=example.com/CN=John&nbsp;Smith"</P
+></DD
+></DL
+></DIV
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>spool_server_cred_service</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>cred_service</I
+></TT
+></DT
+><DD
+><P
+>GSIÇ§¾Ú¤Ë¤ª¤¤¤Æ¡¢<SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+>¤È¤·¤Æ
+¡Ö<SPAN
+CLASS="TOKEN"
+>host</SPAN
+>¡×¤ò»ØÄê¤·¤Æ¤¤¤ë¾ì¹ç¤Ë¡¢gfsd¤¬ÍÑ¤¤¤ë¥µ¡¼¥Ó¥¹¾ÚÌÀ½ñ¤Î
+¼ïÎà¤ò»ØÄê¤·¤Ş¤¹¡£
+<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>ÍøÍÑ»ş¤Ë¤Ï¡¢¤³¤Î»ØÄê¤ÏÃ±¤ËÌµ»ë¤µ¤ì¤Ş¤¹¡£
+¾Ü¤·¤¯¤Ï<SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+>¤Î¹à¤ò»²¾È¤·¤Æ¤¯¤À¤µ¤¤¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>spool_server_cred_name</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>cred_name</I
+></TT
+></DT
+><DD
+><P
+>GSIÇ§¾Ú¤Ë¤ª¤¤¤Æ¡¢<SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+>¤Ç»ØÄê¤·¤¿ÃÍ¤Ë
+±ş¤¸¤Æ¡¢gfsd¤¬ÍÑ¤¤¤ë¾ÚÌÀ½ñ¤ÎÀßÄê¤ò¹Ô¤¤¤Ş¤¹¡£
+<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>ÍøÍÑ»ş¤Ë¤Ï¡¢¤³¤Î»ØÄê¤ÏÃ±¤ËÌµ»ë¤µ¤ì¤Ş¤¹¡£
+¾Ü¤·¤¯¤Ï<SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+>¤Î¹à¤ò»²¾È¤·¤Æ¤¯¤À¤µ¤¤¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_host</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>gfmd¥Û¥¹¥ÈÌ¾</I
+></TT
+></DT
+><DD
+><P
+>gfmd¤¬Æ°ºî¤·¤Æ¤¤¤ë¥Û¥¹¥ÈÌ¾¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	metadb_server_host&nbsp;ldap.example.com</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_port</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>gfmd¥İ¡¼¥ÈÈÖ¹æ</I
+></TT
+></DT
+><DD
+><P
+>gfmd¤¬ÍøÍÑ¤¹¤ëTCP¥İ¡¼¥È¤ÎÈÖ¹æ¤ò»ØÄê¤·¤Ş¤¹¡£
+¾ÊÎ¬»ş¤Î¥Ç¥Õ¥©¥ë¥È¡¦¥İ¡¼¥ÈÈÖ¹æ¤Ï601ÈÖ¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	metadb_server_port&nbsp;601</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_cred_type</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>cred_type</I
+></TT
+></DT
+><DD
+><P
+>GSIÇ§¾Ú¤Ë¤ª¤¤¤Æ¡¢gfmd¤¬ÍÑ¤¤¤ë¾ÚÌÀ½ñ¤Î¼ïÎà¤ò»ØÄê¤·¤Ş¤¹¡£
+<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>ÍøÍÑ»ş¤Ë¤Ï¡¢¤³¤Î»ØÄê¤ÏÃ±¤ËÌµ»ë¤µ¤ì¤Ş¤¹¡£
+ÀßÄê¤Î°ÕÌ£¤Ë¤Ä¤¤¤Æ¤Ï<SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+>¤Î¹à¤ò
+»²¾È¤·¤Æ¤¯¤À¤µ¤¤¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_cred_service</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>cred_service</I
+></TT
+></DT
+><DD
+><P
+>GSIÇ§¾Ú¤Ë¤ª¤¤¤Æ¡¢<SPAN
+CLASS="TOKEN"
+>metadb_server_cred_type</SPAN
+>¤È¤·¤Æ
+¡Ö<SPAN
+CLASS="TOKEN"
+>host</SPAN
+>¡×¤ò»ØÄê¤·¤Æ¤¤¤ë¾ì¹ç¤Ë¡¢gfmd¤¬ÍÑ¤¤¤ë¥µ¡¼¥Ó¥¹¾ÚÌÀ½ñ¤Î
+¼ïÎà¤ò»ØÄê¤·¤Ş¤¹¡£
+<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>ÍøÍÑ»ş¤Ë¤Ï¡¢¤³¤Î»ØÄê¤ÏÃ±¤ËÌµ»ë¤µ¤ì¤Ş¤¹¡£
+ÀßÄê¤Î°ÕÌ£¤Ë¤Ä¤¤¤Æ¤Ï<SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+>¤Î¹à¤ò
+»²¾È¤·¤Æ¤¯¤À¤µ¤¤¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_cred_name</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>cred_name</I
+></TT
+></DT
+><DD
+><P
+>GSIÇ§¾Ú¤Ë¤ª¤¤¤Æ¡¢<SPAN
+CLASS="TOKEN"
+>metadb_server_cred_type</SPAN
+>¤Ç»ØÄê¤·¤¿ÃÍ¤Ë
+±ş¤¸¤Æ¡¢gfmd¤¬ÍÑ¤¤¤ë¾ÚÌÀ½ñ¤ÎÀßÄê¤ò¹Ô¤¤¤Ş¤¹¡£
+<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>ÍøÍÑ»ş¤Ë¤Ï¡¢¤³¤Î»ØÄê¤ÏÃ±¤ËÌµ»ë¤µ¤ì¤Ş¤¹¡£
+ÀßÄê¤Î°ÕÌ£¤Ë¤Ä¤¤¤Æ¤Ï<SPAN
+CLASS="TOKEN"
+>spool_server_cred_type</SPAN
+>¤Î¹à¤ò
+»²¾È¤·¤Æ¤¯¤À¤µ¤¤¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_stack_size</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥Ğ¥¤¥È¿ô</I
+></TT
+></DT
+><DD
+><P
+>¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥ĞgfmdÆâ¤Î³Æ¥¹¥ì¥Ã¥É¤¬ÍøÍÑ¤¹¤ë¥¹¥¿¥Ã¥¯¤Î¥µ¥¤¥º¤ò
+»ØÄê¤·¤Ş¤¹¡£¾ÊÎ¬¤µ¤ì¤¿¾ì¹çOS¤Î¥Ç¥Õ¥©¥ë¥ÈÃÍ¤¬»È¤ï¤ì¤Ş¤¹¡£
+¤³¤Î¥Ñ¥é¥á¡¼¥¿¤Ï¡¢gfmd¤Î¾ÃÈñ¤¹¤ë²¾ÁÛ¥á¥â¥ê¶õ´Ö¤Î¥µ¥¤¥º¤òÀáÌó¤¹¤ë¤¿¤á¤Ë
+ÍÑ¤¤¤Ş¤¹¡£</P
+><P
+>¤¿¤È¤¨¤Ğ¡¢CentOS 5/i386¤Î¾ì¹ç¡¢¥Ç¥Õ¥©¥ë¥È¤Î¥¹¥¿¥Ã¥¯¥µ¥¤¥º¤Ï10MB¤Ç¤¹
+¤Î¤Ç¡¢¤³¤Î¥Ñ¥é¥á¡¼¥¿¤Ç¥¹¥¿¥Ã¥¯¥µ¥¤¥º¤ò256KB¤ËÍŞ¤¨¤ë¤È¡¢gfmd¤Î¥¹¥¿¥Ã¥¯
+¤¬¾ÃÈñ¤¹¤ë²¾ÁÛ¥á¥â¥ê¶õ´Ö¤Î¥µ¥¤¥º¤ò¡¢1/40¤Ë¸º¤é¤¹¤³¤È¤¬¤Ç¤­¤Ş¤¹¡£</P
+><P
+>¤³¤ÎÊ¸¤Ïgfmd.conf¤Î¤ß¤ÇÍ­¸ú¤Ç¤¢¤ê¡¢gfarm2.conf¤Ç¤ÏÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	metadb_server_stack_size&nbsp;262144</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_thread_pool_size</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥¹¥ì¥Ã¥É¿ô</I
+></TT
+></DT
+><DD
+><P
+>¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğgfmd¤Î¥¹¥ì¥Ã¥É¥×¡¼¥ë¤Î¥¹¥ì¥Ã¥É¿ô¤ò»ØÄê¤·¤Ş¤¹¡£
+¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğ¥Î¡¼¥É¤Î¥³¥¢¿ô¤¯¤é¤¤¤ËÀßÄê¤¹¤ë¤È¸ú²ÌÅª¤Ç¤¹¡£
+¥Ç¥Õ¥©¥ë¥ÈÃÍ¤Ï16¤Ç¤¹¡£</P
+><P
+>¤³¤ÎÊ¸¤Ïgfmd.conf¤Î¤ß¤ÇÍ­¸ú¤Ç¤¢¤ê¡¢gfarm2.conf¤Ç¤ÏÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	metadb_server_thread_pool_size&nbsp;16</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_job_queue_length</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥­¥å¡¼Ä¹</I
+></TT
+></DT
+><DD
+><P
+>¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğgfmd¤Î¥¸¥ç¥Ö¥­¥å¡¼¤Î¥­¥å¡¼Ä¹¤ò»ØÄê¤·¤Ş¤¹¡£
+°ìÅÙ¤ËÀÜÂ³¤¹¤ëºÇÂç¥¯¥é¥¤¥¢¥ó¥È¤Î¿ô¤¯¤é¤¤¤ËÀßÄê¤¹¤ë¤È¸ú²ÌÅª¤Ç¤¹¡£
+¥Ç¥Õ¥©¥ë¥ÈÃÍ¤Ï160¤Ç¤¹¡£</P
+><P
+>¤³¤ÎÊ¸¤Ïgfmd.conf¤Î¤ß¤ÇÍ­¸ú¤Ç¤¢¤ê¡¢gfarm2.conf¤Ç¤ÏÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	metadb_server_job_queue_length&nbsp;160</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_heartbeat_interval</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>ÉÃ¿ô</I
+></TT
+></DT
+><DD
+><P
+>¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğgfmd¤¬³Æ¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥µ¡¼¥Ğgfsd
+¤ËÂĞ¤·Æ°ºî³ÎÇ§¤ò¹Ô¤¦¥Ï¡¼¥È¥Ó¡¼¥È¤Î´Ö³Ö¤òÉÃ¿ô¤Ç»ØÄê¤·¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥ÈÃÍ¤Ï180ÉÃ¤Ç¤¹¡£</P
+><P
+>¤³¤ÎÊ¸¤Ïgfmd.conf¤Î¤ß¤ÇÍ­¸ú¤Ç¤¢¤ê¡¢gfarm2.conf¤Ç¤ÏÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	metadb_server_heartbeat_interval&nbsp;180</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>metadb_server_dbq_size</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥­¥å¡¼Ä¹</I
+></TT
+></DT
+><DD
+><P
+>¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğgfmd¤Ç¤Ï¥á¥¿¥Ç¡¼¥¿¤ÎÊÑ¹¹¤ò¥Ğ¥Ã¥¯¥¨¥ó¥ÉDB¤Ë
+ÈóÆ±´üÅª¤ËÈ¿±Ç¤·¤Ş¤¹¤¬¡¤¤½¤Î¥­¥å¡¼¤ÎÄ¹¤µ¤ò»ØÄê¤·¤Ş¤¹¡£
+¥­¥å¡¼Ä¹¤òÄ¹¤¯¤¹¤ë¤È¡¤¥Ğ¥Ã¥¯¥¨¥ó¥ÉDB¤Î¹¹¿·Â®ÅÙ¤ËÎ§Â®¤µ¤ì¤Ë¤¯¤¯¤Ê¤ê¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥ÈÃÍ¤Ï65536¤Ç¤¹¡£</P
+><P
+>¤³¤ÎÊ¸¤Ïgfmd.conf¤Î¤ß¤ÇÍ­¸ú¤Ç¤¢¤ê¡¢gfarm2.conf¤Ç¤ÏÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	metadb_server_dbq_size&nbsp;65536</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>ldap_server_host</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>LDAP¥µ¡¼¥Ğ¡¼¡¦¥Û¥¹¥ÈÌ¾</I
+></TT
+></DT
+><DD
+><P
+>gfmd¤Î¥Ğ¥Ã¥¯¥¨¥ó¥É¡¦¥Ç¡¼¥¿¥Ù¡¼¥¹¤È¤·¤Æ
+LDAP¥µ¡¼¥Ğ¤òÁªÂò¤¹¤ë¾ì¹ç¡¢
+LDAP¥µ¡¼¥Ğ¡¼¤¬Æ°ºî¤·¤Æ¤¤¤ë¥Û¥¹¥ÈÌ¾¤ò»ØÄê¤·¤Ş¤¹¡£
+¤³¤ÎÊ¸¤Ïgfmd.conf¤ÇÍÑ¤¤¤é¤ì¡¢gfarm2.conf¤Ç¤ÏÍÑ¤¤¤é¤ì¤Ş¤»¤ó¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	ldap_server_host&nbsp;ldap.example.com</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>ldap_server_port</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>LDAP¥µ¡¼¥Ğ¡¼¡¦¥İ¡¼¥ÈÈÖ¹æ</I
+></TT
+></DT
+><DD
+><P
+>LDAP¥µ¡¼¥Ğ¡¼¤¬ÍøÍÑ¤¹¤ëTCP¥İ¡¼¥È¤ÎÈÖ¹æ¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>ldap_server_host</SPAN
+>¤ò»ØÄê¤¹¤ë¾ì¹ç¤Ë¤Ï¡¢
+¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	ldap_server_port&nbsp;602</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>ldap_base_dn</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>LDAP_base_distinguished_name</I
+></TT
+></DT
+><DD
+><P
+>LDAP¥Ç¡¼¥¿¥Ù¡¼¥¹¤ÇÊİ»ı¤¹¤ë¥Ç¡¼¥¿¤Î¥­¡¼¤Îº¬¤È¤Ê¤ë¥Î¡¼¥É¤Î
+Ì¾¾Î¡¢base distinguished name¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>ldap_server_host</SPAN
+>¤ò»ØÄê¤¹¤ë¾ì¹ç¤Ë¤Ï¡¢
+¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	ldap_base_dn&nbsp;"dc=example,&nbsp;dc=com"</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>ldap_bind_dn</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>LDAP_bind_distinguished_name</I
+></TT
+></DT
+><DD
+><P
+>LDAP¥Ç¡¼¥¿¥Ù¡¼¥¹¤ËÀÜÂ³¤¹¤ëºİ¤ÎÇ§¾Ú¤ËÍÑ¤¤¤ëÌ¾¾Î¤ò¡¢distinguished name¤Ç»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	ldap_bind_dn&nbsp;"cn=gfarmuser,&nbsp;dc=example,&nbsp;dc=com"</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>ldap_bind_password</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>password</I
+></TT
+></DT
+><DD
+><P
+>LDAP¥Ç¡¼¥¿¥Ù¡¼¥¹¤ËÀÜÂ³¤¹¤ëºİ¤ÎÇ§¾Ú¥Ñ¥¹¥ï¡¼¥É¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	ldap_bind_password&nbsp;"secret-ldap-password"</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>postgresql_server_host</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>PostgreSQL¥µ¡¼¥Ğ¡¼¡¦¥Û¥¹¥ÈÌ¾</I
+></TT
+></DT
+><DD
+><P
+>gfmd¤Î¥Ğ¥Ã¥¯¥¨¥ó¥É¡¦¥Ç¡¼¥¿¥Ù¡¼¥¹¤È¤·¤Æ
+PostgreSQL¥µ¡¼¥Ğ¤òÁªÂò¤¹¤ë¾ì¹ç¡¢
+PostgreSQL¥µ¡¼¥Ğ¡¼¤¬Æ°ºî¤·¤Æ¤¤¤ë¥Û¥¹¥ÈÌ¾¤ò»ØÄê¤·¤Ş¤¹¡£
+¤³¤ÎÊ¸¤Ïgfmd.conf¤ÇÍÑ¤¤¤é¤ì¡¢gfarm2.conf¤Ç¤ÏÍÑ¤¤¤é¤ì¤Ş¤»¤ó¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	postgresql_server_host&nbsp;postgresql.example.com</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>postgresql_server_port</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>PostgreSQL¥µ¡¼¥Ğ¡¼¡¦¥İ¡¼¥ÈÈÖ¹æ</I
+></TT
+></DT
+><DD
+><P
+>PostgreSQL¥µ¡¼¥Ğ¡¼¤¬ÍøÍÑ¤¹¤ëTCP¥İ¡¼¥È¤ÎÈÖ¹æ¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>postgresql_server_host</SPAN
+>¤ò»ØÄê¤¹¤ë¾ì¹ç¤Ë¤Ï¡¢
+¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	postgresql_server_port&nbsp;602</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>postgresql_dbname</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>dbname</I
+></TT
+></DT
+><DD
+><P
+>PostgreSQL¥Ç¡¼¥¿¥Ù¡¼¥¹Ì¾¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>postgresql_server_host</SPAN
+>¤ò»ØÄê¤¹¤ë¾ì¹ç¤Ë¤Ï¡¢
+¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	postgresql_dbname&nbsp;gfarm</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>postgresql_user</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>user</I
+></TT
+></DT
+><DD
+><P
+>PostgreSQL¥Ç¡¼¥¿¥Ù¡¼¥¹¤ËÀÜÂ³¤¹¤ë¥Ç¡¼¥¿¥Ù¡¼¥¹´ÉÍı²¼¤Î¥æ¡¼¥¶Ì¾¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	postgresql_user&nbsp;gfarm</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>postgresql_password</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>password</I
+></TT
+></DT
+><DD
+><P
+>PostgreSQL¥Ç¡¼¥¿¥Ù¡¼¥¹¤ËÀÜÂ³¤¹¤ë¥Ç¡¼¥¿¥Ù¡¼¥¹´ÉÍı²¼¤Î¥æ¡¼¥¶¤Î¥Ñ¥¹¥ï¡¼¥É¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	postgresql_password&nbsp;"secret-postgresql-password"</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>postgresql_conninfo</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>connection_info</I
+></TT
+></DT
+><DD
+><P
+>PostgreSQL¥Ç¡¼¥¿¥Ù¡¼¥¹¤ËÀÜÂ³¤¹¤ë¤È¤­¤ÎÀÜÂ³¥ª¥×¥·¥ç¥ó¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	postgresql_conninfo&nbsp;"sslmode=require&nbsp;connect_timeout=30"</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>auth</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>Í­¸úÀ­</I
+></TT
+>  <TT
+CLASS="PARAMETER"
+><I
+>Ç§¾ÚÊıË¡</I
+></TT
+>  <TT
+CLASS="PARAMETER"
+><I
+>¥Û¥¹¥È»ØÄê</I
+></TT
+></DT
+><DD
+><P
+>¤³¤ÎÊ¸¤Ï¡¢Âè3°ú¿ô¤Ç»ØÄê¤·¤¿¥Û¥¹¥È¤È¤ÎÄÌ¿®¤ËÍÑ¤¤¤ëÇ§¾ÚÊıË¡¤òÀßÄê¤·¤Ş¤¹¡£</P
+><P
+>Âè1°ú¿ô¤Î<TT
+CLASS="PARAMETER"
+><I
+>Í­¸úÀ­</I
+></TT
+>Éô¤Ë¤Ï¡¢<SPAN
+CLASS="TOKEN"
+>enable</SPAN
+>¤Ê¤¤¤·<SPAN
+CLASS="TOKEN"
+>disable</SPAN
+>
+¥­¡¼¥ï¡¼¥É¤ò»ØÄê¤·¤Ş¤¹¡£
+Âè2°ú¿ô¤Î<TT
+CLASS="PARAMETER"
+><I
+>Ç§¾ÚÊıË¡</I
+></TT
+>Éô¤Ë¤Ï¡¢<SPAN
+CLASS="TOKEN"
+>gsi</SPAN
+>¡¢
+<SPAN
+CLASS="TOKEN"
+>gsi_auth</SPAN
+>¤Ê¤¤¤·<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>
+¥­¡¼¥ï¡¼¥É¤ò»ØÄê¤·¤Ş¤¹¡£
+Âè3°ú¿ô¤Ë¤Ï¡¢<TT
+CLASS="PARAMETER"
+><I
+>¥Û¥¹¥È»ØÄê</I
+></TT
+>¤òµ­½Ò¤·¤Ş¤¹¡£</P
+><P
+>¤³¤ÎÊ¸¤ÏÊ£¿ô»ØÄê²ÄÇ½¤Ç¤¹¡£³ÆÇ§¾ÚÊıË¡¤´¤È¤Ë¡¢ÀèÆ¬¤«¤é½ç¤Ë¥Û¥¹¥È»ØÄê¤Ë
+Å¬¹ç¤¹¤ë¤«¤É¤¦¤«Ä´¤Ù¡¢Í­¸ú¤Ç¤¢¤ë¤È¤Î»ØÄê¤ËÅ¬¹ç¤·¤¿¾ì¹ç¡¢¤½¤ÎÇ§¾ÚÊıË¡¤¬
+ÍøÍÑ¸õÊä¤Ë¤Ê¤ê¤Ş¤¹¡£Í­¸ú¤Ç¤¢¤ë¤È¤Î»ØÄê¤ËÅ¬¹ç¤·¤Ê¤¤¾ì¹ç¤ä¡¢¤¢¤ë¤¤¤Ï
+Í­¸ú¤Ç¤¢¤ë¤È¤Î»ØÄê¤ËÅ¬¹ç¤¹¤ë¤è¤ê¤âÁ°¤ËÌµ¸ú¤Ç¤¢¤ë¤È¤Î»ØÄê¤ËÅ¬¹ç¤·¤¿
+¾ì¹ç¡¢¤½¤ÎÇ§¾ÚÊıË¡¤Ï¡¢¸õÊä¤Ë¤Ê¤ê¤Ş¤»¤ó¡£</P
+><P
+>¤³¤Î»ØÄê¤Ï¡¢¥µ¡¼¥Ğ¡¼Â¦¤È¥¯¥é¥¤¥¢¥ó¥ÈÂ¦¤ÎÎ¾Êı¤Ç²ò¼á¤µ¤ì¡¢
+ÁĞÊı¤È¤â¤ÇÍ­¸ú¤Ë¤Ê¤Ã¤Æ¤¤¤ëÇ§¾ÚÊıË¡¤Î¤ß¤¬ÍÑ¤¤¤é¤ì¤Ş¤¹¡£</P
+><P
+>Ç§¾ÚÊıË¡¤¬°Û¤Ê¤ë¤â¤Î¤Ë´Ø¤·¤Æ¤Ï¡¢»ØÄê¤Î½ç½ø¤Ï°ÕÌ£¤¬¤¢¤ê¤Ş¤»¤ó¡£
+Ê£¿ô¤ÎÇ§¾ÚÊıË¡¤¬¸õÊä¤È¤Ê¤Ã¤¿¾ì¹ç¡¢<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>¡¢
+<SPAN
+CLASS="TOKEN"
+>gsi_auth</SPAN
+>¡¢<SPAN
+CLASS="TOKEN"
+>gsi</SPAN
+>Ç§¾Ú¤Î½ç½ø¤Ç»î¤ß¤Ş¤¹¡£</P
+><P
+>Gfarm¤Î¥³¥ó¥Ñ¥¤¥ë»ş¤Ëglobus¤È¤Î¥ê¥ó¥¯¤ò»ØÄê¤·¤Ê¤«¤Ã¤¿¾ì¹ç¡¢
+GSI¤ÏÍøÍÑ¤Ç¤­¤Ş¤»¤ó¡£¤³¤Î¾ì¹ç¡¢<SPAN
+CLASS="TOKEN"
+>gsi</SPAN
+>¤ª¤è¤Ó
+<SPAN
+CLASS="TOKEN"
+>gsi_auth</SPAN
+>Ç§¾Ú¤Î»ØÄê¤ÏÃ±¤ËÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
+><P
+>¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	auth&nbsp;disable&nbsp;sharedsecret&nbsp;192.168.0.100<br>
+	auth&nbsp;disable&nbsp;sharedsecret&nbsp;192.168.0.101<br>
+	auth&nbsp;enable&nbsp;sharedsecret&nbsp;192.168.0.0/24<br>
+	auth&nbsp;enable&nbsp;gsi_auth&nbsp;10.0.0.0/8<br>
+	auth&nbsp;enable&nbsp;gsi&nbsp;*</P
+><P
+>¤³¤ÎÎã¤Ç¤Ï¡¢¥Û¥¹¥È192.168.0.100¤È192.168.0.101¤Î2¤Ä¤Î¥Û¥¹¥È¤ò
+½ü¤¤¤¿192.168.0.0/24¥Í¥Ã¥È¥ï¡¼¥¯¤ËÂ°¤¹¥Û¥¹¥È¤Ë¤Ï
+<SPAN
+CLASS="TOKEN"
+>sharedsecret</SPAN
+>¤È<SPAN
+CLASS="TOKEN"
+>gsi</SPAN
+>¤ÎÎ¾Êı¤ò¡¢
+10.0.0.0/8¥Í¥Ã¥È¥ï¡¼¥¯¤ËÂ°¤¹¥Û¥¹¥È¤Ë¤Ï<SPAN
+CLASS="TOKEN"
+>gsi_auth</SPAN
+>¤ª¤è¤Ó
+<SPAN
+CLASS="TOKEN"
+>gsi</SPAN
+>¤ÎÎ¾Êı¤ò¡¢
+¤½¤ì°Ê³°¤ÎÁ´¤Æ¤Î¥Û¥¹¥È¤Ë¤Ï<SPAN
+CLASS="TOKEN"
+>gsi</SPAN
+>Ç§¾Ú¤Î¤ß¤ò»î¤ß¤Ş¤¹¡£
+¤¹¤Ê¤ï¤Á¡¢¥Û¥¹¥È192.168.0.100¤È192.168.0.101¤Î2¤Ä¤Î¥Û¥¹¥È¤Ï¡¢
+<SPAN
+CLASS="TOKEN"
+>gsi</SPAN
+>Ç§¾Ú¤Î¤ß¤ò»î¤ß¤ë¤³¤È¤Ë¤Ê¤ê¤Ş¤¹¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>sockopt </SPAN
+><TT
+CLASS="PARAMETER"
+><I
+>¥ª¥×¥·¥ç¥ó</I
+></TT
+><I
+CLASS="EMPHASIS"
+>[=</I
+><TT
+CLASS="PARAMETER"
+><I
+>ÃÍ</I
+></TT
+><I
+CLASS="EMPHASIS"
+>] [<SPAN
+CLASS="TOKEN"
+>LISTENER</SPAN
+> | <TT
+CLASS="PARAMETER"
+><I
+>¥Û¥¹¥È»ØÄê</I
+></TT
+>]</I
+></DT
+><DD
+><P
+>ÄÌ¿®socket(2)¤ËÂĞ¤·¤Æ¡¢setsockopt(2)¥·¥¹¥Æ¥à¥³¡¼¥ë¤ò»È¤Ã¤Æ
+¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤ò»ØÄê¤·¤Ş¤¹¡£</P
+><P
+>Âè2°ú¿ô¤ËÁ´¤ÆÂçÊ¸»ú¤Ç<SPAN
+CLASS="TOKEN"
+>LISTENER</SPAN
+>¤ò»ØÄê¤·¤¿¾ì¹ç¡¢
+¥µ¡¼¥Ğ¡¼Â¦(Ãå¸ÆÂ¦)¤Î¥½¥±¥Ã¥È¤Ë»ØÄê¤¹¤ë¥ª¥×¥·¥ç¥ó¤Ë¤Ê¤ê¤Ş¤¹¡£
+¤³¤Î¾ì¹ç¡¢ÄÌ¿®¤¹¤ëÁê¼ê¤Ë´Ø·¸¤Ê¤¯¡¢
+°ìÎ§¤Ë¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤¬ÀßÄê¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Âè2°ú¿ô¤Ë¥Û¥¹¥È»ØÄê¤òµ­½Ò¤·¤¿¾ì¹ç¡¢¥¯¥é¥¤¥¢¥ó¥ÈÂ¦(È¯¸ÆÂ¦)¤Î
+¥½¥±¥Ã¥È¤Ë»ØÄê¤¹¤ë¥ª¥×¥·¥ç¥ó¤Ë¤Ê¤ê¤Ş¤¹¡£¤³¤Î¾ì¹ç¡¢ÄÌ¿®¤¹¤ëÁê¼êËè¤Ë
+¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤òÊÑ¤¨¤ë¤³¤È¤¬¤Ç¤­¤Ş¤¹¡£
+¤Ê¤ª¡¢Âè2°ú¿ô¤Ë"*"¤Èµ­½Ò¤¹¤ë¤È¡¢¥¯¥é¥¤¥¢¥ó¥ÈÂ¦(È¯¸ÆÂ¦)¤ÎÁ´¤Æ¤Î
+¥Û¥¹¥È¤ò°ÕÌ£¤¹¤ë¤³¤È¤Ë¤Ê¤ê¡¢¥µ¡¼¥Ğ¡¼Â¦(Ãå¸ÆÂ¦)¤Ë¤ÏÅ¬ÍÑ¤µ¤ì¤Ş¤»¤ó¡£</P
+><P
+>Âè2°ú¿ô¤ò¾ÊÎ¬¤·¤¿¾ì¹ç¡¢¥µ¡¼¥Ğ¡¼Â¦¤È¥¯¥é¥¤¥¢¥ó¥ÈÂ¦¤ÎÎ¾Êı¤Ç¡¢
+Á´¤Æ¤ÎÄÌ¿®Áê¼ê¤ËÂĞ¤·¤ÆÆ±¤¸¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤òÀßÄê¤·¤Ş¤¹¡£</P
+><P
+>»ØÄê²ÄÇ½¤Ê¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤Ë¤Ï¼¡¤Î¤â¤Î¤¬¤¢¤ê¤Ş¤¹¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>debug</SPAN
+>¡£setsockopt(2)¥·¥¹¥Æ¥à¥³¡¼¥ë¤Ç¡¢<CODE
+CLASS="CONSTANT"
+>SO_DEBUG</CODE
+>¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤ò»ØÄê¤·¤Ş¤¹¡£ÃÍ¤òµ­½Ò¤¹¤ëÉ¬Í×¤Ï¤¢¤ê¤Ş¤»¤ó¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>keepalive</SPAN
+>¡£setsockopt(2)¥·¥¹¥Æ¥à¥³¡¼¥ë¤Ç¡¢<CODE
+CLASS="CONSTANT"
+>SO_KEEPALIVE</CODE
+>
+¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤ò»ØÄê¤·¤Ş¤¹¡£ÃÍ¤òµ­½Ò¤¹¤ëÉ¬Í×¤Ï¤¢¤ê¤Ş¤»¤ó¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>sndbuf</SPAN
+>¡£setsockopt(2)¥·¥¹¥Æ¥à¥³¡¼¥ë¤Ç¡¢<CODE
+CLASS="CONSTANT"
+>SO_SNDBUF</CODE
+>
+¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤ò»ØÄê¤·¤Ş¤¹¡£ÃÍ¤Î»ØÄê¤¬É¬Í×¤Ç¤¹¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>rcvbuf</SPAN
+>¡£setsockopt(2)¥·¥¹¥Æ¥à¥³¡¼¥ë¤Ç¡¢<CODE
+CLASS="CONSTANT"
+>SO_RCVBUF</CODE
+>
+¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤ò»ØÄê¤·¤Ş¤¹¡£ÃÍ¤Î»ØÄê¤¬É¬Í×¤Ç¤¹¡£</P
+><P
+><SPAN
+CLASS="TOKEN"
+>tcp_nodelay</SPAN
+>¡£setsockopt(2)¥·¥¹¥Æ¥à¥³¡¼¥ë¤Ç¡¢<CODE
+CLASS="CONSTANT"
+>TCP_NODELAY</CODE
+>
+¥½¥±¥Ã¥È¡¦¥ª¥×¥·¥ç¥ó¤ò»ØÄê¤·¤Ş¤¹¡£ÃÍ¤òµ­½Ò¤¹¤ëÉ¬Í×¤Ï¤¢¤ê¤Ş¤»¤ó¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	sockopt&nbsp;tcp_nodelay&nbsp;192.168.0.0/24<br>
+	sockopt&nbsp;sndbuf=1048576&nbsp;10.0.0.0/8<br>
+	sockopt&nbsp;sndbuf=1048576&nbsp;LISTENER<br>
+	sockopt&nbsp;rcvbuf=1048576&nbsp;10.0.0.0/8<br>
+	sockopt&nbsp;rcvbuf=1048576&nbsp;LISTENER</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>admin_user</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥æ¡¼¥¶Ì¾</I
+></TT
+></DT
+><DD
+><P
+>gfmd.confÆâ¤Î¤³¤ÎÊ¸¤Ç»ØÄê¤µ¤ì¤¿¥æ¡¼¥¶¤¬¡¢
+¥Ç¥Õ¥©¥ë¥È¤ÎÆÃ¸¢¥æ¡¼¥¶¤È¤Ê¤ê¤Ş¤¹¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>admin_user_gsi_dn</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>DN</I
+></TT
+></DT
+><DD
+><P
+>gfmd.confÆâ¤Îadmin_userÊ¸¤Ç»ØÄê¤µ¤ì¤¿ÆÃ¸¢¥æ¡¼¥¶¤ÎSubject DN¤ò»ØÄê¤·¤Ş¤¹¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>local_user_map</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥æ¡¼¥¶¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¥Ñ¥¹Ì¾</I
+></TT
+></DT
+><DD
+><P
+>sharedsecretÇ§¾Ú¤Ë¤ª¤¤¤Æ¡¢
+¥°¥í¡¼¥Ğ¥ë¥æ¡¼¥¶Ì¾¤È¥í¡¼¥«¥ë¥æ¡¼¥¶Ì¾¤ÎÂĞ±ş´Ø·¸¤òµ­½Ò¤·¤¿
+¥æ¡¼¥¶¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¥Ñ¥¹Ì¾¤ò»ØÄê¤·¤Ş¤¹¡£
+¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤Ï¤¢¤ê¤Ş¤»¤ó¤¬¡¢
+¤½¤Î¾ì¹ç¥í¡¼¥«¥ë¥æ¡¼¥¶Ì¾¤¬¥°¥í¡¼¥Ğ¥ë¥æ¡¼¥¶Ì¾¤ËÊÑ´¹¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Æ±°ì¥æ¡¼¥¶¡¼¤ËÂĞ¤·¤Æ¡¢
+°Û¤Ê¤ë¥í¡¼¥«¥ë¥¢¥«¥¦¥ó¥ÈÌ¾¤òÍ¿¤¨¤Æ¤¤¤ë¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥Î¡¼¥É¤¬¤¢¤ë¾ì¹ç¤ä¡¢
+¥í¡¼¥«¥ë¥æ¡¼¥¶Ì¾¤È¤Ï°Û¤Ê¤ë¥°¥í¡¼¥Ğ¥ë¥æ¡¼¥¶Ì¾¤òÍøÍÑ¤·¤¿¤¤¾ì¹ç¡¢
+¤³¤Î¥Õ¥¡¥¤¥ë¤Ç¡¢³Æ¥Î¡¼¥É¤Î¥í¡¼¥«¥ë¤Ê¥æ¡¼¥¶Ì¾¤ËÂĞ¤·¤Æ¡¢Ã±°ì¤Î
+¥°¥í¡¼¥Ğ¥ë¥æ¡¼¥¶Ì¾¤òÄêµÁ¤·¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	local_user_map&nbsp;/etc/gfarm/gfarm-usermap</P
+><P
+>¥æ¡¼¥¶¡¼¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¤Ï¡¢¥°¥í¡¼¥Ğ¥ë¥æ¡¼¥¶¡¼Ì¾¤È
+¥í¡¼¥«¥ë¥æ¡¼¥¶¡¼Ì¾¤ò¡¢¶õÇò¤Ç¶èÀÚ¤Ã¤Æ³Æ¹Ô¤Ëµ­½Ò¤·¤Ş¤¹¡£</P
+><P
+>¥æ¡¼¥¶¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¤ÎÆâÍÆÎã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	foobar&nbsp;foo<br>
+	quux&nbsp;baz</P
+><P
+>¤³¤ÎÎã¤Î1¹ÔÌÜ¤Î»ØÄê¤Ç¤Ï¡¢¤³¤Î¥Î¡¼¥É¤Î¥í¡¼¥«¥ë¥æ¡¼¥¶Ì¾foo¤Ë
+ÂĞ¤·¤Æ¥°¥í¡¼¥Ğ¥ë¥æ¡¼¥¶Ì¾foobar¤¬ÄêµÁ¤µ¤ì¤Æ¤¤¤Ş¤¹¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>local_group_map</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥°¥ë¡¼¥×¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¥Ñ¥¹Ì¾</I
+></TT
+></DT
+><DD
+><P
+>¥°¥í¡¼¥Ğ¥ë¥°¥ë¡¼¥×Ì¾¤È¥í¡¼¥«¥ë¥°¥ë¡¼¥×Ì¾¤ÎÂĞ±ş´Ø·¸¤òµ­½Ò¤·¤¿
+¥°¥ë¡¼¥×¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¥Ñ¥¹Ì¾¤ò»ØÄê¤·¤Ş¤¹¡£
+¤³¤Î¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¤Ï¡¤¥í¡¼¥«¥ë¥·¥¹¥Æ¥à¤Î¥°¥ë¡¼¥×ID¤òÍøÍÑ¤¹¤ëgfarm2fs¤ä
+Globus GridFTP¤ÎGfarm DSI¤Ê¤É¤ÇÍøÍÑ¤µ¤ì¤Ş¤¹¡£
+¤³¤ÎÀßÄê¤ÏÉ¬¿Ü¤Ç¤Ï¤¢¤ê¤Ş¤»¤ó¤¬¡¢
+¤½¤Î¾ì¹ç¥í¡¼¥«¥ë¥°¥ë¡¼¥×Ì¾¤Ï¥°¥í¡¼¥Ğ¥ë¥°¥ë¡¼¥×Ì¾¤ÈÅù¤·¤¤¤È²¾Äê¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	local_group_map&nbsp;/etc/gfarm/gfarm-groupmap</P
+><P
+>¥°¥ë¡¼¥×¥Ş¥Ã¥×¥Õ¥¡¥¤¥ë¤Ï¡¢¥°¥í¡¼¥Ğ¥ë¥°¥ë¡¼¥×Ì¾¤È
+¥í¡¼¥«¥ë¥°¥ë¡¼¥×Ì¾¤ò¡¢¶õÇò¤Ç¶èÀÚ¤Ã¤Æ³Æ¹Ô¤Ëµ­½Ò¤·¤Ş¤¹¡£</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>minimum_free_disk_space</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥Ğ¥¤¥È¿ô</I
+></TT
+></DT
+><DD
+><P
+>¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥Î¡¼¥É¤ÇÉ¬Í×¤ÊºÇ¾®¸ÂÅÙ¤Î¥Ç¥£¥¹¥¯¶õ¤­ÍÆÎÌ¤ò»ØÄê
+¤·¤Ş¤¹¡£¤³¤Î¥µ¥¤¥º°Ê²¼¤Î¶õ¤­ÍÆÎÌ¤·¤«¤Ê¤¤¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥Î¡¼¥É¤Ï¡¢
+¥Õ¥¡¥¤¥ë½ñ¤­¹ş¤ß¤ò¹Ô¤¦²ÄÇ½À­¤Î¤¢¤ëÁàºî¤ò¹Ô¤¦ºİ¤Ë¡¢ÁªÂò¤µ¤ì¤Ë¤¯¤¯¤Ê¤ê¤Ş¤¹¡£
+»ØÄê¤Ï¥Ğ¥¤¥ÈÃ±°Ì¤Ç¹Ô¤¤¤Ş¤¹¤¬¡¢¿ô»ú¤ÎËöÈø¤Ë¶õÇò¤ò³«¤±¤º¤Ëk/M/G/T¤ò»ØÄê
+¤¹¤ë¤³¤È¤Ç¡¢¤½¤ì¤¾¤ì1k¥Ğ¥¤¥È¡¿1M¥Ğ¥¤¥È¡¿1G¥Ğ¥¤¥È¡¿1T¥Ğ¥¤¥È¤òÃ±°Ì¤È¤¹¤ë
+¤³¤È¤¬¤Ç¤­¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Ï128M¥Ğ¥¤¥È¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	minimum_free_disk_space&nbsp;1G</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>gfsd_connection_cache</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥³¥Í¥¯¥·¥ç¥ó¿ô</I
+></TT
+></DT
+><DD
+><P
+>gfarm¥é¥¤¥Ö¥é¥ê¤¬gfsd¤È¤ÎÄÌ¿®¤ËÍÑ¤¤¤ë¥³¥Í¥¯¥·¥ç¥ó¤ò¡¢¤¤¤¯¤Ä
+¤Ş¤Ç¥­¥ã¥Ã¥·¥å¤¹¤ë¤«¤ò»ØÄê¤·¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Ï16¥³¥Í¥¯¥·¥ç¥ó¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	gfsd_connection_cache&nbsp;32</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>attr_cache_limit</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¸Ä¿ô</I
+></TT
+></DT
+><DD
+><P
+>gfarm¥é¥¤¥Ö¥é¥ê¤¬¥­¥ã¥Ã¥·¥å¤¹¤ëÂ°À­¤ÎºÇÂç¿ô¤ò»ØÄê¤·¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Ï40000¸Ä¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	attr_cache_limit&nbsp;100000</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>attr_cache_timeout</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥ß¥êÉÃ¿ô</I
+></TT
+></DT
+><DD
+><P
+>gfarm¥é¥¤¥Ö¥é¥ê¤¬Â°À­¤ò¥­¥ã¥Ã¥·¥å¤·¤Æ¤¤¤ë»ş´Ö¤ò¡¢¥ß¥êÉÃÃ±°Ì¤Ç»ØÄê¤·¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Ï 1000¥ß¥êÉÃ¤¹¤Ê¤ï¤Á 1ÉÃ¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	attr_cache_timeout&nbsp;3600000</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>log_level</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>Í¥ÀèÅÙ¥ì¥Ù¥ë</I
+></TT
+></DT
+><DD
+><P
+>¤É¤ÎÍ¥ÀèÅÙ¥ì¥Ù¥ë°Ê¾å¤Î¥í¥°¤ò½ĞÎÏ¤¹¤ë¤«¤ò»ØÄê¤·¤Ş¤¹¡£
+¤³¤³¤Ç»ØÄê¤·¤¿¥ì¥Ù¥ëÌ¤Ëş¤ÎÍ¥ÀèÅÙ¤Î¥í¥°¤Ï¡¢syslog¤äÉ¸½à¥¨¥é¡¼¤Ø
+Á÷¤é¤ì¤Ş¤»¤ó¡£
+¥ì¥Ù¥ë¤Ï¡¢Í¥ÀèÅÙ¤Î¹â¤¤½ç¤Ë"emerg", "alert", "crit", "err", "warning",
+"notice", "info", "debug"¤Ç¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Î½ĞÎÏ¥ì¥Ù¥ë¤Ï"info"¤Ç¤¹¡£
+"crit"°Ê¾å¤ÎÍ¥ÀèÅÙ¤ò»ØÄê¤¹¤ë¤³¤È¤Ï¡¢¤ª´«¤á¤Ç¤­¤Ş¤»¤ó¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	log_level&nbsp;debug</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>log_message_verbose_level</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>¥ì¥Ù¥ë</I
+></TT
+></DT
+><DD
+><P
+>¥í¥°¥á¥Ã¥»¡¼¥¸¤Î¾éÄ¹ÅÙ¤ò»ØÄê¤·¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Ï0¤Ç¤¹¡£¥ì¥Ù¥ë0¤Ç¤Ï¡¢¥í¥°ID¤¬½ĞÎÏ¤µ¤ì¤Ş¤¹¡£
+¥ì¥Ù¥ë1¤Ç¤Ï¡¢¥ì¥Ù¥ë0¤Ë²Ã¤¨¥½¡¼¥¹¥³¡¼¥É¤Î¥Õ¥¡¥¤¥ëÌ¾¤È¹ÔÈÖ¹æ¤¬½ĞÎÏ¤µ¤ì¤Ş¤¹¡£
+¥ì¥Ù¥ë2¤Ç¤Ï¡¢¥ì¥Ù¥ë1¤Ë²Ã¤¨´Ø¿ôÌ¾¤¬½ĞÎÏ¤µ¤ì¤Ş¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	log_message_verbose_level&nbsp;1</P
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="REFSECT1"
+><A
+NAME="GRAMMAR"
+></A
+><H2
+>GRAMMAR</H2
+><P
+>gfarm2.conf¤ÎÊ¸Ë¡¤òBNF¤Çµ­½Ò¤¹¤ë¤È¡¢²¼µ­¤Î¤è¤¦¤Ë¤Ê¤ê¤Ş¤¹¡£</P
+><P
+CLASS="LITERALLAYOUT"
+>	&#60;statement&#62;&nbsp;::=<br>
+		  &#60;spool_statement&#62;&nbsp;|<br>
+		  &#60;spool_server_listen_address_statement&#62;&nbsp;|<br>
+		  &#60;spool_server_cred_type_statement&#62;&nbsp;|<br>
+		  &#60;spool_server_cred_service_statement&#62;&nbsp;|<br>
+		  &#60;spool_server_cred_name_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_host_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_port_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_cred_type_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_cred_service_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_cred_name_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_stack_size_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_thread_pool_size_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_job_queue_length_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_heartbeat_interval_statement&#62;&nbsp;|<br>
+		  &#60;metadb_server_dbq_size_statement&#62;&nbsp;|<br>
+		  &#60;ldap_server_host_statement&#62;&nbsp;|<br>
+		  &#60;ldap_server_port_statement&#62;&nbsp;|<br>
+		  &#60;ldap_base_dn_statement&#62;&nbsp;|<br>
+		  &#60;ldap_bind_dn_statement&#62;&nbsp;|<br>
+		  &#60;ldap_bind_password_statement&#62;&nbsp;|<br>
+		  &#60;postgresql_server_host_statement&#62;&nbsp;|<br>
+		  &#60;postgresql_server_port_statement&#62;&nbsp;|<br>
+		  &#60;postgresql_dbname_statement&#62;&nbsp;|<br>
+		  &#60;postgresql_user_statement&#62;&nbsp;|<br>
+		  &#60;postgresql_password_statement&#62;&nbsp;|<br>
+		  &#60;postgresql_conninfo_statement&#62;&nbsp;|<br>
+		  &#60;auth_statement&#62;&nbsp;|<br>
+		  &#60;sockopt_statement&#62;&nbsp;|<br>
+		  &#60;admin_user_statement&#62;&nbsp;|<br>
+		  &#60;admin_user_gsi_dn_statement&#62;&nbsp;|<br>
+		  &#60;local_user_map_statement&#62;&nbsp;|<br>
+		  &#60;local_group_map_statement&#62;&nbsp;|<br>
+		  &#60;schedule_cache_timeout_statement&#62;&nbsp;|<br>
+		  &#60;minimum_free_disk_space_statement&#62;&nbsp;|<br>
+		  &#60;gfsd_connection_cache_statement&#62;&nbsp;|<br>
+		  &#60;attr_cache_limit_statement&#62;&nbsp;|<br>
+		  &#60;attr_cache_timeout_statement&#62;&nbsp;|<br>
+		  &#60;log_level_statement&#62;&nbsp;|<br>
+		  &#60;log_message_verbose_level_statement&#62;<br>
+	&#60;spool_statement&#62;&nbsp;::=&nbsp;"spool"&nbsp;&#60;pathname&#62;<br>
+	&#60;spool_server_listen_address_statement&#62;&nbsp;::=<br>
+		  "spool_server_listen_address"&nbsp;&#60;ipv4_address&#62;<br>
+	&#60;spool_server_cred_type_statement&#62;&nbsp;::=<br>
+		  "spool_server_cred_type"&nbsp;&#60;cred_type&#62;<br>
+	&#60;spool_server_cred_service_statement&#62;&nbsp;::=<br>
+		  "spool_server_cred_service"&nbsp;&#60;cred_service&#62;<br>
+	&#60;spool_server_cred_name_statement&#62;&nbsp;::=<br>
+		  "spool_server_cred_name"&nbsp;&#60;cred_name&#62;<br>
+	&#60;metadb_server_host_statement&#62;&nbsp;::=&nbsp;"metadb_server_host"&nbsp;&#60;hostname&#62;<br>
+	&#60;metadb_server_port_statement&#62;&nbsp;::=&nbsp;"metadb_server_port"&nbsp;&#60;portnumber&#62;<br>
+	&#60;metadb_server_cred_type_statement&#62;&nbsp;::=<br>
+		  "metadb_server_cred_type"&nbsp;&#60;cred_type&#62;<br>
+	&#60;metadb_server_cred_service_statement&#62;&nbsp;::=<br>
+		  "metadb_server_cred_service"&nbsp;&#60;cred_service&#62;<br>
+	&#60;metadb_server_cred_name_statement&#62;&nbsp;::=<br>
+		  "metadb_server_cred_name"&nbsp;&#60;cred_name&#62;<br>
+	&#60;metadb_server_stack_size_statement&#62;&nbsp;::=<br>
+		  "metadb_server_stack_size"&nbsp;&#60;number&#62;<br>
+	&#60;metadb_server_thread_pool_size_statement&#62;&nbsp;::=<br>
+		  "metadb_server_thread_pool_size"&nbsp;&#60;number&#62;<br>
+	&#60;metadb_server_job_queue_length_statement&#62;&nbsp;::=<br>
+		  "metadb_server_job_queue_length"&nbsp;&#60;number&#62;<br>
+	&#60;metadb_server_heartbeat_interval_statement&#62;&nbsp;::=<br>
+		  "metadb_server_heartbeat_interval"&nbsp;&#60;number&#62;<br>
+	&#60;metadb_server_dbq_size_statement&#62;&nbsp;::=<br>
+		  "metadb_server_dbq_size"&nbsp;&#60;number&#62;<br>
+	&#60;ldap_server_host_statement&#62;&nbsp;::=&nbsp;"ldap_server_host"&nbsp;&#60;hostname&#62;<br>
+	&#60;ldap_server_port_statement&#62;&nbsp;::=&nbsp;"ldap_server_port"&nbsp;&#60;portnumber&#62;<br>
+	&#60;ldap_base_dn_statement&#62;&nbsp;::=&nbsp;"ldap_base_dn"&nbsp;&#60;string&#62;<br>
+	&#60;ldap_bind_dn_statement&#62;&nbsp;::=&nbsp;"ldap_bind_dn"&nbsp;&#60;string&#62;<br>
+	&#60;ldap_bind_password_statement&#62;&nbsp;::=&nbsp;"ldap_bind_password"&nbsp;&#60;string&#62;<br>
+	&#60;postgresql_server_host_statement&#62;&nbsp;::=&nbsp;"postgresql_server_host"&nbsp;&#60;hostname&#62;<br>
+	&#60;postgresql_server_port_statement&#62;&nbsp;::=&nbsp;"postgresql_server_port"&nbsp;&#60;portnumber&#62;<br>
+	&#60;postgresql_dbname_statement&#62;&nbsp;::=&nbsp;"postgresql_dbname"&nbsp;&#60;string&#62;<br>
+	&#60;postgresql_user_statement&#62;&nbsp;::=&nbsp;"postgresql_user"&nbsp;&#60;string&#62;<br>
+	&#60;postgresql_password_statement&#62;&nbsp;::=&nbsp;"postgresql_password"&nbsp;&#60;string&#62;<br>
+	&#60;postgresql_conninfo_statement&#62;&nbsp;::=&nbsp;"postgresql_conninfo"&nbsp;&#60;string&#62;<br>
+	&#60;auth_statement&#62;&nbsp;::=<br>
+		  "auth"&nbsp;&#60;validity&#62;&nbsp;&#60;auth_method&#62;&nbsp;&#60;hostspec&#62;<br>
+	&#60;auth_command&#62;&nbsp;::=&nbsp;"enable"&nbsp;|&nbsp;"disable"<br>
+	&#60;auth_method&#62;&nbsp;::=&nbsp;"gsi"&nbsp;|&nbsp;"gsi_auth"&nbsp;|&nbsp;"sharedsecret"<br>
+	&#60;sockopt_statement&#62;&nbsp;::=<br>
+		  "sockopt"&nbsp;&#60;socket_option&#62;[=&#60;number&#62;]&nbsp;[""LISTENER"&nbsp;|&nbsp;&#60;hostspec&#62;]<br>
+	&#60;socket_option&#62;&nbsp;=&nbsp;"debug"&nbsp;|&nbsp;"keepalive"&nbsp;|&nbsp;"sndbuf"&nbsp;|&nbsp;"rcvbuf"&nbsp;|<br>
+		  "tcp_nodelay"<br>
+	&#60;admin_user_statement&#62;&nbsp;::=&nbsp;"admin_user"&nbsp;&#60;string&#62;<br>
+	&#60;admin_user_gsi_dn_statement&#62;&nbsp;::=&nbsp;"admin_user_gsi_dn"&nbsp;&#60;string&#62;<br>
+	&#60;local_user_map_statement&#62;&nbsp;::=&nbsp;"local_user_map"&nbsp;&#60;pathname&#62;<br>
+	&#60;local_group_map_statement&#62;&nbsp;::=&nbsp;"local_group_map"&nbsp;&#60;pathname&#62;<br>
+	&#60;schedule_cache_timeout_statement&#62;&nbsp;::=&nbsp;"schedule_cache_timeout"&nbsp;&#60;number&#62;<br>
+	&#60;minimum_free_disk_space_statement&#62;&nbsp;::=<br>
+		  "minimum_free_disk_space"&nbsp;&#60;size&#62;<br>
+	&#60;gfsd_connection_cache_statement&#62;&nbsp;::=&nbsp;"gfsd_connection_cache"&nbsp;&#60;number&#62;<br>
+	&#60;attr_cache_limit_statement&#62;&nbsp;::=&nbsp;"attr_cache_limit"&nbsp;&#60;number&#62;<br>
+	&#60;attr_cache_timeout_statement&#62;&nbsp;::=&nbsp;"attr_cache_timeout"&nbsp;&#60;number&#62;<br>
+	&#60;log_level_statement&#62;&nbsp;::=&nbsp;"log_level"&nbsp;&#60;log_priority&#62;<br>
+	&#60;log_message_verbose_level_statement&#62;&nbsp;::=&nbsp;"log_message_verbose_level"&nbsp;&#60;number&#62;<br>
+	&#60;hostspec&#62;&nbsp;::=&nbsp;&#60;ipv4_address&#62;&nbsp;|&nbsp;&#60;ipv4_address&#62;&nbsp;"/"&nbsp;&#60;address_mask&#62;&nbsp;|<br>
+		  &#60;hostname&#62;&nbsp;|&nbsp;"."&nbsp;&#60;domain_name&#62;&nbsp;|&nbsp;"*"<br>
+	&#60;pathname&#62;&nbsp;::=&nbsp;&#60;pathname_character&#62;&nbsp;&#60;pathname_character&#62;*<br>
+	&#60;pathname_character&#62;&nbsp;::=&nbsp;&#60;hostname_character&#62;&nbsp;|&nbsp;","&nbsp;|&nbsp;"/"&nbsp;|&nbsp;"_"<br>
+	&#60;hostname&#62;&nbsp;::=&nbsp;&#60;hostname_character&#62;&nbsp;&#60;hostname_character&#62;*<br>
+	&#60;hostname_character&#62;&nbsp;::=&nbsp;&#60;alphabet&#62;&nbsp;|&nbsp;&#60;digit&#62;&nbsp;|&nbsp;"-"&nbsp;|&nbsp;"."<br>
+	&#60;portnumber&#62;&nbsp;::=&nbsp;&#60;number&#62;<br>
+	&#60;size&#62;&nbsp;::=&nbsp;&#60;number&#62;&nbsp;[&nbsp;"k"&nbsp;|&nbsp;"M"&nbsp;|&nbsp;"G"&nbsp;|&nbsp;"T"&nbsp;]<br>
+	&#60;number&#62;&nbsp;::=&nbsp;&#60;digit&#62;&nbsp;[&#60;digit&#62;*]<br>
+	&#60;digit&#62;&nbsp;::=&nbsp;"0"&nbsp;|&nbsp;"1"&nbsp;|&nbsp;"2"&nbsp;|&nbsp;"3"&nbsp;|&nbsp;"4"&nbsp;|&nbsp;"5"&nbsp;|&nbsp;"6"&nbsp;|&nbsp;"7"&nbsp;|&nbsp;"8"&nbsp;|&nbsp;"9"<br>
+	&#60;string&#62;&nbsp;::=&nbsp;"""&nbsp;&#60;double_quoted_character&#62;*&nbsp;"""<br>
+	&#60;double_quoted_character&#62;&nbsp;::=<br>
+		  &#60;any_character_except_backslash_and_double_quotation&#62;&nbsp;|<br>
+		  "\\"&nbsp;|&nbsp;"\""<br>
+	&#60;validity&#62;&nbsp;::=&nbsp;"enable"&nbsp;|&nbsp;"disable"<br>
+	&#60;log_priority&#62;&nbsp;::=&nbsp;"emerg"&nbsp;|&nbsp;"alert"&nbsp;|&nbsp;"crit"&nbsp;|&nbsp;"err"&nbsp;|&nbsp;"warning"&nbsp;|<br>
+		  "notice"&nbsp;|&nbsp;"info"&nbsp;|&nbsp;"debug"</P
+></DIV
+><DIV
+CLASS="REFSECT1"
+><A
+NAME="EXAMPLES"
+></A
+><H2
+>EXAMPLES</H2
+><P
+>¥á¥¿¥Ç¡¼¥¿¤ÎÊİÂ¸¤ËPostgreSQL¤ò»È¤¤¡¢IP¥¢¥É¥ì¥¹192.168.0.0/24¤Î
+¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥Î¡¼¥É¤ä¥¯¥é¥¤¥¢¥ó¥È¤ËÂĞ¤·¤Æ¡¢sharedsecretÇ§¾Ú¤ò
+»È¤¦Îã¤Ç¤¹¡£</P
+><P
+CLASS="LITERALLAYOUT"
+>spool&nbsp;/var/spool/gfarm<br>
+metadb_server_host&nbsp;metadb.example.org<br>
+metadb_server_port&nbsp;601<br>
+postgresql_server_host&nbsp;metadb.example.org<br>
+postgresql_server_port&nbsp;5432<br>
+postgresql_dbname&nbsp;gfarm<br>
+postgresql_user&nbsp;gfarm<br>
+postgresql_password&nbsp;"secret-postgresql-password"<br>
+auth&nbsp;enable&nbsp;sharedsecret&nbsp;192.168.0.0/24<br>
+sockopt&nbsp;keepalive</P
+><P
+>¥á¥¿¥Ç¡¼¥¿¤ÎÊİÂ¸¤ËLDAP¤ò»È¤¤¡¢Ç¤°Õ¤ÎIP¥¢¥É¥ì¥¹¤ò»È¤¦
+¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥Î¡¼¥É¤ä¥¯¥é¥¤¥¢¥ó¥È¤ËÂĞ¤·¤Æ¡¢GSIÇ§¾Ú¤ò»È¤¦Îã¤Ç¤¹¡£</P
+><P
+CLASS="LITERALLAYOUT"
+>spool&nbsp;/var/spool/gfarm<br>
+metadb_server_host&nbsp;metadb.example.com<br>
+metadb_server_port&nbsp;601<br>
+ldap_server_host&nbsp;metadb.example.com<br>
+ldap_server_port&nbsp;602<br>
+ldap_base_dn&nbsp;"dc=example,&nbsp;dc=com"<br>
+ldap_bind_dn&nbsp;"cn=gfarmuser,&nbsp;dc=example,&nbsp;dc=com"<br>
+ldap_bind_password&nbsp;"secret-ldap-password"<br>
+auth&nbsp;enable&nbsp;gsi&nbsp;*<br>
+sockopt&nbsp;keepalive</P
+></DIV
+><DIV
+CLASS="REFSECT1"
+><A
+NAME="FILES"
+></A
+><H2
+>FILES</H2
+><P
+></P
+><DIV
+CLASS="VARIABLELIST"
+><DL
+><DT
+><TT
+CLASS="FILENAME"
+>%%SYSCONFDIR%%/gfarm2.conf</TT
+></DT
+><DD
+><P
+></P
+></DD
+><DT
+><TT
+CLASS="FILENAME"
+>$HOME/.gfarm2rc</TT
+></DT
+><DD
+><P
+></P
+></DD
+></DL
+></DIV
+></DIV
+><DIV
+CLASS="REFSECT1"
+><A
+NAME="SEE-ALSO"
+></A
+><H2
+>SEE ALSO</H2
+><P
+>  <SPAN
+CLASS="CITEREFENTRY"
+><SPAN
+CLASS="REFENTRYTITLE"
+>gfmd</SPAN
+>(8)</SPAN
+>,
+  <SPAN
+CLASS="CITEREFENTRY"
+><SPAN
+CLASS="REFENTRYTITLE"
+>gfsd</SPAN
+>(8)</SPAN
+>,
+  <SPAN
+CLASS="CITEREFENTRY"
+><SPAN
+CLASS="REFENTRYTITLE"
+>setsockopt</SPAN
+>(2)</SPAN
+></P
+></DIV
+></BODY
+></HTML
+>
