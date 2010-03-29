@@ -2,7 +2,6 @@
 #include <string.h>
 
 #include <gfarm/error.h>
-#include <gfarm/gflog.h>
 #include <gfarm/gfarm_misc.h>
 
 #include <gfarm/host_info.h>
@@ -44,16 +43,14 @@ const struct gfarm_base_generic_info_ops gfarm_base_host_info_ops = {
 	gfarm_base_host_info_validate,
 };
 
-/*
- * see the comment in server/gfmd/host.c:host_enter()
- * to see why this interface is necessary only for gfmd.
- */
 void
-gfarm_host_info_free_except_hostname(
+gfarm_host_info_free(
 	struct gfarm_host_info *info)
 {
 	int i;
 
+	if (info->hostname != NULL)
+		free(info->hostname);
 	if (info->hostaliases != NULL) {
 		for (i = 0; i < info->nhostaliases; i++)
 			free(info->hostaliases[i]);
@@ -61,15 +58,6 @@ gfarm_host_info_free_except_hostname(
 	}
 	if (info->architecture != NULL)
 		free(info->architecture);
-}
-
-void
-gfarm_host_info_free(
-	struct gfarm_host_info *info)
-{
-	if (info->hostname != NULL)
-		free(info->hostname);
-	gfarm_host_info_free_except_hostname(info);
 }
 
 static void
@@ -280,9 +268,6 @@ gfs_stat_copy(struct gfs_stat *d, const struct gfs_stat *s)
 			free(user);
 		if (group != NULL)
 			free(group);
-		gflog_debug(GFARM_MSG_1001022,
-			"allocation of user or group failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
 		return (GFARM_ERR_NO_MEMORY);
 	}
 	*d = *s;

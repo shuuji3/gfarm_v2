@@ -9,7 +9,6 @@
 #include <pwd.h>
 
 #include <gfarm/gfarm_config.h>
-#include <gfarm/gflog.h>
 #include "gfsl_config.h"
 #include "gfarm_auth.h"
 
@@ -44,12 +43,10 @@ gfarmGetInt(char *str, int *val)
 
     buf = strdup(str);
     if (buf == NULL) {
-	gflog_debug(GFARM_MSG_1000842, "strdup() failed");
 	return -1;
     }
     len = strlen(buf);
     if (len == 0) {
-	gflog_debug(GFARM_MSG_1000843, "Buffer length is zero");
 	return -1;
     }
 
@@ -163,9 +160,6 @@ gfarmGetEtcDir()
     if (stat(path, &st) == 0 &&
 	S_ISDIR(st.st_mode)) {
 	return strdup(path);
-    } else {
-	gflog_debug(GFARM_MSG_1000844,
-		"stat() failed or given path is not directory (%s)", path);
     }
 
     return NULL;

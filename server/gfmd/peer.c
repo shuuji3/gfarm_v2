@@ -1,5 +1,5 @@
 /*
- * $Id: peer.c 4457 2010-02-23 01:53:23Z ookuma$
+ * $Id$
  */
 
 #include <gfarm/gfarm_config.h>
@@ -31,9 +31,8 @@
 #include "io_fd.h"
 #include "auth.h"
 
-#include "subr.h"
-#include "thrsubr.h"
 #include "thrpool.h"
+#include "subr.h"
 #include "user.h"
 #include "host.h"
 #include "peer.h"
@@ -43,24 +42,8 @@
 
 #include "protocol_state.h"
 
-struct peer_closing_queue {
-	pthread_mutex_t mutex;
-	pthread_cond_t ready_to_close;
-
-	struct peer *head, **tail;
-} peer_closing_queue = {
-	PTHREAD_MUTEX_INITIALIZER,
-	PTHREAD_COND_INITIALIZER,
-	NULL,
-	&peer_closing_queue.head
-};
-
 struct peer {
-	struct peer *next_close;
-	int refcount;
-
 	struct gfp_xdr *conn;
-	gfp_xdr_async_peer_t async;	/* used by back_channel only */
 
 	enum gfarm_auth_id_type id_type;
 	char *username, *hostname;
@@ -69,14 +52,10 @@ struct peer {
 
 	struct process *process;
 	int protocol_error;
-	void *(*protocol_handler)(void *);
-	struct thread_pool *handler_thread_pool;
 
 	volatile sig_atomic_t control;
-#define PEER_WATCHING	1
-	/* XXX FIXME: #66 - unexpected collision to access peer:control */
-#define PEER_WATCHED	2
-	pthread_mutex_t control_mutex;
+#define PEER_AUTHORIZED 1
+#define PEER_WATCHING	2
 
 	struct protocol_state pstate;
 
@@ -86,9 +65,6 @@ struct peer {
 #define PEER_FLAGS_FD_SAVED_EXTERNALIZED	2
 
 	void *findxmlattrctx;
-
-	/* only one pending GFM_PROTO_GENERATION_UPDATED per peer is allowed */
-	struct inode *pending_new_generation;
 
 	union {
 		struct {
@@ -111,9 +87,7 @@ struct {
 #else
 static struct pollfd *peer_poll_fds;
 #endif
-
-static struct thread_pool *peer_default_thread_pool;
-static void *(*peer_default_protocol_handler)(void *);
+static void *(*peer_protocol_handler)(void *);
 
 static void
 peer_table_lock(void)
@@ -161,26 +135,6 @@ peer_epoll_del_fd(int fd)
 }
 #endif
 
-/* XXX FIXME: #66 - unexpected collision to access peer:control */
-static void
-peer_control_mutex_lock(struct peer *peer, const char *where)
-{
-	int err = pthread_mutex_trylock(&peer->control_mutex);
-
-	if (err == 0)
-		return;
-	if (err == EBUSY) {
-		gflog_warning(GFARM_MSG_UNFIXED,
-		    "%s: unexpected collision to access peer:control", where);
-		err = pthread_mutex_lock(&peer->control_mutex);
-		if (err == 0)
-			return;
-	}
-	gflog_fatal(GFARM_MSG_UNFIXED,
-	    "%s: fatel error at unexpected collision "
-	    "to access peer:control: %s", where, strerror(err));
-}
-
 #define PEER_WATCH_INTERVAL 10 /* 10ms: XXX FIXME */
 
 void *
@@ -203,25 +157,9 @@ peer_watcher(void *arg)
 		peer_table_lock();
 		for (i = 0; i < peer_table_size; i++) {
 			peer = &peer_table[i];
-
-			/*
-			 * XXX FIXME: #66 -
-			 * unexpected collision to access peer:control
-			 *
-			 * don't use peer_control_mutex_lock(), because
-			 * collision with peer_watch_access() is expected here.
-			 */
-			mutex_lock(&peer->control_mutex,
-			    "peer_watcher start", "peer:control_mutex");
-			skip = peer->conn == NULL ||
-			    (peer->control & PEER_WATCHING) == 0;
-			if (!skip)
-				peer->control |= PEER_WATCHED;
-			mutex_unlock(&peer->control_mutex,
-			    "peer_watcher start", "peer:control_mutex");
-			if (skip)
+			if (peer->conn == NULL ||
+			    peer->control != (PEER_AUTHORIZED|PEER_WATCHING))
 				continue;
-
 			fd = &peer_poll_fds[nfds++];
 			fd->fd = i;
 			fd->events = POLLIN;
@@ -256,30 +194,12 @@ peer_watcher(void *arg)
 #endif
 			giant_lock();
 			peer_table_lock();
-			/*
-			 * don't use peer_control_mutex_lock(), because
-			 * collision with peer_watch_access() is expected here.
-			 */
-			mutex_lock(&peer->control_mutex,
-			    "peer_watcher checking", "peer:control_mutex");
 			skip = peer->conn == NULL ||
-			    (peer->control & PEER_WATCHING) == 0;
-			mutex_unlock(&peer->control_mutex,
-			    "peer_watcher checking", "peer:control_mutex");
+			    peer->control != (PEER_AUTHORIZED|PEER_WATCHING);
 			peer_table_unlock();
 			giant_unlock();
-			if (skip) {
-#ifdef HAVE_EPOLL_WAIT
-				if (peer_epoll.events[i].events & EPOLLIN) {
-#else
-				if (fd->revents & POLLIN) {
-#endif
-					gflog_error(GFARM_MSG_UNFIXED,
-					    "peer_watcher: spurious wakeup: "
-					    "0x%x", (int)peer->control);
-				}
+			if (skip)
 				continue;
-			}
 #ifdef HAVE_EPOLL_WAIT
 			if (peer_epoll.events[i].events & EPOLLIN) {
 #else
@@ -287,33 +207,9 @@ peer_watcher(void *arg)
 #endif
 				/*
 				 * This peer is not running at this point,
-				 * so it should be ok to modify peer->control
-				 * without mutex.
-				 *
-				 * XXX FIXME: #66 -
-				 * unexpected collision to access peer:control
+				 * so it's ok to modify peer->control.
 				 */
-				peer_control_mutex_lock(peer,
-				    "peer_watcher invoking");
-				skip = (peer->control & PEER_WATCHED) == 0;
-				if (skip) {
-					gflog_error(GFARM_MSG_UNFIXED,
-					    "peer_watcher: unexpected wakeup: "
-					    "0x%x", (int)peer->control);
-#ifdef HAVE_EPOLL_WAIT
-					skip = 0; /* really shound't happen */
-#endif
-				}
-				if (!skip) {
-					peer->control &=
-					    ~(PEER_WATCHING|PEER_WATCHED);
-				}
-				mutex_unlock(&peer->control_mutex,
-				    "peer_watcher invoking",
-				    "peer:control_mutex");
-				rv--;
-				if (skip)
-					continue;
+				peer->control &= ~PEER_WATCHING;
 #ifdef HAVE_EPOLL_WAIT
 				peer_epoll_del_fd(efd);
 #endif
@@ -321,120 +217,15 @@ peer_watcher(void *arg)
 				 * We shouldn't have giant_lock or
 				 * peer_table_lock here.
 				 */
-				thrpool_add_job(peer->handler_thread_pool,
-				    peer->protocol_handler, peer);
+				thrpool_add_job(peer_protocol_handler, peer);
+				rv--;
 			}
 		}
 	}
 }
 
 void
-peer_add_ref(struct peer *peer)
-{
-	static const char diag[] = "peer_add_ref";
-
-	mutex_lock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-	++peer->refcount;
-	mutex_unlock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-}
-
-int
-peer_del_ref(struct peer *peer)
-{
-	int referenced;
-	static const char diag[] = "peer_del_ref";
-
-	mutex_lock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-
-	if (--peer->refcount > 0) {
-		referenced = 1;
-	} else {
-		referenced = 0;
-		cond_signal(&peer_closing_queue.ready_to_close, diag,
-		    "ready to close");
-	}
-
-	mutex_unlock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-
-	return (referenced);
-}
-
-void *
-peer_closer(void *arg)
-{
-	struct peer *peer, **prev;
-	static const char diag[] = "peer_closer";
-
-	mutex_lock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-
-	for (;;) {
-		while (peer_closing_queue.head == NULL)
-			cond_wait(&peer_closing_queue.ready_to_close,
-			    &peer_closing_queue.mutex,
-			    diag, "queue is not empty");
-
-		for (prev = &peer_closing_queue.head;
-		    (peer = *prev) != NULL; prev = &peer->next_close) {
-			if (peer->refcount == 0) {
-				*prev = peer->next_close;
-				if (peer_closing_queue.tail ==
-				    &peer->next_close)
-					peer_closing_queue.tail = prev;
-				break;
-			}
-		}
-		if (peer == NULL) {
-			cond_wait(&peer_closing_queue.ready_to_close,
-			    &peer_closing_queue.mutex,
-			    diag, "ready to close");
-			continue;
-		}
-
-		mutex_unlock(&peer_closing_queue.mutex, diag, "before giant");
-
-		giant_lock();
-		/*
-		 * NOTE: this shouldn't need db_begin()/db_end()
-		 * at least for now,
-		 * because only externalized descriptor needs the calls.
-		 */
-		peer_free(peer);
-		giant_unlock();
-
-		mutex_lock(&peer_closing_queue.mutex, diag, "after giant");
-	}
-
-	mutex_unlock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-}
-
-void
-peer_free_request(struct peer *peer)
-{
-	int fd = peer_get_fd(peer), rv;
-	static const char diag[] = "peer_free_request";
-
-	mutex_lock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-
-	/*
-	 * wake up threads which may be sleeping at read() or write(), because
-	 * they may be holding host_sender_lock() or host_receiver_lock(), but
-	 * without closing the descriptor, because that leads race condition.
-	 */
-	rv = shutdown(fd, SHUT_RDWR);
-	if (rv == -1)
-		gflog_warning(GFARM_MSG_1002220, 
-		    "back_channel: shutdown(%d): %s", fd, strerror(errno));
-
-	*peer_closing_queue.tail = peer;
-	peer->next_close = NULL;
-	peer_closing_queue.tail = &peer->next_close;
-
-	mutex_unlock(&peer_closing_queue.mutex, diag, "peer_closing_queue");
-}
-
-void
-peer_init(int max_peers,
-	struct thread_pool *thrpool, void *(*protocol_handler)(void *))
+peer_init(int max_peers, void *(*protocol_handler)(void *))
 {
 	int i;
 	struct peer *peer;
@@ -448,30 +239,18 @@ peer_init(int max_peers,
 
 	for (i = 0; i < peer_table_size; i++) {
 		peer = &peer_table[i];
-		peer->next_close = NULL;
-		peer->refcount = 0;
 		peer->conn = NULL;
-		peer->async = NULL;
 		peer->username = NULL;
 		peer->hostname = NULL;
 		peer->user = NULL;
 		peer->host = NULL;
 		peer->process = NULL;
 		peer->protocol_error = 0;
-
 		peer->control = 0;
-		/*
-		 * XXX FIXME: #66 -
-		 * unexpected collision to access peer:control
-		 */
-		mutex_init(&peer->control_mutex,
-		    "peer_init", "peer:control_mutex");
-
 		peer->fd_current = -1;
 		peer->fd_saved = -1;
 		peer->flags = 0;
 		peer->findxmlattrctx = NULL;
-		peer->pending_new_generation = NULL;
 		peer->u.client.jobs = NULL;
 	}
 
@@ -491,18 +270,11 @@ peer_init(int max_peers,
 		gflog_fatal(GFARM_MSG_1000281,
 		    "peer pollfd table: %s", strerror(ENOMEM));
 #endif
-	peer_default_protocol_handler = protocol_handler;
-	peer_default_thread_pool = thrpool;
+	peer_protocol_handler = protocol_handler;
 	e = create_detached_thread(peer_watcher, NULL);
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_fatal(GFARM_MSG_1000282,
 		    "create_detached_thread(peer_watcher): %s",
-			    gfarm_error_string(e));
-
-	e = create_detached_thread(peer_closer, NULL);
-	if (e != GFARM_ERR_NO_ERROR)
-		gflog_fatal(GFARM_MSG_1000282,
-		    "create_detached_thread(peer_closer): %s",
 			    gfarm_error_string(e));
 }
 
@@ -513,47 +285,28 @@ peer_alloc(int fd, struct peer **peerp)
 	struct peer *peer;
 	int sockopt;
 
-	if (fd < 0) {
-		gflog_debug(GFARM_MSG_1001580,
-			"invalid argument 'fd'");
+	if (fd < 0)
 		return (GFARM_ERR_INVALID_ARGUMENT);
-	}
-	if (fd >= peer_table_size) {
-		gflog_debug(GFARM_MSG_1001581,
-			"too many open files: fd >= peer_table_size");
+	if (fd >= peer_table_size)
 		return (GFARM_ERR_TOO_MANY_OPEN_FILES);
-	}
 	peer_table_lock();
 	peer = &peer_table[fd];
 	if (peer->conn != NULL) { /* must be an implementation error */
 		peer_table_unlock();
-		gflog_debug(GFARM_MSG_1001582,
-			"bad file descriptor: conn is NULL");
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
 	}
-
-	peer->next_close = NULL;
-	peer->refcount = 0;
-
 	/* XXX FIXME gfp_xdr requires too much memory */
 	e = gfp_xdr_new_socket(fd, &peer->conn);
 	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001583,
-			"gfp_xdr_new_socket() failed: %s",
-			gfarm_error_string(e));
 		peer_table_unlock();
 		return (e);
 	}
-
-	peer->async = NULL; /* synchronous protocol by default */
 	peer->username = NULL;
 	peer->hostname = NULL;
 	peer->user = NULL;
 	peer->host = NULL;
 	peer->process = NULL;
 	peer->protocol_error = 0;
-	peer->protocol_handler = peer_default_protocol_handler;
-	peer->handler_thread_pool = peer_default_thread_pool;
 	peer->control = 0;
 	peer->fd_current = -1;
 	peer->fd_saved = -1;
@@ -609,20 +362,9 @@ peer_authorized(struct peer *peer,
 	}
 	/* We don't record auth_method for now */
 
-	/*
-	 * XXX FIXME: #66 - unexpected collision to access peer:control
-	 * don't use peer_control_mutex_lock(), because
-	 * collision with peer_watcher() is expected here.
-	 */
-	mutex_lock(&peer->control_mutex,
-	    "peer_authorized", "peer:control_mutex");
-	peer->control = 0;
-	mutex_unlock(&peer->control_mutex,
-	    "peer_authorized", "peer:control_mutex");
-
+	peer->control = PEER_AUTHORIZED;
 	if (gfp_xdr_recv_is_ready(peer_get_conn(peer)))
-		thrpool_add_job(peer->handler_thread_pool,
-		    peer->protocol_handler, peer);
+		thrpool_add_job(peer_protocol_handler, peer);
 	else
 		peer_watch_access(peer);
 }
@@ -647,8 +389,6 @@ peer_free(struct peer *peer)
 	gflog_notice(GFARM_MSG_1000286,
 	    "(%s@%s) disconnected", username, hostname);
 
-	peer_unset_pending_new_generation(peer);
-
 	peer->control = 0;
 
 	peer->protocol_error = 0;
@@ -667,14 +407,7 @@ peer_free(struct peer *peer)
 	}
 	peer->findxmlattrctx = NULL;
 
-	if (peer->async != NULL) {
-		gfp_xdr_async_peer_free(peer->async, NULL, NULL);
-		peer->async = NULL;
-	}
-
 	gfp_xdr_free(peer->conn); peer->conn = NULL;
-	peer->next_close = NULL;
-	peer->refcount = 0;
 
 	peer_table_unlock();
 }
@@ -696,9 +429,6 @@ peer_shutdown_all(void)
 
 		gflog_notice(GFARM_MSG_1000287, "(%s@%s) shutting down",
 		    peer->username, peer->hostname);
-#if 0		/* we don't really have to do this at shutdown */
-		peer_unset_pending_new_generation(peer);
-#endif
 		process_detach_peer(peer->process, peer);
 		peer->process = NULL;
 	}
@@ -710,16 +440,7 @@ peer_shutdown_all(void)
 void
 peer_watch_access(struct peer *peer)
 {
-	/* XXX FIXME: #66 - unexpected collision to access peer:control */
-	mutex_lock(&peer->control_mutex,
-	    "peer_watch_access", "peer:control_mutex");
-#ifdef HAVE_EPOLL_WAIT
-	peer->control |= PEER_WATCHING|PEER_WATCHED;
-#else
 	peer->control |= PEER_WATCHING;
-#endif
-	mutex_unlock(&peer->control_mutex,
-	    "peer_watch_access", "peer:control_mutex");
 #ifdef HAVE_EPOLL_WAIT
 	peer_epoll_add_fd(peer_get_fd(peer));
 #endif
@@ -768,18 +489,6 @@ peer_get_fd(struct peer *peer)
 	return (fd);
 }
 
-void
-peer_set_async(struct peer *peer, gfp_xdr_async_peer_t async)
-{
-	peer->async = async;
-}
-
-gfp_xdr_async_peer_t
-peer_get_async(struct peer *peer)
-{
-	return (peer->async);
-}
-
 /*
  * This funciton is experimentally introduced to accept a host in
  * private networks.
@@ -787,23 +496,14 @@ peer_get_async(struct peer *peer)
 gfarm_error_t
 peer_set_host(struct peer *peer, char *hostname)
 {
-	if (peer->id_type != GFARM_AUTH_ID_TYPE_SPOOL_HOST) {
-		gflog_debug(GFARM_MSG_1001584,
-			"operation is not permitted");
+	if (peer->id_type != GFARM_AUTH_ID_TYPE_SPOOL_HOST)
 		return (GFARM_ERR_OPERATION_NOT_PERMITTED);
-	}
-	if (peer->host != NULL) { /* already set */
-		gflog_debug(GFARM_MSG_1001585,
-			"peer host is already set");
+	if (peer->host != NULL) /* already set */
 		return (GFARM_ERR_NO_ERROR);
-	}
 
 	peer->host = host_lookup(hostname);
-	if (peer->host == NULL) {
-		gflog_debug(GFARM_MSG_1001586,
-			"host does not exist");
+	if (peer->host == NULL)
 		return (GFARM_ERR_UNKNOWN_HOST);
-	}
 
 	if (peer->hostname != NULL) {
 		free(peer->hostname);
@@ -853,29 +553,6 @@ peer_get_host(struct peer *peer)
 	return (peer->host);
 }
 
-/* NOTE: caller of this function should acquire giant_lock as well */
-void
-peer_set_pending_new_generation(struct peer *peer, struct inode *inode)
-{
-	peer->pending_new_generation = inode;
-}
-
-/* NOTE: caller of this function should acquire giant_lock as well */
-void
-peer_reset_pending_new_generation(struct peer *peer)
-{
-	peer->pending_new_generation = NULL;
-}
-
-/* NOTE: caller of this function should acquire giant_lock as well */
-void
-peer_unset_pending_new_generation(struct peer *peer)
-{
-	if (peer->pending_new_generation != NULL)
-		inode_new_generation_done(peer->pending_new_generation, peer,
-		    GFARM_ERR_PROTOCOL);
-}
-
 struct process *
 peer_get_process(struct peer *peer)
 {
@@ -901,8 +578,6 @@ peer_unset_process(struct peer *peer)
 		gflog_fatal(GFARM_MSG_1000292,
 		    "peer_unset_process: already unset");
 
-	peer_unset_pending_new_generation(peer);
-
 	peer_fdpair_clear(peer);
 
 	process_detach_peer(peer->process, peer);
@@ -919,14 +594,6 @@ int
 peer_had_protocol_error(struct peer *peer)
 {
 	return (peer->protocol_error);
-}
-
-void
-peer_set_protocol_handler(struct peer *peer,
-	struct thread_pool *thrpool, void *(*protocol_handler)(void *))
-{
-	peer->protocol_handler = protocol_handler;
-	peer->handler_thread_pool = thrpool;
 }
 
 struct protocol_state *
@@ -972,11 +639,8 @@ peer_fdpair_clear(struct peer *peer)
 gfarm_error_t
 peer_fdpair_externalize_current(struct peer *peer)
 {
-	if (peer->fd_current == -1) {
-		gflog_debug(GFARM_MSG_1001587,
-			"bad file descriptor");
+	if (peer->fd_current == -1)
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
-	}
 	peer->flags |= PEER_FLAGS_FD_CURRENT_EXTERNALIZED;
 	if (peer->fd_current == peer->fd_saved)
 		peer->flags |= PEER_FLAGS_FD_SAVED_EXTERNALIZED;
@@ -986,11 +650,8 @@ peer_fdpair_externalize_current(struct peer *peer)
 gfarm_error_t
 peer_fdpair_close_current(struct peer *peer)
 {
-	if (peer->fd_current == -1) {
-		gflog_debug(GFARM_MSG_1001588,
-			"bad file descriptor");
+	if (peer->fd_current == -1)
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
-	}
 	if (peer->fd_current == peer->fd_saved) {
 		peer->flags &= ~PEER_FLAGS_FD_SAVED_EXTERNALIZED;
 		peer->fd_saved = -1;
@@ -1020,11 +681,8 @@ peer_fdpair_set_current(struct peer *peer, gfarm_int32_t fd)
 gfarm_error_t
 peer_fdpair_get_current(struct peer *peer, gfarm_int32_t *fdp)
 {
-	if (peer->fd_current == -1) {
-		gflog_debug(GFARM_MSG_1001589,
-			"bad file descriptor");
+	if (peer->fd_current == -1)
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
-	}
 	*fdp = peer->fd_current;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1032,11 +690,8 @@ peer_fdpair_get_current(struct peer *peer, gfarm_int32_t *fdp)
 gfarm_error_t
 peer_fdpair_get_saved(struct peer *peer, gfarm_int32_t *fdp)
 {
-	if (peer->fd_saved == -1) {
-		gflog_debug(GFARM_MSG_1001590,
-			"bad file descriptor");
+	if (peer->fd_saved == -1)
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
-	}
 	*fdp = peer->fd_saved;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1049,11 +704,8 @@ peer_fdpair_get_saved(struct peer *peer, gfarm_int32_t *fdp)
 gfarm_error_t
 peer_fdpair_save(struct peer *peer)
 {
-	if (peer->fd_current == -1) {
-		gflog_debug(GFARM_MSG_1001591,
-			"bad file descriptor");
+	if (peer->fd_current == -1)
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
-	}
 
 	if (peer->fd_saved != -1 &&
 	    (peer->flags & PEER_FLAGS_FD_SAVED_EXTERNALIZED) == 0 &&
@@ -1075,11 +727,8 @@ peer_fdpair_save(struct peer *peer)
 gfarm_error_t
 peer_fdpair_restore(struct peer *peer)
 {
-	if (peer->fd_saved == -1) {
-		gflog_debug(GFARM_MSG_1001592,
-			"bad file descriptor");
+	if (peer->fd_saved == -1)
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
-	}
 
 	if (peer->fd_current != -1 &&
 	    (peer->flags & PEER_FLAGS_FD_CURRENT_EXTERNALIZED) == 0 &&

@@ -149,14 +149,6 @@ gfarm_error_t gfm_client_close_write_request(struct gfm_connection *,
 	gfarm_off_t,
 	gfarm_int64_t, gfarm_int32_t, gfarm_int64_t, gfarm_int32_t);
 gfarm_error_t gfm_client_close_write_result(struct gfm_connection *);
-gfarm_error_t gfm_client_close_write_v2_4_request(struct gfm_connection *,
-	gfarm_off_t,
-	gfarm_int64_t, gfarm_int32_t, gfarm_int64_t, gfarm_int32_t);
-gfarm_error_t gfm_client_close_write_v2_4_result(struct gfm_connection *,
-	gfarm_int32_t *, gfarm_int64_t *, gfarm_int64_t *);
-gfarm_error_t gfm_client_generation_updated_request(struct gfm_connection *,
-	gfarm_int32_t);
-gfarm_error_t gfm_client_generation_updated_result(struct gfm_connection *);
 gfarm_error_t gfm_client_verify_type_request(struct gfm_connection *,
 	gfarm_int32_t);
 gfarm_error_t gfm_client_verify_type_result(struct gfm_connection *);
@@ -287,11 +279,7 @@ gfarm_error_t gfm_client_lock_info_request(struct gfm_connection *,
 	gfarm_off_t, gfarm_off_t, gfarm_int32_t, gfarm_int32_t);
 gfarm_error_t gfm_client_lock_info_result(struct gfm_connection *,
 	gfarm_off_t *, gfarm_off_t *, gfarm_int32_t *, char **, gfarm_pid_t *);
-#if 1 /* should be 0, since gfmd has to be newer than gfsd */
 gfarm_error_t gfm_client_switch_back_channel(struct gfm_connection *);
-#endif
-gfarm_error_t gfm_client_switch_async_back_channel(struct gfm_connection *,
-	gfarm_int32_t, gfarm_int64_t, gfarm_int32_t *);
 
 /* gfs_pio from client */
 /*XXX*/
@@ -314,18 +302,6 @@ gfarm_error_t gfm_client_replica_remove_by_host_result(
 gfarm_error_t gfm_client_replica_remove_by_file_request(
 	struct gfm_connection *, const char *);
 gfarm_error_t gfm_client_replica_remove_by_file_result(
-	struct gfm_connection *);
-gfarm_error_t gfm_client_replica_info_get_request(struct gfm_connection *,
-	gfarm_int32_t);
-gfarm_error_t gfm_client_replica_info_get_result(struct gfm_connection *,
-	gfarm_int32_t *, char ***, gfarm_int64_t **, gfarm_int32_t **);
-gfarm_error_t gfm_client_replicate_file_from_to_request(
-	struct gfm_connection *, const char *, const char *, gfarm_int32_t);
-gfarm_error_t gfm_client_replicate_file_from_to_result(
-	struct gfm_connection *);
-gfarm_error_t gfm_client_replicate_file_from_request(
-	struct gfm_connection *, const char *, const char *, gfarm_int32_t);
-gfarm_error_t gfm_client_replicate_file_from_result(
 	struct gfm_connection *);
 
 /* replica management from gfsd */

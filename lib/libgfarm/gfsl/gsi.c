@@ -461,13 +461,6 @@ gfarmGssAcquireCredential(credPtr, desiredName, credUsage, majStatPtr, minStatPt
     if (minStatPtr != NULL) {
 	*minStatPtr = minStat;
     }	
-
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000790,
-		"failed to acquire credential (%u)(%u)",
-		majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -493,13 +486,6 @@ gfarmGssDeleteCredential(credPtr, majStatPtr, minStatPtr)
     if (minStatPtr != NULL) {
 	*minStatPtr = minStat;
     }	
-
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000791,
-		"failed to delete credential (%u)(%u)",
-		majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -512,11 +498,9 @@ gfarmGssSendToken(fd, gsBuf)
     gfarm_int32_t iLen = (gfarm_int32_t)(gsBuf->length);
 
     if (gfarmWriteInt32(fd, &iLen, 1) != 1) {
-	gflog_debug(GFARM_MSG_1000792, "gfarmWriteInt32() failed");
 	return -1;
     }
     if (gfarmWriteInt8(fd, (gfarm_int8_t *)(gsBuf->value), iLen) != iLen) {
-	gflog_debug(GFARM_MSG_1000793, "gfarmWriteInt8() failed");
 	return -1;
     }
     return iLen;
@@ -540,7 +524,6 @@ gfarmGssReceiveToken(fd, gsBuf)
     gsBuf->value = NULL;
 
     if (gfarmReadInt32(fd, &iLen, 1) != 1) {
-	gflog_debug(GFARM_MSG_1000794, "gfarmReadInt32() failed");
 	return -1;
     }
 
@@ -551,14 +534,12 @@ gfarmGssReceiveToken(fd, gsBuf)
      */
     GFARM_MALLOC_ARRAY(p, iLen);
     if (p == NULL) {
-	gflog_debug(GFARM_MSG_1000795, "allocation of buffer failed");
 	return -1;
     }
     buf = (gfarm_int8_t *)p;
 
     if (gfarmReadInt8(fd, buf, iLen) != iLen) {
 	(void)free(buf);
-	gflog_debug(GFARM_MSG_1000796, "gfarmReadInt8() failed");
 	return -1;
     }
 
@@ -850,9 +831,6 @@ gfarmGssConfigureMessageSize(sCtx, doEncrypt, qopReq, reqOutSz, maxInSzPtr, majS
 	if (maxInSzPtr != NULL) {
 	    *maxInSzPtr = (int)oMaxSz;
 	}
-    } else {
-	    gflog_debug(GFARM_MSG_1000797,
-		"failed to configure message size (%u)(%u)", majStat, minStat);
     }
 
     return ret;
@@ -941,12 +919,6 @@ gfarmGssSend(fd, sCtx, doEncrypt, qopReq, buf, n, chunkSz, statPtr)
 	*statPtr = majStat;
     }
     
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000798,
-		"error occurred during gfarmGssSend (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -1051,12 +1023,6 @@ gfarmGssReceive(fd, sCtx, bufPtr, lenPtr, statPtr)
 	*lenPtr = n;
     }
 
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000799,
-		"error occurred during gfarmGssReceive (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -1127,13 +1093,6 @@ gfarmGssExportCredential(cred, statPtr)
     gss_release_buffer(&minStat, &buf);
     if (statPtr != NULL)
 	*statPtr = majStat;
-
-    if (GSS_ERROR(majStat)) {
-	gflog_debug(GFARM_MSG_1000800,
-		"failed to export credential (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return exportedCred;
 }
 
@@ -1450,13 +1409,6 @@ gfarmGssInitiateSecurityContextRequest(q, fd, acceptorName, cred, reqFlag, conti
     if (minStatPtr != NULL) {
 	*minStatPtr = minStat;
     }
-
-    if (GSS_ERROR(majStat)) {
-	gflog_debug(GFARM_MSG_1000801,
-		"failed to request initiate security context (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return (NULL);
 }
 
@@ -1510,11 +1462,5 @@ gfarmGssInitiateSecurityContextResult(state, scPtr, majStatPtr, minStatPtr, remo
 
     ret = state->majStat == GSS_S_COMPLETE ? 1 : -1;
     free(state);
-
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000802,
-		"failed to get result of initiate security context");
-    }
-
     return ret;
 }

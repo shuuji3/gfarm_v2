@@ -220,12 +220,8 @@ gfs_readdir_internal(GFS_Dir super, struct gfs_dirent **entry)
 	if (dir->index >= dir->n) {
 		e = gfm_client_compound_fd_op(dir->gfm_server, dir->fd,
 		    gfm_getdirents_request, gfm_getdirents_result, NULL, dir);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001270,
-				"gfm_client_compound_fd_op() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 
 		if (dir->n == 0) {
 			*entry = NULL;
@@ -251,18 +247,12 @@ gfs_closedir_internal(GFS_Dir super)
 gfarm_error_t
 gfs_seekdir_unimpl(GFS_Dir dir, gfarm_off_t off)
 {
-	gflog_debug(GFARM_MSG_1001271,
-		"Not implemented: %s",
-		gfarm_error_string(GFARM_ERR_FUNCTION_NOT_IMPLEMENTED));
 	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED); /* XXX FIXME */
 }
 
 gfarm_error_t
 gfs_telldir_unimpl(GFS_Dir dir, gfarm_off_t *offp)
 {
-	gflog_debug(GFARM_MSG_1001272,
-		"Not implemented: %s",
-		gfarm_error_string(GFARM_ERR_FUNCTION_NOT_IMPLEMENTED));
 	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED); /* XXX FIXME */
 }
 
@@ -279,12 +269,8 @@ gfs_dir_alloc(struct gfm_connection *gfm_server, gfarm_int32_t fd,
 	};
 
 	GFARM_MALLOC(dir);
-	if (dir == NULL) {
-		gflog_debug(GFARM_MSG_1001273,
-			"allocation of dir failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (dir == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	dir->super.ops = &ops;
 	dir->gfm_server = gfm_server;
@@ -304,30 +290,14 @@ gfs_opendir(const char *path, GFS_Dir *dirp)
 	int fd, type;
 
 	if ((e = gfm_open_fd(path, GFARM_FILE_RDONLY, &gfm_server, &fd, &type))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001274,
-			"gfm_open_fd(%s) failed: %s",
-			path,
-			gfarm_error_string(e));
+	    != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (type != GFS_DT_DIR)
 		e = GFARM_ERR_NOT_A_DIRECTORY;
 	else if ((e = gfs_dir_alloc(gfm_server, fd, dirp)) ==
 	    GFARM_ERR_NO_ERROR)
 		return (GFARM_ERR_NO_ERROR);
-
-	if (e == GFARM_ERR_NOT_A_DIRECTORY)
-		gflog_debug(GFARM_MSG_1001275,
-			"Not a directory (%s): %s",
-			path,
-			gfarm_error_string(e));
-	else if (e != GFARM_ERR_NO_ERROR)
-		gflog_debug(GFARM_MSG_1001276,
-			"allocation of dir for path (%s) failed: %s",
-			path,
-			gfarm_error_string(e));
 
 	(void)gfm_close_fd(gfm_server, fd); /* ignore result */
 	gfm_client_connection_free(gfm_server);

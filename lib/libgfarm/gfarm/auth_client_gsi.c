@@ -54,12 +54,8 @@ gfarm_auth_request_gsi(struct gfp_xdr *conn,
 	int eof, cred_acquired = 0;
 
 	e = gfarm_gsi_client_initialize();
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001465,
-			"initialization of client failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	e = gfarm_gsi_cred_config_convert_to_name(
 	    serv_type != GFARM_AUTH_CRED_TYPE_DEFAULT ?
@@ -135,8 +131,6 @@ gfarm_auth_request_gsi(struct gfp_xdr *conn,
 			 * continue gracefully in this case.
 			 * So, just kill this connection.
 			 */
-			gflog_debug(GFARM_MSG_1001466,
-				"acquirement of client credential failed");
 			return (GFARM_ERRMSG_CANNOT_ACQUIRE_CLIENT_CRED);
 #endif
 		}
@@ -175,9 +169,6 @@ gfarm_auth_request_gsi(struct gfp_xdr *conn,
 		 * GFSL protocol doesn't guarantee to gracefully continue
 		 * further communication on error cases.
 		 */
-		gflog_debug(GFARM_MSG_1001467,
-			"initiation of session failed: %s",
-			gfarm_error_string(GFARM_ERR_OPERATION_NOT_PERMITTED));
 		return (GFARM_ERR_OPERATION_NOT_PERMITTED);
 #endif
 	}
@@ -185,23 +176,14 @@ gfarm_auth_request_gsi(struct gfp_xdr *conn,
 	    cred_acquired ? cred : GSS_C_NO_CREDENTIAL);
 
 	e = gfp_xdr_recv(conn, 1, &eof, "i", &error);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001468,
-		    "receiving response failed: %s", gfarm_error_string(e));
-	} else if (eof) {
-		gflog_debug(GFARM_MSG_1001469,
-		    "Unexpected EOF when receiving response");
-		e = GFARM_ERR_PROTOCOL;
-	} else if (error != GFARM_AUTH_ERROR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001470,
-		    "Authentication failed: %d", error);
-		e = GFARM_ERR_AUTHENTICATION;
-	} else {
-		return (GFARM_ERR_NO_ERROR);
+	if (e != GFARM_ERR_NO_ERROR || eof ||
+	    error != GFARM_AUTH_ERROR_NO_ERROR) {
+		gfp_xdr_reset_secsession(conn);
+		gfp_xdr_set_socket(conn, fd);
+		return (e != GFARM_ERR_NO_ERROR ? e :
+		    eof ? GFARM_ERR_PROTOCOL : GFARM_ERR_AUTHENTICATION);
 	}
-	gfp_xdr_reset_secsession(conn);
-	gfp_xdr_set_socket(conn, fd);
-	return (e);
+	return (GFARM_ERR_NO_ERROR);
 }
 
 /*
@@ -236,9 +218,6 @@ gfarm_auth_request_gsi_receive_result(int events, int fd, void *closure,
 	if ((events & GFARM_EVENT_TIMEOUT) != 0) {
 		assert(events == GFARM_EVENT_TIMEOUT);
 		state->error = GFARM_ERR_OPERATION_TIMED_OUT;
-		gflog_debug(GFARM_MSG_1001471,
-			"receiving gsi auth result failed: %s",
-			gfarm_error_string(state->error));
 		if (state->continuation != NULL)
 			(*state->continuation)(state->closure);
 		return;
@@ -322,20 +301,12 @@ gfarm_auth_request_gsi_multiplexed(struct gfarm_eventqueue *q,
 	OM_uint32 e_major, e_minor;
 
 	e = gfarm_gsi_client_initialize();
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001472,
-			"initialization of gsi client failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	GFARM_MALLOC(state);
-	if (state == NULL) {
-		gflog_debug(GFARM_MSG_1001473,
-			"allocation of 'state' failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (state == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	/*
 	 * We cannot use two independent events (i.e. a fd_event with
@@ -346,9 +317,6 @@ gfarm_auth_request_gsi_multiplexed(struct gfarm_eventqueue *q,
 	    GFARM_EVENT_READ|GFARM_EVENT_TIMEOUT, gfp_xdr_fd(conn),
 	    gfarm_auth_request_gsi_receive_result, state);
 	if (state->readable == NULL) {
-		gflog_debug(GFARM_MSG_1001474,
-			"allocation of 'readable' failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
 		e = GFARM_ERR_NO_MEMORY;
 		goto error_free_state;
 	}
@@ -395,8 +363,6 @@ gfarm_auth_request_gsi_multiplexed(struct gfarm_eventqueue *q,
 			 * continue gracefully in this case.
 			 * So, just kill this connection.
 			 */
-			gflog_debug(GFARM_MSG_1001475,
-				"acquirement of client credential failed");
 			e = GFARM_ERRMSG_CANNOT_ACQUIRE_CLIENT_CRED;
 #endif
 			goto error_free_acceptor_name;
@@ -412,8 +378,6 @@ gfarm_auth_request_gsi_multiplexed(struct gfarm_eventqueue *q,
 	    &e_major, &e_minor);
 	if (state->gfsl_state == NULL) {
 		/* XXX e_major/e_minor should be used */
-		gflog_debug(GFARM_MSG_1001476,
-			"initiation of gsi connection failed");
 		e = GFARM_ERRMSG_CANNOT_INITIATE_GSI_CONNECTION;
 		goto error_free_cred;
 	}

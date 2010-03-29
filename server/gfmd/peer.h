@@ -1,11 +1,6 @@
 struct peer;
-struct thread_pool;
 
-void peer_add_ref(struct peer *);
-int peer_del_ref(struct peer *);
-void peer_free_request(struct peer *);
-
-void peer_init(int, struct thread_pool *, void *(*)(void *));
+void peer_init(int, void *(*)(void *));
 
 gfarm_error_t peer_alloc(int, struct peer **);
 void peer_authorized(struct peer *,
@@ -20,12 +15,6 @@ gfarm_error_t peer_free_by_fd(int);
 
 struct gfp_xdr *peer_get_conn(struct peer *);
 int peer_get_fd(struct peer *);
-
-/* (struct gfp_xdr_aync_peer *) == gfp_xdr_async_peer_t XXX  */
-struct gfp_xdr_async_peer;
-void peer_set_async(struct peer *, struct gfp_xdr_async_peer *);
-struct gfp_xdr_async_peer *peer_get_async(struct peer *);
-
 gfarm_error_t peer_set_host(struct peer *, char *);
 enum gfarm_auth_id_type peer_get_auth_id_type(struct peer *);
 char *peer_get_username(struct peer *);
@@ -36,12 +25,6 @@ struct user *peer_get_user(struct peer *);
 void peer_set_user(struct peer *, struct user *);
 struct host;
 struct host *peer_get_host(struct peer *);
-
-struct inode;
-void peer_set_pending_new_generation(struct peer *, struct inode *);
-void peer_reset_pending_new_generation(struct peer *);
-void peer_unset_pending_new_generation(struct peer *);
-
 struct process;
 struct process *peer_get_process(struct peer *);
 void peer_set_process(struct peer *, struct process *);
@@ -49,9 +32,6 @@ void peer_unset_process(struct peer *);
 
 void peer_record_protocol_error(struct peer *);
 int peer_had_protocol_error(struct peer *);
-
-void peer_set_protocol_handler(struct peer *,
-	struct thread_pool *, void *(*)(void *));
 
 struct protocol_state;
 struct protocol_state *peer_get_protocol_state(struct peer *);

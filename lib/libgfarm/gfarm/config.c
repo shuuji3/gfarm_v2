@@ -74,8 +74,8 @@ map_user(gfarm_stringlist map_file_list, char *from, char **to_p,
 	for (i = 0; i < list_len; i++) {
 		mapfile = gfarm_stringlist_elem(&map_file_list, i);
 		if ((map = fopen(mapfile, "r")) == NULL) {
-			gflog_error(GFARM_MSG_1000009,
-			    "%s: cannot open: %s", mapfile, strerror(errno));
+			gflog_error(GFARM_MSG_1000009, "%s: %s",
+			    mapfile, strerror(errno));
 			return (GFARM_ERR_CANT_OPEN);
 		}
 		lineno = 0;
@@ -219,12 +219,8 @@ set_string(char **var, char *value)
 	if (*var != NULL)
 		free(*var);
 	*var = strdup(value);
-	if (*var == NULL) {
-		gflog_debug(GFARM_MSG_1000918,
-			"allocation of memory failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (*var == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -537,12 +533,8 @@ gfarm_strtoken(char **cursorp, char **tokenp)
 			for (;;) {
 				if (*s == '\'')
 					break;
-				if (*s == '\0' || *s == '\n') {
-					gflog_debug(GFARM_MSG_1000919,
-						"Unterminated single quote "
-						"found in string");
+				if (*s == '\0' || *s == '\n')
 					return (GFARM_ERRMSG_UNTERMINATED_SINGLE_QUOTE);
-				}
 				*p++ = *s++;
 			}
 			s++;
@@ -552,20 +544,11 @@ gfarm_strtoken(char **cursorp, char **tokenp)
 			for (;;) {
 				if (*s == '"')
 					break;
-				if (*s == '\0' || *s == '\n') {
-					gflog_debug(GFARM_MSG_1000920,
-						"Unterminated double quote "
-						"found in string");
+				if (*s == '\0' || *s == '\n')
 					return (GFARM_ERRMSG_UNTERMINATED_DOUBLE_QUOTE);
-				}
 				if (*s == '\\') {
-					if (s[1] == '\0' || s[1] == '\n') {
-						gflog_debug(GFARM_MSG_1000921,
-							"Unterminated double "
-							"quote found in string"
-						);
+					if (s[1] == '\0' || s[1] == '\n')
 						return (GFARM_ERRMSG_UNTERMINATED_DOUBLE_QUOTE);
-					}
 					/*
 					 * only interpret `\"' and `\\'
 					 * in double quotation.
@@ -579,11 +562,8 @@ gfarm_strtoken(char **cursorp, char **tokenp)
 			break;
 		case '\\':
 			s++;
-			if (*s == '\0' || *s == '\n') {
-				gflog_debug(GFARM_MSG_1000922,
-					"Incomplete escape found in string");
+			if (*s == '\0' || *s == '\n')
 				return (GFARM_ERRMSG_INCOMPLETE_ESCAPE);
-			}
 			*p++ = *s++;
 			break;
 		case '\n':	
@@ -617,30 +597,16 @@ parse_auth_arguments(char *p, char **op)
 	/* assert(strcmp(*op, "auth") == 0); */
 
 	e = gfarm_strtoken(&p, &command);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000923,
-			"parsing of auth command argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (command == NULL) {
-		gflog_debug(GFARM_MSG_1000924,
-			"Missing first auth command argument");
+	if (command == NULL)
 		return (GFARM_ERRMSG_MISSING_1ST_AUTH_COMMAND_ARGUMENT);
-	}
 
 	e = gfarm_strtoken(&p, &auth);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000925,
-			"parsing of auth method argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (auth == NULL) {
-		gflog_debug(GFARM_MSG_1000926,
-			"Missing second auth method argument");
+	if (auth == NULL)
 		return (GFARM_ERRMSG_MISSING_2ND_AUTH_METHOD_ARGUMENT);
-	}
 	if (strcmp(auth, "*") == 0 || strcmp(auth, "ALL") == 0) {
 		auth_method = GFARM_AUTH_METHOD_ALL;
 	} else {
@@ -649,37 +615,20 @@ parse_auth_arguments(char *p, char **op)
 			*op = "2nd(auth-method) argument";
 			if (e == GFARM_ERR_NO_SUCH_OBJECT)
 				e = GFARM_ERRMSG_UNKNOWN_AUTH_METHOD;
-			gflog_debug(GFARM_MSG_1000927,
-				"parsing of auth method (%s) failed: %s",
-				auth, gfarm_error_string(e));
 			return (e);
 		}
 	}
 
 	e = gfarm_strtoken(&p, &host);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000928,
-			"parsing of auth host argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (host == NULL) {
-		gflog_debug(GFARM_MSG_1000929,
-			"Missing third auth host spec argument");
+	if (host == NULL)
 		return (GFARM_ERRMSG_MISSING_3RD_HOST_SPEC_ARGUMENT);
-	}
 	e = gfarm_strtoken(&p, &tmp);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000930,
-			"parsing of auth arguments (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (tmp != NULL) {
-		gflog_debug(GFARM_MSG_1000931,
-			"Too many auth arguments passed");
+	if (tmp != NULL)
 		return (GFARM_ERRMSG_TOO_MANY_ARGUMENTS);
-	}
 	e = gfarm_hostspec_parse(host, &hostspecp);
 	if (e != GFARM_ERR_NO_ERROR) {
 		/*
@@ -687,9 +636,6 @@ parse_auth_arguments(char *p, char **op)
 		 * because it may be too long.
 		 */
 		*op = "3rd(host-spec) argument";
-		gflog_debug(GFARM_MSG_1000932,
-			"parsing of auth host spec (%s) failed: %s",
-			host, gfarm_error_string(e));
 		return (e);
 	}
 
@@ -704,18 +650,10 @@ parse_auth_arguments(char *p, char **op)
 		 */
 		*op = "1st(auth-command) argument";
 		gfarm_hostspec_free(hostspecp);
-		gflog_debug(GFARM_MSG_1000933,
-			"Unknown auth subcommand (%s)",
-			command);
 		return (GFARM_ERRMSG_UNKNOWN_AUTH_SUBCOMMAND);
 	}
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000934,
-			"Failed to enable/disable auth (%s)(%s)(%s): (%s)",
-			command, auth, host,
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		gfarm_hostspec_free(hostspecp);
-	}
 	return (e);
 }
 
@@ -729,36 +667,20 @@ parse_netparam_arguments(char *p, char **op)
 	/* assert(strcmp(*op, "netparam") == 0); */
 
 	e = gfarm_strtoken(&p, &option);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000935,
-			"parsing of netparam option argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (option == NULL) {
-		gflog_debug(GFARM_MSG_1000936,
-			"Missing first netparam option argument");
+	if (option == NULL)
 		return (GFARM_ERRMSG_MISSING_NETPARAM_OPTION_ARGUMENT);
-	}
 
 	e = gfarm_strtoken(&p, &host);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000937,
-			"parsing of netparam host argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	if (host == NULL) {
 		/* if 2nd argument is omitted, it is treated as "*". */
 		host = "*";
 	} else if ((e = gfarm_strtoken(&p, &tmp)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000938,
-			"parsing of netparam arguments (%s) failed: %s",
-			p, gfarm_error_string(e));
 		return (e);
 	} else if (tmp != NULL) {
-		gflog_debug(GFARM_MSG_1000939,
-			"Too many netparam arguments passed");
 		return (GFARM_ERRMSG_TOO_MANY_ARGUMENTS);
 	}
 	
@@ -769,9 +691,6 @@ parse_netparam_arguments(char *p, char **op)
 		 * because it may be too long.
 		 */
 		*op = "2nd(host-spec) argument";
-		gflog_debug(GFARM_MSG_1000940,
-			"parsing of netparam host spec (%s) failed: %s",
-			host, gfarm_error_string(e));
 		return (e);
 	}
 
@@ -783,9 +702,6 @@ parse_netparam_arguments(char *p, char **op)
 		 */
 		*op = "1st(sockopt-option) argument";
 		gfarm_hostspec_free(hostspecp);
-		gflog_debug(GFARM_MSG_1000941,
-			"add netparam config (%s)(%s) failed: %s",
-			host, option, gfarm_error_string(e));
 		return (e);
 	}
 	return (GFARM_ERR_NO_ERROR);
@@ -802,25 +718,14 @@ parse_sockopt_arguments(char *p, char **op)
 	/* assert(strcmp(*op, "sockopt") == 0); */
 
 	e = gfarm_strtoken(&p, &option);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000942,
-			"parsing of sockopt option argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (option == NULL) {
-		gflog_debug(GFARM_MSG_1000943,
-			"Missing sockopt option argument");
+	if (option == NULL)
 		return (GFARM_ERRMSG_MISSING_SOCKOPT_OPTION_ARGUMENT);
-	}
 
 	e = gfarm_strtoken(&p, &host);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000944,
-			"parsing of sockopt host argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	if (host == NULL) {
 		/*
 		 * if 2nd argument is omitted, it is treated as:
@@ -829,17 +734,10 @@ parse_sockopt_arguments(char *p, char **op)
 		is_listener = 1;
 	} else {
 		is_listener = strcmp(host, "LISTENER") == 0;
-		if ((e = gfarm_strtoken(&p, &tmp)) != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1000945,
-				"parsing of sockopt arguments (%s) failed: %s",
-				p, gfarm_error_string(e));
+		if ((e = gfarm_strtoken(&p, &tmp)) != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
-		if (tmp != NULL) {
-			gflog_debug(GFARM_MSG_1000946,
-				"Too many sockopt arguments passed");
+		if (tmp != NULL)
 			return (GFARM_ERRMSG_TOO_MANY_ARGUMENTS);
-		}
 	}
 	
 	if (is_listener) {
@@ -850,10 +748,6 @@ parse_sockopt_arguments(char *p, char **op)
 			 * because it may be too long.
 			 */
 			*op = "1st(sockopt-option) argument";
-			gflog_debug(GFARM_MSG_1000947,
-				"add sockopt listener config failed"
-				"(%s)(%s): %s",
-				host, option, gfarm_error_string(e));
 			return (e);
 		}
 	}
@@ -866,9 +760,6 @@ parse_sockopt_arguments(char *p, char **op)
 			 * because it may be too long.
 			 */
 			*op = "2nd(host-spec) argument";
-			gflog_debug(GFARM_MSG_1000948,
-				"parsing of sockopt host (%s) failed: %s",
-				host, gfarm_error_string(e));
 			return (e);
 		}
 
@@ -880,9 +771,6 @@ parse_sockopt_arguments(char *p, char **op)
 			 */
 			*op = "1st(sockopt-option) argument";
 			gfarm_hostspec_free(hostspecp);
-			gflog_debug(GFARM_MSG_1000949,
-				"add sockopt config (%s)(%s) failed: %s",
-				host, option, gfarm_error_string(e));
 			return (e);
 		}
 	}
@@ -941,37 +829,18 @@ parse_local_user_map(char *p, char **op)
 	char *tmp, *mapfile;
 
 	e = gfarm_strtoken(&p, &mapfile);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000950,
-			"parsing of local user map "
-			"mapfile argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (mapfile == NULL) {
-		gflog_debug(GFARM_MSG_1000951,
-			"Missing local user map mapfile argument");
+	if (mapfile == NULL)
 		return (GFARM_ERRMSG_MISSING_USER_MAP_FILE_ARGUMENT);
-	}
 	e = gfarm_strtoken(&p, &tmp);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000952,
-			"parsing of local user map arguments (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (tmp != NULL) {
-		gflog_debug(GFARM_MSG_1000953,
-			"Too many local user map arguments passed");
+	if (tmp != NULL)
 		return (GFARM_ERRMSG_TOO_MANY_ARGUMENTS);
-	}
 	mapfile = strdup(mapfile);
-	if (mapfile == NULL) {
-		gflog_debug(GFARM_MSG_1000954,
-			"allocation of 'mapfile' failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (mapfile == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	e = gfarm_stringlist_add(&local_user_map_file_list, mapfile);
 	return (e);
 }
@@ -1045,29 +914,15 @@ get_one_argument(char *p, char **rv)
 	char *tmp, *s;
 
 	e = gfarm_strtoken(&p, &s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000955,
-			"parsing of one argument (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (s == NULL) {
-		gflog_debug(GFARM_MSG_1000956,
-			"Missing argument");
+	if (s == NULL)
 		return (GFARM_ERRMSG_MISSING_ARGUMENT);
-	}
 	e = gfarm_strtoken(&p, &tmp);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000957,
-			"parsing of arguments (%s) failed: %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (tmp != NULL) {
-		gflog_debug(GFARM_MSG_1000958,
-			"Too many arguments passed");
+	if (tmp != NULL)
 		return (GFARM_ERRMSG_TOO_MANY_ARGUMENTS);
-	}
 
 	*rv = s;
 	return (GFARM_ERR_NO_ERROR);
@@ -1080,23 +935,14 @@ parse_set_var(char *p, char **rv)
 	char *s;
 
 	e = get_one_argument(p, &s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000959,
-			"get_one_argument failed "
-			"when parsing var (%s): %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (*rv != NULL) /* first line has precedence */
 		return (GFARM_ERR_NO_ERROR);
 	s = strdup(s);
-	if (s == NULL) {
-		gflog_debug(GFARM_MSG_1000960,
-			"allocation of argument failed when parsing set var: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (s == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	*rv = s;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1109,39 +955,19 @@ parse_set_misc_int(char *p, int *vp)
 	int v;
 
 	e = get_one_argument(p, &s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000961,
-			"get_one_argument failed "
-			"when parsing misc integer (%s): %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (*vp != MISC_DEFAULT) /* first line has precedence */
 		return (GFARM_ERR_NO_ERROR);
 	errno = 0;
 	v = strtol(s, &ep, 10);
-	if (errno != 0) {
-		int save_errno = errno;
-		gflog_debug(GFARM_MSG_1000962,
-			"conversion to integer failed "
-			"when parsing misc integer (%s): %s",
-			p, strerror(save_errno));
-		return (gfarm_errno_to_error(save_errno));
-	}
-	if (ep == s) {
-		gflog_debug(GFARM_MSG_1000963,
-			"Integer expected when parsing misc integer but (%s)",
-			s);
+	if (errno != 0)
+		return (gfarm_errno_to_error(errno));
+	if (ep == s)
 		return (GFARM_ERRMSG_INTEGER_EXPECTED);
-	}
-	if (*ep != '\0') {
-		gflog_debug(GFARM_MSG_1000964,
-			"Invalid character found "
-			"when parsing misc integer (%s)",
-			s);
+	if (*ep != '\0')
 		return (GFARM_ERRMSG_INVALID_CHARACTER);
-	}
 	*vp = v;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1179,32 +1005,17 @@ parse_set_misc_offset(char *p, gfarm_off_t *vp)
 	gfarm_off_t v;
 
 	e = get_one_argument(p, &s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000965,
-			"get_one_argument failed "
-			"when parsing misc offset (%s): %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (*vp != MISC_DEFAULT) /* first line has precedence */
 		return (GFARM_ERR_NO_ERROR);
 	errno = 0;
 	v = gfarm_strtoi64(s, &ep);
-	if (errno != 0) {
-		int save_errno = errno;
-		gflog_debug(GFARM_MSG_1000966,
-			"conversion to int64 failed "
-			"when parsing misc offset (%s): %s",
-			p, strerror(save_errno));
-		return (gfarm_errno_to_error(save_errno));
-	}
-	if (ep == s) {
-		gflog_debug(GFARM_MSG_1000967,
-			"Integer expected when parsing misc offset but (%s)",
-			s);
+	if (errno != 0)
+		return (gfarm_errno_to_error(errno));
+	if (ep == s)
 		return (GFARM_ERRMSG_INTEGER_EXPECTED);
-	}
 	if (*ep != '\0') {
 		switch (*ep) {
 		case 'k': case 'K': ep++; v *= 1024; break;
@@ -1212,13 +1023,8 @@ parse_set_misc_offset(char *p, gfarm_off_t *vp)
 		case 'g': case 'G': ep++; v *= 1024 * 1024 * 1024; break;
 		case 't': case 'T': ep++; v *=1024*1024; v *=1024*1024; break;
 		}
-		if (*ep != '\0') {
-			gflog_debug(GFARM_MSG_1000968,
-				"Invalid character found "
-				"when parsing misc offset (%s)",
-				s);
+		if (*ep != '\0')
 			return (GFARM_ERRMSG_INVALID_CHARACTER);
-		}
 	}
 	*vp = v;
 	return (GFARM_ERR_NO_ERROR);
@@ -1232,13 +1038,8 @@ parse_set_misc_enabled(char *p, int *vp)
 	int v;
 
 	e = get_one_argument(p, &s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000969,
-			"get_one_argument failed "
-			"when parsing misc enabled (%s): %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (*vp != MISC_DEFAULT) /* first line has precedence */
 		return (GFARM_ERR_NO_ERROR);
@@ -1246,13 +1047,8 @@ parse_set_misc_enabled(char *p, int *vp)
 		v = 1;
 	else if (strcmp(s, "disable") == 0)
 		v = 0;
-	else {
-		gflog_debug(GFARM_MSG_1000970,
-			"'enable' or 'disable' expected "
-			"when parsing misc enabled but (%s)",
-			s);
+	else
 		return (GFARM_ERRMSG_ENABLED_OR_DISABLED_EXPECTED);
-	}
 	*vp = v;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1265,13 +1061,8 @@ parse_cred_config(char *p, char *service,
 	char *s;
 
 	e = get_one_argument(p, &s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000971,
-			"get_one_argument failed "
-			"when parsing cred config (%s): %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	return ((*set)(service, s));
 }
@@ -1284,23 +1075,14 @@ parse_log_level(char *p, int *vp)
 	int v;
 
 	e = get_one_argument(p, &s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000972,
-			"get_one_argument failed "
-			"when parsing log level (%s): %s",
-			p, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (*vp != MISC_DEFAULT) /* first line has precedence */
 		return (GFARM_ERR_NO_ERROR);
 	v = gflog_syslog_name_to_priority(s);
-	if (v == -1) {
-		gflog_debug(GFARM_MSG_1000973,
-			"Invalid syslog priority level (%s)",
-			s);
+	if (v == -1)
 		return (GFARM_ERRMSG_INVALID_SYSLOG_PRIORITY_LEVEL);
-	}
 	*vp = v;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1471,10 +1253,6 @@ parse_one_line(char *s, char *p, char **op)
 
 	} else {
 		o = s;
-		gflog_debug(GFARM_MSG_1000974,
-			"Unknown keyword encountered "
-			"when parsing one line (%s)",
-			s);
 		e = GFARM_ERRMSG_UNKNOWN_KEYWORD;
 	}
 	*op = o;
@@ -1529,10 +1307,6 @@ gfarm_config_read_file(FILE *config, int *lineno_p)
 		if (e != GFARM_ERR_NO_ERROR) {
 			fclose(config);
 			*lineno_p = lineno;
-			gflog_debug(GFARM_MSG_1000975,
-				"parsing token failed"
-				"when reading config file (%s): %s",
-				p, gfarm_error_string(e));
 			return (e);
 		}
 	}

@@ -58,12 +58,8 @@ gfs_stat_cache_init(void)
 
 	stat_cache = gfarm_hash_table_alloc(
 	    STAT_HASH_SIZE, gfarm_hash_default, gfarm_hash_key_equal_default);
-	if (stat_cache == NULL) {
-		gflog_debug(GFARM_MSG_1001282,
-			"allocation of stat_cache failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (stat_cache == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -148,12 +144,8 @@ gfs_stat_cache_enter_internal(const char *path, const struct gfs_stat *st,
 	int created;
 
 	if (stat_cache == NULL) {
-		if ((e = gfs_stat_cache_init()) != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001283,
-				"initialization of stat_cache failed: %s",
-				gfarm_error_string(e));
+		if ((e = gfs_stat_cache_init()) != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 	}
 	gfs_stat_cache_expire_internal(nowp);
 
@@ -171,12 +163,8 @@ gfs_stat_cache_enter_internal(const char *path, const struct gfs_stat *st,
 
 	entry = gfarm_hash_enter(stat_cache, path, strlen(path) + 1,
 	    sizeof(*data), &created);
-	if (entry == NULL) {
-		gflog_debug(GFARM_MSG_1001284,
-			"allocation of hash entry for stat cache failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (entry == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	data = gfarm_hash_entry_data(entry);
 	if (created) {
@@ -194,9 +182,6 @@ gfs_stat_cache_enter_internal(const char *path, const struct gfs_stat *st,
 		gfarm_hash_purge(stat_cache, gfarm_hash_entry_key(entry),
 		    gfarm_hash_entry_key_length(entry));
 		--stat_cache_count;
-		gflog_debug(GFARM_MSG_1001285,
-			"gfs_stat_copy() failed: %s",
-			gfarm_error_string(e));
 		return (e);
 	}
 	data->expiration = *nowp;
@@ -221,15 +206,8 @@ gfs_stat_cache_purge(const char *path)
 		return (GFARM_ERR_NO_ERROR);
 
 	gfs_stat_cache_expire();
-	if (!gfarm_hash_iterator_lookup(
-		stat_cache, path, strlen(path)+1, &it)) {
-		gflog_debug(GFARM_MSG_1001286,
-			"lookup for path (%s) in stat cache failed: %s",
-			path,
-			gfarm_error_string(
-				GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY));
+	if (!gfarm_hash_iterator_lookup(stat_cache, path, strlen(path)+1, &it))
 		return (GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY);
-	}
 	entry = gfarm_hash_iterator_access(&it);
 	assert(entry != NULL);
 	data = gfarm_hash_entry_data(entry);
@@ -249,13 +227,8 @@ gfs_stat_caching(const char *path, struct gfs_stat *st)
 	struct timeval now;
 
 	e = gfs_stat(path, st);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001287,
-			"gfs_stat(%s) failed: %s",
-			path,
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	gettimeofday(&now, NULL);
 	if ((e = gfs_stat_cache_enter_internal(path, st, &now)) !=
@@ -289,12 +262,8 @@ gfs_stat_cached_internal(const char *path, struct gfs_stat *st)
 	if (stat_cache == NULL) {
 		gfarm_error_t e = gfs_stat_cache_init();
 
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001288,
-				"initialization of stat cache failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 	}
 	gettimeofday(&now, NULL);
 	gfs_stat_cache_expire_internal(&now);
@@ -338,12 +307,8 @@ gfs_readdir_caching_internal(GFS_Dir super, struct gfs_dirent **entryp)
 	char *path;
 	gfarm_error_t e = gfs_readdirplus(dir->dp, &ep, &stp);
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001289,
-			"gfs_readdirplus() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (ep != NULL) { /* i.e. not EOF */
 		GFARM_MALLOC_ARRAY(path,
@@ -411,13 +376,8 @@ gfs_opendir_caching_internal(const char *path, GFS_Dir *dirp)
 		gfs_telldir_unimpl
 	};
 
-	if ((e = gfs_opendirplus(path, &dp)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001290,
-			"gfs_opendirplus(%s) failed: %s",
-			path,
-			gfarm_error_string(e));
+	if ((e = gfs_opendirplus(path, &dp)) != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	GFARM_MALLOC(dir);
 	if (*gfarm_path_dir_skip(path) != '\0') {
@@ -436,9 +396,6 @@ gfs_opendir_caching_internal(const char *path, GFS_Dir *dirp)
 			free(dir);
 		if (p != NULL)
 			free(p);
-		gflog_debug(GFARM_MSG_1001291,
-			"allocation of dir or path failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
 		return (GFARM_ERR_NO_MEMORY);
 	}
 

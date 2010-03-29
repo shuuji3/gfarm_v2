@@ -35,11 +35,6 @@ gfs_pio_remote_storage_close(GFS_File gf)
 		return (GFARM_ERR_NO_ERROR);
 	e = gfs_client_close(gfs_server, gf->fd);
 	gfs_client_connection_free(gfs_server);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001373,
-			"gfs_client_close() failed: %s",
-			gfarm_error_string(e));
-	}
 	return (e);
 }
 
@@ -135,12 +130,8 @@ gfs_pio_open_remote_section(GFS_File gf, struct gfs_connection *gfs_server)
 	struct gfs_file_section_context *vc = gf->view_context;
 
 	e = gfs_client_open(gfs_server, gf->fd);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001374,
-			"gfs_client_open() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	vc->ops = &gfs_pio_remote_storage_ops;
 	vc->storage_context = gfs_server;

@@ -1,22 +1,8 @@
-struct peer;
-struct event_waiter {
-	struct event_waiter *next;
-
-	struct peer *peer;
-	gfarm_error_t (*action)(struct peer *, void *, int *);
-	void *arg;
-};
-
-void resuming_enqueue(struct event_waiter *);
-
  /*
-  * The following part exports hook points for a private extension.
+  * This header exports hook points for a private extension.
   *
-  * The official gfmd source code shouldn't use these interface.
+  * The official gfmd source code shouldn't include this header.
   */
-
-extern struct thread_pool *authentication_thread_pool;
-extern struct thread_pool *sync_protocol_thread_pool;
 
 gfarm_error_t gfm_server_protocol_extension_default(struct peer *,
 	int, int, int, gfarm_int32_t, gfarm_int32_t *, gfarm_error_t *);

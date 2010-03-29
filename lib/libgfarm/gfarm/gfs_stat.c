@@ -66,13 +66,6 @@ gfs_stat(const char *path, struct gfs_stat *s)
 	gfs_profile(gfarm_gettimerval(&t2));
 	gfs_profile(gfs_stat_time += gfarm_timerval_sub(&t2, &t1));
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001377,
-			"gfm_inode_op(%s) failed: %s",
-			path,
-			gfarm_error_string(e));
-	}
-
 	return (e);
 }
 
@@ -101,12 +94,6 @@ gfs_fstat(GFS_File gf, struct gfs_stat *s)
 
 	gfs_profile(gfarm_gettimerval(&t2));
 	gfs_profile(gfs_stat_time += gfarm_timerval_sub(&t2, &t1));
-
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001378,
-			"gfm_client_compound_fd_op() failed: %s",
-			gfarm_error_string(e));
-	}
 
 	return (e);
 }

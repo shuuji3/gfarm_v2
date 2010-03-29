@@ -40,13 +40,6 @@ host_info_get_by_name_alias(struct gfm_connection *gfm_server,
 
 	e = gfm_client_host_info_get_by_namealiases(gfm_server,
 	    1, &hostname, &e2, info);
-	if (e != GFARM_ERR_NO_ERROR || e2 != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000866,
-			"gfm_client_host_info_get_by_namealiases(%s) failed: "
-			"%s",
-			hostname,
-			gfarm_error_string(e != GFARM_ERR_NO_ERROR ? e : e2));
-	}
 	return (e != GFARM_ERR_NO_ERROR ? e : e2);
 }
 
@@ -73,13 +66,8 @@ gfm_host_info_get_by_name_alias(struct gfm_connection *gfm_server,
 	 * FIXME: This design must be revised, when we support IPv6.
 	 */
 	hp = gethostbyname(if_hostname);
-	if (hp == NULL || hp->h_addrtype != AF_INET) {
-		gflog_debug(GFARM_MSG_1000867,
-			"Unknown host (%s): %s",
-			if_hostname,
-			gfarm_error_string(GFARM_ERR_UNKNOWN_HOST));
+	if (hp == NULL || hp->h_addrtype != AF_INET)
 		return (GFARM_ERR_UNKNOWN_HOST);
-	}
 	for (i = 0, n = hp->h_name; n != NULL; n = hp->h_aliases[i++]){
 		if (host_info_get_by_name_alias(gfm_server, n, info) ==
 		    GFARM_ERR_NO_ERROR)
@@ -101,23 +89,14 @@ gfm_host_get_canonical_name(struct gfm_connection *gfm_server,
 	char *n;
 
 	e = gfm_host_info_get_by_name_alias(gfm_server, hostname, &info);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000868,
-			"gfm_host_info_get_by_name_alias(%s) failed: %s",
-			hostname,
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	n = strdup(info.hostname);
 	port = info.port;
 	gfarm_host_info_free(&info);
-	if (n == NULL) {
-		gflog_debug(GFARM_MSG_1000869,
-			"allocation of hostname failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (n == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	*canonical_hostnamep = n;
 	*portp = port;
 	return (GFARM_ERR_NO_ERROR);
@@ -163,9 +142,6 @@ gfm_host_get_canonical_self_name(struct gfm_connection *gfm_server,
 		    gfarm_host_get_self_name(), &canonical_self_name, &port);
 		if (e != GFARM_ERR_NO_ERROR) {
 			error_save = e;
-			gflog_debug(GFARM_MSG_1000870,
-				"gfm_host_get_canonical_name() failed: %s",
-				gfarm_error_string(e));
 			return (e);
 		}
 	}
@@ -356,7 +332,6 @@ gfarm_get_ip_addresses(int *countp, struct in_addr **ip_addressesp)
 #ifdef NEW_SOCKADDR
 	int i;
 #endif
-	int save_errno;
 	struct in_addr *addresses, *p;
 	struct ifreq *ifr; /* pointer to interface address */
 	struct ifconf ifc; /* buffer for interface addresses */
@@ -364,32 +339,21 @@ gfarm_get_ip_addresses(int *countp, struct in_addr **ip_addressesp)
 	struct ifreq ifreq; /* buffer for interface flag */
 
 	fd = socket(PF_INET, SOCK_DGRAM, 0);
-	if (fd < 0) {
-		save_errno = errno;
-		gflog_debug(GFARM_MSG_1000871, "creation of socket failed: %s",
-			strerror(save_errno));
-		return (gfarm_errno_to_error(save_errno));
-	}
+	if (fd < 0)
+		return (gfarm_errno_to_error(errno));
 	ifc.ifc_len = sizeof(ifcbuffer);
 	ifc.ifc_buf = ifcbuffer;
 	if (ioctl(fd, SIOCGIFCONF, &ifc) < 0) {
-		save_errno = errno;
+		e = gfarm_errno_to_error(errno);
 		close(fd);
-		gflog_debug(GFARM_MSG_1000872,
-			"ioctl() on socket failed: %s",
-			strerror(save_errno));
-		return (gfarm_errno_to_error(save_errno));
+		return (e);
 	}
 
 	count = 0;
 	size = 2; /* ethernet address + loopback interface address */
 	GFARM_MALLOC_ARRAY(addresses,  size);
-	if (addresses == NULL) {
-		gflog_debug(GFARM_MSG_1000873,
-			"allocation of 'addresses' failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (addresses == NULL)
 		goto err;
-	}
 
 #ifdef NEW_SOCKADDR
 	ifreq.ifr_name[0] = '\0';
@@ -415,10 +379,7 @@ gfarm_get_ip_addresses(int *countp, struct in_addr **ip_addressesp)
 			/* if this is first entry of the interface, get flag */
 			ifreq = *ifr;
 			if (ioctl(fd, SIOCGIFFLAGS, &ifreq) < 0) {
-				save_errno = errno;
-				gflog_debug(GFARM_MSG_1000874,
-					"ioctl() on socket failed: %s",
-					strerror(save_errno));
+				e = gfarm_errno_to_error(errno);
 				goto err;
 			}
 		}
@@ -428,14 +389,8 @@ gfarm_get_ip_addresses(int *countp, struct in_addr **ip_addressesp)
 		if (count + 1 > size) {
 			size += ADDRESSES_DELTA;
 			GFARM_REALLOC_ARRAY(p, addresses, size);
-			if (p == NULL) {
-				gflog_debug(GFARM_MSG_1000875,
-					"re-allocation of 'addresses' failed:"
-					" %s",
-					gfarm_error_string(
-						GFARM_ERR_NO_MEMORY));
+			if (p == NULL)
 				goto err;
-			}
 			addresses = p;
 		}
 		addresses[count++] =
@@ -447,12 +402,8 @@ gfarm_get_ip_addresses(int *countp, struct in_addr **ip_addressesp)
 		addresses = NULL;
 	} else if (size != count) {
 		GFARM_REALLOC_ARRAY(p, addresses, count);
-		if (p == NULL) {
-			gflog_debug(GFARM_MSG_1000876,
-				"re-allocation of 'addresses' failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
+		if (p == NULL)
 			goto err;
-		}
 		addresses = p;
 	}
 	*ip_addressesp = addresses;
@@ -486,12 +437,8 @@ gfarm_host_address_use(struct gfarm_hostspec *hsp)
 	struct gfarm_host_address_use_config *haucp;
 
 	GFARM_MALLOC(haucp);
-	if (haucp == NULL) {
-		gflog_debug(GFARM_MSG_1000877,
-			"allocation of host address use config failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (haucp == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	haucp->hostspec = hsp;
 	haucp->next = NULL;
@@ -526,13 +473,8 @@ host_address_get(const char *name, int port,
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM; /* XXX maybe used for SOCK_DGRAM */
 	error = gfarm_getaddrinfo(name, sbuf, &hints, &res0);
-	if (error != 0) {
-		gflog_debug(GFARM_MSG_1000878,
-			"Unknown host (%s): %s",
-			name,
-			gfarm_error_string(GFARM_ERR_UNKNOWN_HOST));
+	if (error != 0)
 		return (GFARM_ERR_UNKNOWN_HOST);
-	}
 
 	for (res = res0; res != NULL; res = res->ai_next) {
 		if ((*match)(hostspec, name, res->ai_addr)) {
@@ -540,12 +482,6 @@ host_address_get(const char *name, int port,
 			if (res0->ai_addr->sa_family != AF_INET ||
 			    res0->ai_addrlen > sizeof(*peer_addr)) {
 				gfarm_freeaddrinfo(res0);
-				gflog_debug(GFARM_MSG_1000879,
-					"Address family not supported by "
-					"protocol family (%s): %s",
-					name,
-					gfarm_error_string(
-		GFARM_ERR_ADDRESS_FAMILY_NOT_SUPPORTED_BY_PROTOCOL_FAMILY));
 				return (GFARM_ERR_ADDRESS_FAMILY_NOT_SUPPORTED_BY_PROTOCOL_FAMILY);
 			}
 			if (if_hostnamep != NULL) {
@@ -553,11 +489,6 @@ host_address_get(const char *name, int port,
 				n = strdup(name); 
 				if (n == NULL) {
 					gfarm_freeaddrinfo(res0);
-					gflog_debug(GFARM_MSG_1000880,
-						"allocation of hostname failed"
-						": %s",
-						gfarm_error_string(
-							GFARM_ERR_NO_MEMORY));
 					return (GFARM_ERR_NO_MEMORY);
 				}
 				*if_hostnamep = n;
@@ -569,10 +500,6 @@ host_address_get(const char *name, int port,
 		}
 	}
 	gfarm_freeaddrinfo(res0);
-	gflog_debug(GFARM_MSG_1000881,
-		"failed to get host address (%s): %s",
-		name,
-		gfarm_error_string(GFARM_ERR_NO_SUCH_OBJECT));
 	return (GFARM_ERR_NO_SUCH_OBJECT);
 }
 
@@ -604,11 +531,6 @@ host_info_address_get_matched(struct gfarm_host_info *info, int port,
 		if (e == GFARM_ERR_NO_ERROR)
 			return (GFARM_ERR_NO_ERROR);
 	}
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000882,
-		"failed to get matched host address: %s",
-		gfarm_error_string(e));
-	}
 	return (e);
 }
 
@@ -638,11 +560,6 @@ address_get_matched(struct gfm_connection *gfm_server,
 	if (hir->got) {
 		e = host_info_address_get_matched(hir->info, port, hostspec,
 		    peer_addr, if_hostnamep);
-	}
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000883,
-		"failed to get matched address: %s",
-		gfarm_error_string(e));
 	}
 	return (e);
 }

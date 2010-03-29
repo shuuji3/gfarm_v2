@@ -3,7 +3,6 @@
 #include <string.h>
 #include <gfarm/gfarm_config.h>
 #include <gfarm/error.h>
-#include <gfarm/gflog.h>
 #include <gfarm/gfarm_misc.h>
 #include <gfarm/gfarm_stringlist.h>
 
@@ -18,12 +17,8 @@ gfarm_stringlist_init(gfarm_stringlist *listp)
 	char **v;
 
 	GFARM_MALLOC_ARRAY(v, GFARM_STRINGLIST_INITIAL);
-	if (v == NULL) {
-		gflog_debug(GFARM_MSG_1000912,
-			"allocation of init string list failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (v == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	listp->size = GFARM_STRINGLIST_INITIAL;
 	listp->length = 0;
 	listp->array = v;
@@ -67,12 +62,8 @@ gfarm_stringlist_add_strings(gfarm_stringlist *listp, int al, char **av)
 			n += GFARM_STRINGLIST_DELTA;
 		} while (ll + al > n);
 		GFARM_REALLOC_ARRAY(t, listp->array, n);
-		if (t == NULL) {
-			gflog_debug(GFARM_MSG_1000913,
-				"re-allocation of 'listp->array' failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
+		if (t == NULL)
 			return (GFARM_ERR_NO_MEMORY);
-		}
 		listp->size = n;
 		listp->array = t;
 	}
@@ -98,12 +89,8 @@ gfarm_stringlist_add(gfarm_stringlist *listp, char *s)
 		char **t;
 		
 		GFARM_REALLOC_ARRAY(t, listp->array, n);
-		if (t == NULL) {
-			gflog_debug(GFARM_MSG_1000914,
-				"re-allocation of 'listp->array' failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
+		if (t == NULL)
 			return (GFARM_ERR_NO_MEMORY);
-		}
 		listp->size = n;
 		listp->array = t;
 	}
@@ -133,9 +120,6 @@ gfarm_fixedstrings_dup(int n, char **dst, char **src)
 				free(dst[i]);
 				dst[i] = NULL;
 			}
-			gflog_debug(GFARM_MSG_1000915,
-				"allocation of string 'dst' failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
 			return (GFARM_ERR_NO_MEMORY);
 		}
 	}
@@ -152,12 +136,8 @@ gfarm_strings_alloc_from_stringlist(gfarm_stringlist *listp)
 	char **t;
 
 	GFARM_MALLOC_ARRAY(t, n);
-	if (t == NULL) {
-		gflog_debug(GFARM_MSG_1000916,
-			"allocation of string failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (t == NULL)
 		return (NULL);
-	}
 	memcpy(t, listp->array, sizeof(char *) * n);
 	return (t);
 }
@@ -193,12 +173,8 @@ gfarm_strarray_dup(char **array)
 	char **v;
 
 	GFARM_MALLOC_ARRAY(v, n + 1);
-	if (v == NULL) {
-		gflog_debug(GFARM_MSG_1000917,
-			"allocation of string failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (v == NULL)
 		return (v);
-	}
 	if (gfarm_fixedstrings_dup(n, v, array) != GFARM_ERR_NO_ERROR)
 		return (NULL);
 	v[n] = NULL;
