@@ -30,11 +30,7 @@ extern int gfarm_metadb_heartbeat_interval;
 extern int gfarm_metadb_dbq_size;
 #define GFARM_METADB_STACK_SIZE_DEFAULT 0 /* use OS default */
 #define GFARM_METADB_THREAD_POOL_SIZE_DEFAULT	16  /* quadcore, quadsocket */
-#if 0
 #define GFARM_METADB_JOB_QUEUE_LENGTH_DEFAULT	160 /* THREAD_POOL * 10 */
-#else /* XXX FIXME: until bcworkq is implemented */
-#define GFARM_METADB_JOB_QUEUE_LENGTH_DEFAULT	16000
-#endif
 #define GFARM_METADB_HEARTBEAT_INTERVAL_DEFAULT 180 /* 3 min */
 #define GFARM_METADB_DBQ_SIZE_DEFAULT	65536
 
@@ -62,13 +58,14 @@ extern char *gfarm_localfs_datadir;
 
 /* miscellaneous configurations */
 extern int gfarm_log_level; /* syslog priority level to log */
+extern int gfarm_no_file_system_node_timeout;
+extern int gfarm_gfmd_reconnection_timeout;
 extern int gfarm_attr_cache_limit;
 extern int gfarm_attr_cache_timeout;
 extern int gfarm_schedule_cache_timeout;
 extern float gfarm_schedule_idle_load;
 extern float gfarm_schedule_busy_load;
 extern float gfarm_schedule_virtual_load;
-extern int gfarm_simultaneous_replication_receivers;
 extern int gfarm_gfsd_connection_cache;
 extern int gfarm_record_atime;
 

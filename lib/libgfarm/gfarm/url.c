@@ -538,12 +538,8 @@ gfarm_path_dir(const char *pathname)
 	if (pathname[0] == '\0')
 		return (strdup(dot));
 	dir = strdup(pathname);
-	if (dir == NULL) {
-		gflog_debug(GFARM_MSG_1001463,
-			"allocation of dir failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (dir == NULL)
 		return (NULL);
-	}
 		
 	/* remove trailing '/' */
 	p = dir + strlen(dir) - 1;
@@ -570,12 +566,8 @@ gfarm_path_dirname(const char *pathname)
 {
 	char *parent = strdup(pathname), *b;
 
-	if (parent == NULL) {
-		gflog_debug(GFARM_MSG_1001464,
-			"allocation of path failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (parent == NULL)
 		return (NULL);
-	}
 
 	/* create parent directory canonic path */
 	for (b = (char *)gfarm_path_dir_skip(parent);

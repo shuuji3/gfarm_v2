@@ -2,7 +2,7 @@
 
 <refentry id='gfarm2.conf.5'>
 
-<refentryinfo><date>12 Apr 2010</date></refentryinfo>
+<refentryinfo><date>8 Mar 2010</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfarm2.conf</refentrytitle>
@@ -399,7 +399,7 @@ GSI認証において、<token>metadb_server_cred_type</token>で指定した値に
 <listitem>
 <para>メタデータサーバgfmdのジョブキューのキュー長を指定します。
 一度に接続する最大クライアントの数くらいに設定すると効果的です。
-デフォルト値は16000です。
+デフォルト値は160です。
 </para>
 <para>
 この文はgfmd.confのみで有効であり、gfarm2.confでは無視されます。
@@ -420,7 +420,7 @@ GSI認証において、<token>metadb_server_cred_type</token>で指定した値に
 </para>
 <para>
 Gfarm-2.3.0まではこの文はgfmd.confのみで有効であり、gfarm2.confでは
-無視されていましたが、Gfarm-2.4.0以降はgfsdもこのパラメータを利用し
+無視されていましたが、Gfarm-2.3.1以降はgfsdもこのパラメータを利用し
 gfmd停止を検知するため、
 gfarm2.confとgfmd.confの両方で指定する必要があります。
 </para>
@@ -975,20 +975,6 @@ CPU負荷のクライアントキャッシュにここで指定されるCPU負荷が加えられます。
 </varlistentry>
 
 <varlistentry>
-<term><token>simultaneous_replication_receivers</token> <parameter>同時処理数</parameter></term>
-<listitem>
-<para>gfmd 主導の複製処理を、単一複製作成ホストに対して、
-同時いくつまで並行して行なうことを許すかを設定します。
-デフォルトは 20です。
-</para>
-<para>例:</para>
-<literallayout>
-	simultaneous_replication_receivers 40
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>gfsd_connection_cache</token> <parameter>コネクション数</parameter></term>
 <listitem>
 <para>gfarmライブラリがgfsdとの通信に用いるコネクションを、いくつ
@@ -1063,6 +1049,36 @@ CPU負荷のクライアントキャッシュにここで指定されるCPU負荷が加えられます。
 </listitem>
 </varlistentry>
 
+<varlistentry>
+<term><token>no_file_system_node_timeout</token> <parameter>秒数</parameter></term>
+<listitem>
+<para>利用可能なファイルシステムノードが存在しない場合，
+Gfarmクライアントライブラリはファイルシステムノードが利用可能になるまで試行を繰り返しますが、
+そのタイムアウト時間を秒単位で指定します。
+デフォルトは 30秒です。
+</para>
+<para>例:</para>
+<literallayout>
+	no_file_system_node_timeout 30
+</literallayout>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term><token>gfmd_reconnection_timeout</token> <parameter>秒数</parameter></term>
+<listitem>
+<para>メタデータサーバへの接続が切断された場合，
+メタデータサーバへの再接続を繰り返しますが，
+そのタイムアウト時間を秒単位で指定します。
+デフォルトは 30秒です。
+</para>
+<para>例:</para>
+<literallayout>
+	gfmd_reconnection_timeout 30
+</literallayout>
+</listitem>
+</varlistentry>
+
 <!--
 <varlistentry>
 <term><token>record_atime</token> <parameter>有効性</parameter></term>
@@ -1132,7 +1148,6 @@ disable設定は、通常のファイルシステムにおける"noatime"オプションに
 <!--		&nbsp;&nbsp;&lt;write_local_priority_statement&gt; | -->
 <!--		&nbsp;&nbsp;&lt;write_target_domain_statement&gt; | -->
 		&nbsp;&nbsp;&lt;minimum_free_disk_space_statement&gt; |
-		&nbsp;&nbsp;&lt;simultaneous_replication_receivers&gt; |
 		&nbsp;&nbsp;&lt;gfsd_connection_cache_statement&gt; |
 		&nbsp;&nbsp;&lt;attr_cache_limit_statement&gt; |
 		&nbsp;&nbsp;&lt;attr_cache_timeout_statement&gt; |
@@ -1208,12 +1223,13 @@ disable設定は、通常のファイルシステムにおける"noatime"オプションに
 <!--	&lt;write_target_domain_statement&gt; ::= "write_target_domain" &lt;string&gt; -->
 	&lt;minimum_free_disk_space_statement&gt; ::=
 		&nbsp;&nbsp;"minimum_free_disk_space" &lt;size&gt;
-	&lt;simultaneous_replication_receivers&gt; ::= "simultaneous_replication_receivers" &lt;number&gt;
 	&lt;gfsd_connection_cache_statement&gt; ::= "gfsd_connection_cache" &lt;number&gt;
 	&lt;attr_cache_limit_statement&gt; ::= "attr_cache_limit" &lt;number&gt;
 	&lt;attr_cache_timeout_statement&gt; ::= "attr_cache_timeout" &lt;number&gt;
 	&lt;log_level_statement&gt; ::= "log_level" &lt;log_priority&gt;
 	&lt;log_message_verbose_level_statement&gt; ::= "log_message_verbose_level" &lt;number&gt;
+	&lt;no_file_system_node_timeout_statement&gt; ::= "no_file_system_node_timeout" &lt;number&gt;
+	&lt;gfmd_reconnection_timeout_statement&gt; ::= "gfmd_reconnection_timeout" &lt;number&gt;
 <!--	&lt;record_atime_statement&gt; ::= "record_atime" &lt;validity&gt; -->
 	&lt;hostspec&gt; ::= &lt;ipv4_address&gt; | &lt;ipv4_address&gt; "/" &lt;address_mask&gt; |
 		&nbsp;&nbsp;&lt;hostname&gt; | "." &lt;domain_name&gt; | "*"

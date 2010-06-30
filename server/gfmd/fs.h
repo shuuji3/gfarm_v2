@@ -18,8 +18,6 @@ gfarm_error_t gfm_server_open_parent(struct peer *, int, int);
 gfarm_error_t gfm_server_close(struct peer *, int, int);
 gfarm_error_t gfm_server_close_read(struct peer *, int, int);
 gfarm_error_t gfm_server_close_write(struct peer *, int, int);
-gfarm_error_t gfm_server_close_write_v2_4(struct peer *, int, int, int *);
-gfarm_error_t gfm_server_generation_updated(struct peer *, int, int);
 gfarm_error_t gfm_server_verify_type(struct peer *, int, int);
 gfarm_error_t gfm_server_verify_type_not(struct peer *, int, int);
 gfarm_error_t gfm_server_fstat(struct peer *, int, int);
@@ -43,7 +41,7 @@ gfarm_error_t gfm_server_seek(struct peer *, int, int);
 gfarm_error_t gfm_server_getdirentsplus(struct peer *, int, int);
 
 /* gfs from gfsd */
-gfarm_error_t gfm_server_reopen(struct peer *, int, int, int *);
+gfarm_error_t gfm_server_reopen(struct peer *, int, int);
 gfarm_error_t gfm_server_lock(struct peer *, int, int);
 gfarm_error_t gfm_server_trylock(struct peer *, int, int);
 gfarm_error_t gfm_server_unlock(struct peer *, int, int);
@@ -62,11 +60,9 @@ gfarm_error_t gfm_server_replica_list_by_name(struct peer *, int, int);
 gfarm_error_t gfm_server_replica_list_by_host(struct peer *, int, int);
 gfarm_error_t gfm_server_replica_remove_by_host(struct peer *, int, int);
 gfarm_error_t gfm_server_replica_remove_by_file(struct peer *, int, int);
-gfarm_error_t gfm_server_replica_info_get(struct peer *, int, int);
-gfarm_error_t gfm_server_replicate_file_from_to(struct peer *, int, int);
 
 /* replica management from gfsd */
-gfarm_error_t gfm_server_replica_adding(struct peer *, int, int, int *);
+gfarm_error_t gfm_server_replica_adding(struct peer *, int, int);
 gfarm_error_t gfm_server_replica_added(struct peer *, int, int);
 gfarm_error_t gfm_server_replica_added2(struct peer *, int, int);
 gfarm_error_t gfm_server_replica_remove(struct peer *, int, int);

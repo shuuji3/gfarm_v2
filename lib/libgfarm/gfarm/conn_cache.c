@@ -77,12 +77,8 @@ gfp_uncached_connection_new(struct gfp_cached_connection **connectionp)
 	struct gfp_cached_connection *connection;
 
 	GFARM_MALLOC(connection);
-	if (connection == NULL) {
-		gflog_debug(GFARM_MSG_1001087,
-			"allocation of 'connection' failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (connection == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	connection->hash_entry = NULL; /* this is an uncached connection */
 
@@ -134,20 +130,10 @@ gfp_uncached_connection_enter_cache(struct gfp_conn_cache *cache,
 	    sizeof(connection),
 	    hostname, port, gfarm_get_global_username(),
 	    &entry, &created);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001088,
-			"insertion to connection hash (%s)(%d) failed: %s",
-			hostname, port,
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
-	if (!created) {
-		gflog_debug(GFARM_MSG_1001089,
-			"insertion to connection hash (%s)(%d) failed: %s",
-			hostname, port,
-			gfarm_error_string(GFARM_ERR_ALREADY_EXISTS));
+	if (!created)
 		return (GFARM_ERR_ALREADY_EXISTS);
-	}
 
 	gfarm_lru_cache_link_entry(&cache->lru_list, &connection->lru_entry);
 
@@ -212,13 +198,8 @@ gfp_cached_connection_acquire(struct gfp_conn_cache *cache,
 	    sizeof(connection), canonical_hostname, port,
 	    gfarm_get_global_username(),
 	    &entry, createdp);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001090,
-			"insertion to connection hash (%s)(%d) failed: %s",
-			canonical_hostname, port,
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	if (!*createdp) {
 		connection = *(struct gfp_cached_connection **)
 		    gfarm_hash_entry_data(entry);
@@ -228,9 +209,6 @@ gfp_cached_connection_acquire(struct gfp_conn_cache *cache,
 		GFARM_MALLOC(connection);
 		if (connection == NULL) {
 			gfp_conn_hash_purge(cache->hashtab, entry);
-			gflog_debug(GFARM_MSG_1001091,
-				"allocation of 'connection' failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
 			return (GFARM_ERR_NO_MEMORY);
 		}
 
