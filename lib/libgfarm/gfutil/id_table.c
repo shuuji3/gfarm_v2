@@ -4,7 +4,6 @@
 #include <unistd.h>
 
 #include <gfarm/error.h>
-#include <gfarm/gflog.h>
 #include <gfarm/gfarm_misc.h>
 
 #include "id_table.h"
@@ -57,11 +56,8 @@ gfarm_id_table_alloc(struct gfarm_id_table_entry_ops *entry_ops)
 	struct gfarm_id_table *idtab;
 
 	GFARM_MALLOC(idtab);
-	if (idtab == NULL) {
-		gflog_debug(GFARM_MSG_1000787,
-			"allocation of 'gfarm_id_table' failed");
+	if (idtab == NULL)
 		return (NULL);
-	}
 
 	idtab->entry_ops = entry_ops;
 
@@ -484,12 +480,8 @@ gfarm_id_alloc(struct gfarm_id_table *idtab, gfarm_int32_t *idp)
 	if (idtab->id_next >= idtab->id_limit) {
 		/* previous gfarm_id_rewind(idtab) failed, try again */
 		gfarm_id_rewind(idtab);
-		if (idtab->id_next >= idtab->id_limit) {
-			gflog_debug(GFARM_MSG_1002407,
-			    "gfarm_id_alloc: no more id space %d/%d",
-			    idtab->id_next, idtab->id_limit);
+		if (idtab->id_next >= idtab->id_limit)
 			return (NULL); /* no more id space */
-		}
 	}
 	if (idtab->hole_start >= idtab->hole_end &&
 	    !gfarm_id_compaction_from_head(idtab) &&
@@ -503,21 +495,13 @@ gfarm_id_alloc(struct gfarm_id_table *idtab, gfarm_int32_t *idp)
 		/* assert(idtab->hole_start == idtab->hole_end); */
 		data = malloc(ALIGN_CEIL(sizeof(struct gfarm_id_data_chunk)) +
 		    idtab->idx_delta * idtab->entry_size);
-		if (data == NULL) {
-			gflog_debug(GFARM_MSG_1002408,
-			    "gfarm_id_alloc: no memory for %d * %d",
-			    idtab->idx_delta, (int)idtab->entry_size);
+		if (data == NULL)
 			return (NULL);
-		}
 		newidx = realloc(idtab->index,
 		    (idtab->idxsize + idtab->idx_delta) *
 		    sizeof(struct gfarm_id_index));
 		if (newidx == NULL) {
 			free(data);
-			gflog_debug(GFARM_MSG_1002409,
-			    "gfarm_id_alloc: no memory for (%d + %d) * %d",
-			    idtab->idxsize, idtab->idx_delta,
-			    (int)sizeof(struct gfarm_id_index));
 			return (NULL); /* no more memory */
 		}
 

@@ -36,12 +36,8 @@ gfarm_set_global_user_for_sharedsecret(void)
 	 */
 	local_user = gfarm_get_local_username();
 	e = gfarm_local_to_global_username(local_user, &global_user);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000978,
-			"local_to_global_username(%s) failed: %s",
-			local_user, gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	e = gfarm_set_global_username(global_user);
 	free(global_user);
@@ -68,11 +64,6 @@ gfarm_set_global_user_by_gsi(struct gfm_connection *gfm_server)
 		if (e == GFARM_ERR_NO_ERROR) {
 			e = gfarm_set_global_username(user.username);
 			gfarm_user_info_free(&user);
-		} else {
-			gflog_debug(GFARM_MSG_1000979,
-				"gfm_client_user_info_"
-				"get_by_gsi_dn(%s) failed: %s",
-				gsi_dn, gfarm_error_string(e));
 		}
 	}
 #endif
@@ -106,12 +97,8 @@ gfarm_config_read(void)
 
 		GFARM_MALLOC_ARRAY(rc,
 		    strlen(home) + 1 + sizeof(gfarm_client_rc));
-		if (rc == NULL) {
-			gflog_debug(GFARM_MSG_1000980,
-				"allocation of array for 'gfarm_client_rc' failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
+		if (rc == NULL)
 			return (GFARM_ERR_NO_MEMORY);
-		}
 		sprintf(rc, "%s/%s", home, gfarm_client_rc);
 		rc_need_free = 1;
 	}
@@ -134,12 +121,8 @@ gfarm_config_read(void)
 		free(rc);
 
 	if ((config = fopen(gfarm_config_file, "r")) == NULL) {
-		if (user_config_errno != 0) {
-			gflog_debug(GFARM_MSG_1000981,
-				"open operation on config file (%s) failed",
-				gfarm_config_file);
+		if (user_config_errno != 0)
 			return (GFARM_ERRMSG_CANNOT_OPEN_CONFIG);
-		}
 	} else {
 		e = gfarm_config_read_file(config, &lineno);
 		if (e != GFARM_ERR_NO_ERROR) {
@@ -395,19 +378,11 @@ gfarm_initialize(int *argcp, char ***argvp)
 	gflog_initialize();
 
 	e = gfarm_set_local_user_for_this_local_account();
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000982,
-			"gfarm_set_local_user_for_this_local_account() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	e = gfarm_config_read();
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000983,
-			"gfarm_config_read() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 #ifdef HAVE_GSI
 	/* Force to display verbose error messages. */
 	saved_auth_verb = gflog_auth_set_verbose(1);
@@ -418,12 +393,8 @@ gfarm_initialize(int *argcp, char ***argvp)
 	 * required to be set to access a metadata server.
 	 */
 	e = gfarm_set_global_user_for_sharedsecret();
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000984,
-			"gfarm_set_global_user_for_sharedsecret() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	/*
 	 * XXX FIXME this shouldn't be necessary here
@@ -446,12 +417,8 @@ gfarm_initialize(int *argcp, char ***argvp)
 	auth_method = gfm_client_connection_auth_method(gfm_server);
 	if (GFARM_IS_AUTH_GSI(auth_method)) {
 		e = gfarm_set_global_user_by_gsi(gfm_server);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1000985,
-				"gfarm_set_global_user_by_gsi() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 	}
 	gfm_client_connection_free(gfm_server);
 
@@ -484,12 +451,8 @@ gfarm_client_process_set(struct gfs_connection *gfs_server,
 	gfarm_error_t e = gfm_client_process_get(gfm_server,
 	    &key_type, &key, &key_size, &pid);
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000986,
-			"gfm_client_process_get() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	return (gfs_client_process_set(gfs_server,
 	    key_type, key, key_size, pid));
 }

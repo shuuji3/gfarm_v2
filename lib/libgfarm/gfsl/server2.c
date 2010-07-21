@@ -36,10 +36,8 @@ ParseArgs(argc, argv)
     int c;
 
     while ((c = getopt(argc, argv, COMMON_OPTIONS)) != -1) {
-	if (HandleCommonOptions(c, optarg) != 0) {
-		fprintf(stderr, "HandleCommonOptions(%s) failed.\n", optarg);
+	if (HandleCommonOptions(c, optarg) != 0)
 	    return -1;
-	}
     }
     if (optind < argc) {
 	fprintf(stderr, "unknown extra argument %s\n", argv[optind]);
@@ -82,7 +80,6 @@ main(argc, argv)
     }
 
     if (ParseArgs(argc, argv) != 0) {
-	fprintf(stderr, "parsing of argument failed.\n");
 	goto Done;
     }
 
@@ -111,7 +108,6 @@ main(argc, argv)
      */
     bindFd = gfarmTCPBindPort(port);
     if (bindFd < 0) {
-	fprintf(stderr, "Failed to bind port (%d)", port);
 	goto Done;
     }
     (void)gfarmGetNameOfSocket(bindFd, &port);

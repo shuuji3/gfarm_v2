@@ -16,7 +16,6 @@
 
 #include "gfevent.h"
 #include "gfutil.h"
-#include "thrsubr.h"
 
 #include "tcputil.h"
 
@@ -27,7 +26,6 @@
 #endif
 
 static pthread_mutex_t gss_mutex = PTHREAD_MUTEX_INITIALIZER;
-static const char gssDiag[] = "gss_mutex";
 
 static char **gssCrackStatus(OM_uint32 statValue, int statType);
 
@@ -463,13 +461,6 @@ gfarmGssAcquireCredential(credPtr, desiredName, credUsage, majStatPtr, minStatPt
     if (minStatPtr != NULL) {
 	*minStatPtr = minStat;
     }	
-
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000790,
-		"failed to acquire credential (%u)(%u)",
-		majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -495,13 +486,6 @@ gfarmGssDeleteCredential(credPtr, majStatPtr, minStatPtr)
     if (minStatPtr != NULL) {
 	*minStatPtr = minStat;
     }	
-
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000791,
-		"failed to delete credential (%u)(%u)",
-		majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -514,11 +498,9 @@ gfarmGssSendToken(fd, gsBuf)
     gfarm_int32_t iLen = (gfarm_int32_t)(gsBuf->length);
 
     if (gfarmWriteInt32(fd, &iLen, 1) != 1) {
-	gflog_debug(GFARM_MSG_1000792, "gfarmWriteInt32() failed");
 	return -1;
     }
     if (gfarmWriteInt8(fd, (gfarm_int8_t *)(gsBuf->value), iLen) != iLen) {
-	gflog_debug(GFARM_MSG_1000793, "gfarmWriteInt8() failed");
 	return -1;
     }
     return iLen;
@@ -542,7 +524,6 @@ gfarmGssReceiveToken(fd, gsBuf)
     gsBuf->value = NULL;
 
     if (gfarmReadInt32(fd, &iLen, 1) != 1) {
-	gflog_debug(GFARM_MSG_1000794, "gfarmReadInt32() failed");
 	return -1;
     }
 
@@ -553,14 +534,12 @@ gfarmGssReceiveToken(fd, gsBuf)
      */
     GFARM_MALLOC_ARRAY(p, iLen);
     if (p == NULL) {
-	gflog_debug(GFARM_MSG_1000795, "allocation of buffer failed");
 	return -1;
     }
     buf = (gfarm_int8_t *)p;
 
     if (gfarmReadInt8(fd, buf, iLen) != iLen) {
 	(void)free(buf);
-	gflog_debug(GFARM_MSG_1000796, "gfarmReadInt8() failed");
 	return -1;
     }
 
@@ -597,8 +576,6 @@ gfarmGssAcceptSecurityContext(fd, cred, scPtr, majStatPtr, minStatPtr, remoteNam
 
     int tknStat;
 
-    static const char diag[] = "gfarmGssAcceptSecurityContext()";
-
     *scPtr = GSS_C_NO_CONTEXT;
 
     do {
@@ -612,7 +589,7 @@ gfarmGssAcceptSecurityContext(fd, cred, scPtr, majStatPtr, minStatPtr, remoteNam
 	    break;
 	}
 
-	gfarm_mutex_lock(&gss_mutex, diag, gssDiag);
+	pthread_mutex_lock(&gss_mutex);
 	majStat = gss_accept_sec_context(&minStat,
 					 scPtr,
 					 cred,
@@ -625,7 +602,7 @@ gfarmGssAcceptSecurityContext(fd, cred, scPtr, majStatPtr, minStatPtr, remoteNam
 					 &timeRet,
 					 &remCred);
 
-	gfarm_mutex_unlock(&gss_mutex, diag, gssDiag);
+	pthread_mutex_unlock(&gss_mutex);
 	if (itPtr->length > 0) {
 	    (void)gss_release_buffer(&minStat2, itPtr);
 	}
@@ -708,8 +685,6 @@ gfarmGssInitiateSecurityContext(fd, acceptorName, cred, reqFlag, scPtr, majStatP
 
     int tknStat;
 
-    static const char diag[] = "gfarmGssInitiateSecurityContext()";
-
     *scPtr = GSS_C_NO_CONTEXT;
 
     /*
@@ -727,7 +702,7 @@ gfarmGssInitiateSecurityContext(fd, acceptorName, cred, reqFlag, scPtr, majStatP
     }
 
     while (1) {
-	gfarm_mutex_lock(&gss_mutex, diag, gssDiag);
+	pthread_mutex_lock(&gss_mutex);
 	majStat = gss_init_sec_context(&minStat,
 				       cred,
 				       scPtr,
@@ -741,7 +716,7 @@ gfarmGssInitiateSecurityContext(fd, acceptorName, cred, reqFlag, scPtr, majStatP
 				       otPtr,
 				       &retFlag,
 				       &timeRet);
-	gfarm_mutex_unlock(&gss_mutex, diag, gssDiag);
+	pthread_mutex_unlock(&gss_mutex);
 	
 	if (itPtr->length > 0) {
 	    (void)gss_release_buffer(&minStat2, itPtr);
@@ -856,9 +831,6 @@ gfarmGssConfigureMessageSize(sCtx, doEncrypt, qopReq, reqOutSz, maxInSzPtr, majS
 	if (maxInSzPtr != NULL) {
 	    *maxInSzPtr = (int)oMaxSz;
 	}
-    } else {
-	    gflog_debug(GFARM_MSG_1000797,
-		"failed to configure message size (%u)(%u)", majStat, minStat);
     }
 
     return ret;
@@ -947,12 +919,6 @@ gfarmGssSend(fd, sCtx, doEncrypt, qopReq, buf, n, chunkSz, statPtr)
 	*statPtr = majStat;
     }
     
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000798,
-		"error occurred during gfarmGssSend (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -1057,12 +1023,6 @@ gfarmGssReceive(fd, sCtx, bufPtr, lenPtr, statPtr)
 	*lenPtr = n;
     }
 
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000799,
-		"error occurred during gfarmGssReceive (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return ret;
 }
 
@@ -1133,13 +1093,6 @@ gfarmGssExportCredential(cred, statPtr)
     gss_release_buffer(&minStat, &buf);
     if (statPtr != NULL)
 	*statPtr = majStat;
-
-    if (GSS_ERROR(majStat)) {
-	gflog_debug(GFARM_MSG_1000800,
-		"failed to export credential (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return exportedCred;
 }
 
@@ -1236,9 +1189,8 @@ gssInitiateSecurityContextNext(state)
 {
     OM_uint32 minStat2;
     int rv;
-    static const char diag[] = "gssInitiateSecurityContextNext()";
 
-    gfarm_mutex_lock(&gss_mutex, diag, gssDiag);
+    pthread_mutex_lock(&gss_mutex);
     state->majStat = gss_init_sec_context(&state->minStat,
 					  state->cred,
 					  &state->sc,
@@ -1252,7 +1204,7 @@ gssInitiateSecurityContextNext(state)
 					  state->otPtr,
 					  &state->retFlag,
 					  &state->timeRet);
-    gfarm_mutex_unlock(&gss_mutex, diag, gssDiag);
+    pthread_mutex_unlock(&gss_mutex);
 
     if (state->itPtr->length > 0) {
 	(void)gss_release_buffer(&minStat2, state->itPtr);
@@ -1457,13 +1409,6 @@ gfarmGssInitiateSecurityContextRequest(q, fd, acceptorName, cred, reqFlag, conti
     if (minStatPtr != NULL) {
 	*minStatPtr = minStat;
     }
-
-    if (GSS_ERROR(majStat)) {
-	gflog_debug(GFARM_MSG_1000801,
-		"failed to request initiate security context (%u)(%u)",
-		 majStat, minStat);
-    }
-
     return (NULL);
 }
 
@@ -1517,11 +1462,5 @@ gfarmGssInitiateSecurityContextResult(state, scPtr, majStatPtr, minStatPtr, remo
 
     ret = state->majStat == GSS_S_COMPLETE ? 1 : -1;
     free(state);
-
-    if (ret == -1) {
-	gflog_debug(GFARM_MSG_1000802,
-		"failed to get result of initiate security context");
-    }
-
     return ret;
 }

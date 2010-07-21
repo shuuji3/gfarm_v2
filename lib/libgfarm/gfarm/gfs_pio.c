@@ -79,14 +79,6 @@ gfs_pio_set_view_default(GFS_File gf)
 	gf->view_flags = 0;
 #endif /* not yet in gfarm v2 */
 	gf->error = e_save;
-
-	if (e_save != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001292,
-			"gfs_pio_isview_set() is false or "
-			"view_close() failed: %s",
-			gfarm_error_string(e_save));
-	}
-
 	return (e_save);
 }
 
@@ -96,12 +88,8 @@ gfs_pio_check_view_default(GFS_File gf)
 	gfarm_error_t e;
 
 	e = GFS_PIO_ERROR(gf);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001293,
-			"GFS_PIO_ERROR: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (!gfs_pio_is_view_set(gf)) /* view isn't set yet */
 #if 0 /* not yet in gfarm v2 */
@@ -139,9 +127,6 @@ gfs_file_alloc(struct gfm_connection *gfm_server, gfarm_int32_t fd, int flags,
 			free(buffer);
 		if (gf != NULL)
 			free(gf);
-		gflog_debug(GFARM_MSG_1001294,
-			"allocation of GFS_File or it's buffer failed: %s",
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
 		return (GFARM_ERR_NO_MEMORY);
 	}
 	memset(gf, 0, sizeof(*gf));
@@ -219,16 +204,7 @@ gfs_pio_create(const char *url, int flags, gfarm_mode_t mode, GFS_File *gfp)
 		if (e != GFARM_ERR_NO_ERROR) {
 			(void)gfm_close_fd(gfm_server, fd); /* ignore result */
 			gfm_client_connection_free(gfm_server);
-			gflog_debug(GFARM_MSG_1001295,
-				"creation of pio for URL (%s) failed: %s",
-				url,
-				gfarm_error_string(e));
 		}
-	} else {
-		gflog_debug(GFARM_MSG_1001296,
-			"creation of file descriptor for URL (%s): %s",
-			url,
-			gfarm_error_string(e));
 	}
 
 	gfs_profile(gfarm_gettimerval(&t2));
@@ -258,17 +234,7 @@ gfs_pio_open(const char *url, int flags, GFS_File *gfp)
 		if (e != GFARM_ERR_NO_ERROR) {
 			(void)gfm_close_fd(gfm_server, fd); /* ignore result */
 			gfm_client_connection_free(gfm_server);
-			gflog_debug(GFARM_MSG_1001297,
-				"open operation on pio for URL (%s) failed: %s",
-				url,
-				gfarm_error_string(e));
 		}
-	} else {
-		gflog_debug(GFARM_MSG_1001298,
-			"open operation on file descriptor for URL (%s) "
-			"failed: %s",
-			url,
-			gfarm_error_string(e));
 	}
 
 	gfs_profile(gfarm_gettimerval(&t2));
@@ -324,12 +290,6 @@ gfs_pio_close(GFS_File gf)
 	gfs_profile(gfarm_gettimerval(&t2));
 	gfs_profile(gfs_pio_close_time += gfarm_timerval_sub(&t2, &t1));
 
-	if (e_save != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001299,
-			"close operation on pio failed: %s",
-			gfarm_error_string(e_save));
-	}
-
 	return (e_save);
 }
 
@@ -369,25 +329,15 @@ gfs_pio_fillbuf(GFS_File gf, size_t size)
 
 	CHECK_READABLE(gf);
 
-	if (gf->error != GFARM_ERR_NO_ERROR) { /* error or EOF? */
-		if (GFS_PIO_ERROR(gf) != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001300,
-				"CHECK_READABLE failed: %s",
-				gfarm_error_string(GFS_PIO_ERROR(gf)));
-		}
+	if (gf->error != GFARM_ERR_NO_ERROR) /* error or EOF? */
 		return (GFS_PIO_ERROR(gf));
-	}
 	if (gf->p < gf->length)
 		return (GFARM_ERR_NO_ERROR);
 
 	if ((gf->mode & GFS_FILE_MODE_BUFFER_DIRTY) != 0) {
 		e = gfs_pio_flush(gf);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001301,
-				"gfs_pio_flush() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 	} else
 		gfs_pio_purge(gf);
 
@@ -399,9 +349,6 @@ gfs_pio_fillbuf(GFS_File gf, size_t size)
 	e = (*gf->ops->view_pread)(gf, gf->buffer, size, gf->io_offset, &len);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gf->error = e;
-		gflog_debug(GFARM_MSG_1001302,
-			"view_pread() failed: %s",
-			gfarm_error_string(e));
 		return (e);
 	}
 	gf->length = len;
@@ -433,15 +380,11 @@ do_write(GFS_File gf, const char *buffer, size_t length,
 			&len);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gf->error = e;
-			gflog_debug(GFARM_MSG_1001303,
-				"view_pwrite() failed: %s",
-				gfarm_error_string(e));
 			break;
 		}
 		gf->io_offset += len;
 	}
 	*writtenp = written;
-
 	return (e);
 }
 
@@ -451,23 +394,15 @@ gfs_pio_flush(GFS_File gf)
 	gfarm_error_t e = gfs_pio_check_view_default(gf);
 	size_t written;
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001304,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	CHECK_WRITABLE(gf);
 
 	if ((gf->mode & GFS_FILE_MODE_BUFFER_DIRTY) != 0) {
 		e = do_write(gf, gf->buffer, gf->length, &written);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001305,
-				"do_write() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 		gf->mode &= ~GFS_FILE_MODE_BUFFER_DIRTY;
 	}
 	if (gf->p >= gf->length)
@@ -487,12 +422,8 @@ gfs_pio_seek(GFS_File gf, gfarm_off_t offset, int whence, gfarm_off_t *resultp)
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	e = gfs_pio_check_view_default(gf);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001306,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		goto finish;
-	}
 
 	if (gf->error == GFARM_ERRMSG_GFS_PIO_IS_EOF)
 		gf->error = GFARM_ERR_NO_ERROR;
@@ -507,23 +438,13 @@ gfs_pio_seek(GFS_File gf, gfarm_off_t offset, int whence, gfarm_off_t *resultp)
 	case GFARM_SEEK_END:
 		/* XXX FIXME: ask the file size to gfsd. */
 		e = gf->error = GFARM_ERR_FUNCTION_NOT_IMPLEMENTED;
-		gflog_debug(GFARM_MSG_1001307,
-			"GFARM_SEEK_END option is not supported: %s",
-			gfarm_error_string(e));
 		goto finish;
 	default:
 		e = gf->error = GFARM_ERR_INVALID_ARGUMENT;
-		gflog_debug(GFARM_MSG_1001308,
-			"invalid argument whence(%d): %s",
-			whence,
-			gfarm_error_string(e));
 		goto finish;
 	}
 	if (where < 0) {
 		e = gf->error = GFARM_ERR_INVALID_ARGUMENT;
-		gflog_debug(GFARM_MSG_1001309,
-			"invalid argument: %s",
-			gfarm_error_string(e));
 		goto finish;
 	}
 
@@ -554,9 +475,6 @@ gfs_pio_seek(GFS_File gf, gfarm_off_t offset, int whence, gfarm_off_t *resultp)
 		e = gfs_pio_flush(gf);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gf->error = e;
-			gflog_debug(GFARM_MSG_1001310,
-				"gfs_pio_flush() failed: %s",
-				gfarm_error_string(e));
 			goto finish;
 		}
 	}
@@ -584,12 +502,8 @@ gfs_pio_truncate(GFS_File gf, gfarm_off_t length)
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	e = gfs_pio_check_view_default(gf);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001311,
-			"gfs_pio_check_view_default() failed %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		goto finish;
-	}
 
 	CHECK_WRITABLE(gf);
 
@@ -597,12 +511,8 @@ gfs_pio_truncate(GFS_File gf, gfarm_off_t length)
 
 	if (gf->mode & GFS_FILE_MODE_BUFFER_DIRTY) {
 		e = gfs_pio_flush(gf);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001312,
-				"gfs_pio_flush(): %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			goto finish;
-		}
 	}
 
 	gf->error = GFARM_ERR_NO_ERROR; /* purge EOF/error state */
@@ -631,12 +541,8 @@ gfs_pio_read(GFS_File gf, void *buffer, int size, int *np)
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	e = gfs_pio_check_view_default(gf);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001313,
-			"Check view default for pio failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	CHECK_READABLE(gf);
 
@@ -657,12 +563,8 @@ gfs_pio_read(GFS_File gf, void *buffer, int size, int *np)
 		size -= length;
 		gf->p += length;
 	}
-	if (e != GFARM_ERR_NO_ERROR && n == 0) {
-		gflog_debug(GFARM_MSG_1001314,
-			"gfs_pio_fillbuf() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR && n == 0)
 		goto finish;
-	}
 
 	if (gf->open_flags & GFARM_FILE_UNBUFFERED)
 		gfs_pio_purge(gf);
@@ -687,12 +589,8 @@ gfs_pio_write(GFS_File gf, const void *buffer, int size, int *np)
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	e = gfs_pio_check_view_default(gf);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001315,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	CHECK_WRITABLE(gf);
 
@@ -703,12 +601,8 @@ gfs_pio_write(GFS_File gf, const void *buffer, int size, int *np)
 		 */
 		gf->length = gf->p;
 		e = gfs_pio_flush(gf); /* this does purge too */
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001316,
-				"gfs_pio_flush() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			goto finish;
-		}
 	}
 	if (size >= GFS_FILE_BUFSIZE) {
 		/* shortcut to avoid unnecessary memory copy */
@@ -717,12 +611,8 @@ gfs_pio_write(GFS_File gf, const void *buffer, int size, int *np)
 		gf->mode &= ~GFS_FILE_MODE_BUFFER_DIRTY;
 
 		e = do_write(gf, buffer, size, &written);
-		if (e != GFARM_ERR_NO_ERROR && written == 0) {
-			gflog_debug(GFARM_MSG_1001317,
-				"do_write() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR && written == 0)
 			goto finish;
-		}
 		gf->offset += written;
 		*np = written; /* XXX - size_t vs int */
 
@@ -759,20 +649,12 @@ sync_internal(GFS_File gf, int operation, double *time)
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	e = gfs_pio_flush(gf);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001318,
-			"gfs_pio_flush() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		goto finish;
-	}
 
 	e = (*gf->ops->view_fsync)(gf, operation);
-	if (e != GFARM_ERR_NO_ERROR) {
+	if (e != GFARM_ERR_NO_ERROR)
 		gf->error = e;
-		gflog_debug(GFARM_MSG_1001319,
-			"view_fsync() failed: %s",
-			gfarm_error_string(e));
-	}
 finish:
 	gfs_profile(gfarm_gettimerval(&t2));
 	gfs_profile(*time += gfarm_timerval_sub(&t2, &t1));
@@ -807,9 +689,6 @@ gfs_pio_getc(GFS_File gf)
 	e = gfs_pio_check_view_default(gf);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gf->error = e;
-		gflog_debug(GFARM_MSG_1001320,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
 		return (EOF);
 	}
 
@@ -820,16 +699,10 @@ gfs_pio_getc(GFS_File gf)
 		    gf->open_flags & GFARM_FILE_UNBUFFERED ?
 		    1 : GFS_FILE_BUFSIZE) != GFARM_ERR_NO_ERROR) {
 			c = EOF; /* can get reason via gfs_pio_error() */
-			gflog_debug(GFARM_MSG_1001321,
-				"gfs_pio_fillbuf() failed: %s",
-				gfarm_error_string(GFS_PIO_ERROR(gf)));
 			goto finish;
 		}
 		if (gf->error != GFARM_ERR_NO_ERROR) {
 			c = EOF;
-			gflog_debug(GFARM_MSG_1001322,
-				"gfs_pio_fillbuf() failed: %s",
-				gfarm_error_string(gf->error));
 			goto finish;
 		}
 	}
@@ -849,9 +722,6 @@ gfs_pio_ungetc(GFS_File gf, int c)
 
 	if (e != GFARM_ERR_NO_ERROR) {
 		gf->error = e;
-		gflog_debug(GFARM_MSG_1001323,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
 		return (EOF);
 	}
 
@@ -860,9 +730,6 @@ gfs_pio_ungetc(GFS_File gf, int c)
 	if (c != EOF) {
 		if (gf->p == 0) { /* cannot unget - XXX should permit this? */
 			gf->error = GFARM_ERR_NO_SPACE;
-			gflog_debug(GFARM_MSG_1001324,
-				"gfs_pio_ungetc(): %s",
-				gfarm_error_string(GFARM_ERR_NO_SPACE));
 			return (EOF);
 		}
 		/* We do not mark this buffer dirty here. */
@@ -881,24 +748,16 @@ gfs_pio_putc(GFS_File gf, int c)
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	e = gfs_pio_check_view_default(gf);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001325,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	CHECK_WRITABLE(gf);
 
 	if (gf->p >= GFS_FILE_BUFSIZE) {
 		gfarm_error_t e = gfs_pio_flush(gf); /* this does purge too */
 
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001326,
-				"gfs_pio_flush() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			goto finish;
-		}
 	}
 	gf->mode |= GFS_FILE_MODE_BUFFER_DIRTY;
 	gf->buffer[gf->p++] = c;
@@ -922,24 +781,16 @@ gfs_pio_puts(GFS_File gf, const char *s)
 {
 	gfarm_error_t e = gfs_pio_check_view_default(gf);
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001327,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	CHECK_WRITABLE(gf);
 
 	while (*s != '\0') {
 		gfarm_error_t e = gfs_pio_putc(gf, *(unsigned char *)s);
 
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001328,
-				"gfs_pio_putc() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 		s++;
 	}
 	return (GFARM_ERR_NO_ERROR);
@@ -954,12 +805,8 @@ gfs_pio_gets(GFS_File gf, char *s, size_t size)
 	int c;
 	gfarm_timerval_t t1, t2;
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001329,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
@@ -971,10 +818,6 @@ gfs_pio_gets(GFS_File gf, char *s, size_t size)
 
 	if (size <= 1) {
 		gf->error = GFARM_ERR_INVALID_ARGUMENT;
-		gflog_debug(GFARM_MSG_1001330,
-			"invalid argument, size (%d) <= 1: %s",
-			(int)size,
-			gfarm_error_string(gf->error));
 		return (gf->error);
 	}
 	--size; /* for '\0' */
@@ -1000,12 +843,8 @@ gfs_pio_getline(GFS_File gf, char *s, size_t size, int *eofp)
 	int c;
 	gfarm_timerval_t t1, t2;
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001331,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
@@ -1017,10 +856,6 @@ gfs_pio_getline(GFS_File gf, char *s, size_t size, int *eofp)
 
 	if (size <= 1) {
 		gf->error = GFARM_ERR_INVALID_ARGUMENT;
-		gflog_debug(GFARM_MSG_1001332,
-			"invalid argument, size(%d) <= 1: %s",
-			(int)size,
-			gfarm_error_string(gf->error));
 		return (gf->error);
 	}
 	--size; /* for '\0' */
@@ -1047,22 +882,14 @@ gfs_pio_putline(GFS_File gf, const char *s)
 {
 	gfarm_error_t e = gfs_pio_check_view_default(gf);
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001333,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	CHECK_WRITABLE(gf);
 
 	e = gfs_pio_puts(gf, s);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001334,
-			"gfs_pio_puts() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	return (gfs_pio_putc(gf, '\n'));
 }
 
@@ -1085,12 +912,8 @@ gfs_pio_readline(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp)
 	int overflow = 0;
 	gfarm_timerval_t t1, t2;
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001335,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
@@ -1104,12 +927,8 @@ gfs_pio_readline(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp)
 		if (size <= 1)
 			size = ALLOC_SIZE_INIT;
 		GFARM_REALLOC_ARRAY(buf, buf, size);
-		if (buf == NULL) {
-			gflog_debug(GFARM_MSG_1001336,
-				"allocation of buf for pio_getc failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
+		if (buf == NULL)
 			return (GFARM_ERR_NO_MEMORY);
-		}
 	}
 	for (;;) {
 		c = gfs_pio_getc(gf);
@@ -1122,11 +941,6 @@ gfs_pio_readline(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp)
 			if (overflow || p == NULL) {
 				*bufp = buf;
 				*sizep = size;
-				gflog_debug(GFARM_MSG_1001337,
-					"allocation of buf for pio_getc "
-					"failed or size overflow: %s",
-					gfarm_error_string(
-						GFARM_ERR_NO_MEMORY));
 				return (GFARM_ERR_NO_MEMORY);
 			}
 			buf = p;
@@ -1143,11 +957,6 @@ gfs_pio_readline(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp)
 		if (overflow || p == NULL) {
 			*bufp = buf;
 			*sizep = size;
-			gflog_debug(GFARM_MSG_1001338,
-				"allocation of buf for pio_getc failed "
-				"or size overflow: %s",
-				gfarm_error_string(
-					GFARM_ERR_NO_MEMORY));
 			return (GFARM_ERR_NO_MEMORY);
 		}
 		buf = p;
@@ -1183,12 +992,8 @@ gfs_pio_readdelim(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp,
 	static const char empty_line[] = "\n\n";
 	gfarm_timerval_t t1, t2;
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001339,
-			"gfs_pio_check_view_default() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
@@ -1211,12 +1016,8 @@ gfs_pio_readdelim(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp,
 		if (size <= 1)
 			size = ALLOC_SIZE_INIT;
 		GFARM_REALLOC_ARRAY(buf, buf, size);
-		if (buf == NULL) {
-			gflog_debug(GFARM_MSG_1001340,
-				"allocation of buf for pio_getc failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
+		if (buf == NULL)
 			return (GFARM_ERR_NO_MEMORY);
-		}
 	}
 	for (;;) {
 		c = gfs_pio_getc(gf);
@@ -1229,11 +1030,6 @@ gfs_pio_readdelim(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp,
 			if (overflow || p == NULL) {
 				*bufp = buf;
 				*sizep = size;
-				gflog_debug(GFARM_MSG_1001341,
-					"allocation of buf for pio_getc failed"
-					" or size overflow: %s",
-					gfarm_error_string(
-						GFARM_ERR_NO_MEMORY));
 				return (GFARM_ERR_NO_MEMORY);
 			}
 			buf = p;
@@ -1262,15 +1058,6 @@ gfs_pio_readdelim(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp,
 						if (overflow || p == NULL) {
 							*bufp = buf;
 							*sizep = size;
-							gflog_debug(
-							  GFARM_MSG_1001342,
-							  "allocation of buf "
-							  "for pio_getc failed"
-							  "or size overflow: "
-							  "%s",
-							  gfarm_error_string(
-							    GFARM_ERR_NO_MEMORY
-								));
 							return (
 							  GFARM_ERR_NO_MEMORY);
 						}
@@ -1290,11 +1077,6 @@ gfs_pio_readdelim(GFS_File gf, char **bufp, size_t *sizep, size_t *lenp,
 		if (overflow || p == NULL) {
 			*bufp = buf;
 			*sizep = size;
-			gflog_debug(GFARM_MSG_1001343,
-				"allocation of buf for pio_getc failed "
-				"or size overflow: %s",
-				gfarm_error_string(
-					GFARM_ERR_NO_MEMORY));
 			return (GFARM_ERR_NO_MEMORY);
 		}
 		buf = p;
@@ -1323,23 +1105,15 @@ gfs_pio_stat(GFS_File gf, struct gfs_stat *st)
 	gfarm_error_t e;
 
 	e = gfs_fstat(gf, st);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001344,
-			"gfs_fstat() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	if (gfs_pio_is_view_set(gf)) {
 		if ((gf->mode & GFS_FILE_MODE_WRITE) != 0)
-			gfs_pio_flush(gf);		
+			gfs_pio_flush(gf);
 		e = (*gf->ops->view_fstat)(gf, st);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001345,
-				"view_fstat() failed: %s",
-				gfarm_error_string(e));
+		if (e != GFARM_ERR_NO_ERROR)
 			gf->error = e;
-		}
 	}
 	return (e);
 }

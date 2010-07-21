@@ -652,7 +652,7 @@ CLASS="PARAMETER"
 ><P
 >¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğgfmd¤Î¥¸¥ç¥Ö¥­¥å¡¼¤Î¥­¥å¡¼Ä¹¤ò»ØÄê¤·¤Ş¤¹¡£
 °ìÅÙ¤ËÀÜÂ³¤¹¤ëºÇÂç¥¯¥é¥¤¥¢¥ó¥È¤Î¿ô¤¯¤é¤¤¤ËÀßÄê¤¹¤ë¤È¸ú²ÌÅª¤Ç¤¹¡£
-¥Ç¥Õ¥©¥ë¥ÈÃÍ¤Ï16000¤Ç¤¹¡£</P
+¥Ç¥Õ¥©¥ë¥ÈÃÍ¤Ï160¤Ç¤¹¡£</P
 ><P
 >¤³¤ÎÊ¸¤Ïgfmd.conf¤Î¤ß¤ÇÍ­¸ú¤Ç¤¢¤ê¡¢gfarm2.conf¤Ç¤ÏÌµ»ë¤µ¤ì¤Ş¤¹¡£</P
 ><P
@@ -678,7 +678,7 @@ CLASS="PARAMETER"
 ¥Ç¥Õ¥©¥ë¥ÈÃÍ¤Ï180ÉÃ¤Ç¤¹¡£</P
 ><P
 >Gfarm-2.3.0¤Ş¤Ç¤Ï¤³¤ÎÊ¸¤Ïgfmd.conf¤Î¤ß¤ÇÍ­¸ú¤Ç¤¢¤ê¡¢gfarm2.conf¤Ç¤Ï
-Ìµ»ë¤µ¤ì¤Æ¤¤¤Ş¤·¤¿¤¬¡¢Gfarm-2.4.0°Ê¹ß¤Ïgfsd¤â¤³¤Î¥Ñ¥é¥á¡¼¥¿¤òÍøÍÑ¤·
+Ìµ»ë¤µ¤ì¤Æ¤¤¤Ş¤·¤¿¤¬¡¢Gfarm-2.3.1°Ê¹ß¤Ïgfsd¤â¤³¤Î¥Ñ¥é¥á¡¼¥¿¤òÍøÍÑ¤·
 gfmdÄä»ß¤ò¸¡ÃÎ¤¹¤ë¤¿¤á¡¢
 gfarm2.conf¤Ègfmd.conf¤ÎÎ¾Êı¤Ç»ØÄê¤¹¤ëÉ¬Í×¤¬¤¢¤ê¤Ş¤¹¡£</P
 ><P
@@ -1406,27 +1406,6 @@ CLASS="LITERALLAYOUT"
 ><DT
 ><SPAN
 CLASS="TOKEN"
->simultaneous_replication_receivers</SPAN
-> <TT
-CLASS="PARAMETER"
-><I
->Æ±»ş½èÍı¿ô</I
-></TT
-></DT
-><DD
-><P
->gfmd ¼çÆ³¤ÎÊ£À½½èÍı¤ò¡¢Ã±°ìÊ£À½ºîÀ®¥Û¥¹¥È¤ËÂĞ¤·¤Æ¡¢
-Æ±»ş¤¤¤¯¤Ä¤Ş¤ÇÊÂ¹Ô¤·¤Æ¹Ô¤Ê¤¦¤³¤È¤òµö¤¹¤«¤òÀßÄê¤·¤Ş¤¹¡£
-¥Ç¥Õ¥©¥ë¥È¤Ï 20¤Ç¤¹¡£</P
-><P
->Îã:</P
-><P
-CLASS="LITERALLAYOUT"
->	simultaneous_replication_receivers&nbsp;40</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
 >gfsd_connection_cache</SPAN
 > <TT
 CLASS="PARAMETER"
@@ -1532,6 +1511,50 @@ CLASS="PARAMETER"
 CLASS="LITERALLAYOUT"
 >	log_message_verbose_level&nbsp;1</P
 ></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>no_file_system_node_timeout</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>ÉÃ¿ô</I
+></TT
+></DT
+><DD
+><P
+>ÍøÍÑ²ÄÇ½¤Ê¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥Î¡¼¥É¤¬Â¸ºß¤·¤Ê¤¤¾ì¹ç¡¤
+Gfarm¥¯¥é¥¤¥¢¥ó¥È¥é¥¤¥Ö¥é¥ê¤Ï¥Õ¥¡¥¤¥ë¥·¥¹¥Æ¥à¥Î¡¼¥É¤¬ÍøÍÑ²ÄÇ½¤Ë¤Ê¤ë¤Ş¤Ç»î¹Ô¤ò·«¤êÊÖ¤·¤Ş¤¹¤¬¡¢
+¤½¤Î¥¿¥¤¥à¥¢¥¦¥È»ş´Ö¤òÉÃÃ±°Ì¤Ç»ØÄê¤·¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Ï 30ÉÃ¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	no_file_system_node_timeout&nbsp;30</P
+></DD
+><DT
+><SPAN
+CLASS="TOKEN"
+>gfmd_reconnection_timeout</SPAN
+> <TT
+CLASS="PARAMETER"
+><I
+>ÉÃ¿ô</I
+></TT
+></DT
+><DD
+><P
+>¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğ¤Ø¤ÎÀÜÂ³¤¬ÀÚÃÇ¤µ¤ì¤¿¾ì¹ç¡¤
+¥á¥¿¥Ç¡¼¥¿¥µ¡¼¥Ğ¤Ø¤ÎºÆÀÜÂ³¤ò·«¤êÊÖ¤·¤Ş¤¹¤¬¡¤
+¤½¤Î¥¿¥¤¥à¥¢¥¦¥È»ş´Ö¤òÉÃÃ±°Ì¤Ç»ØÄê¤·¤Ş¤¹¡£
+¥Ç¥Õ¥©¥ë¥È¤Ï 30ÉÃ¤Ç¤¹¡£</P
+><P
+>Îã:</P
+><P
+CLASS="LITERALLAYOUT"
+>	gfmd_reconnection_timeout&nbsp;30</P
+></DD
 ></DL
 ></DIV
 ></DIV
@@ -1584,7 +1607,6 @@ CLASS="LITERALLAYOUT"
 		  &#60;schedule_busy_load_thresh_statement&#62;&nbsp;|<br>
 		  &#60;schedule_virtual_load_statement&#62;&nbsp;|<br>
 		  &#60;minimum_free_disk_space_statement&#62;&nbsp;|<br>
-		  &#60;simultaneous_replication_receivers&#62;&nbsp;|<br>
 		  &#60;gfsd_connection_cache_statement&#62;&nbsp;|<br>
 		  &#60;attr_cache_limit_statement&#62;&nbsp;|<br>
 		  &#60;attr_cache_timeout_statement&#62;&nbsp;|<br>
@@ -1646,12 +1668,13 @@ CLASS="LITERALLAYOUT"
 	&#60;schedule_virtual_load_statement&#62;&nbsp;::=&nbsp;"schedule_virtual_load"&nbsp;&#60;load&#62;<br>
 	&#60;minimum_free_disk_space_statement&#62;&nbsp;::=<br>
 		  "minimum_free_disk_space"&nbsp;&#60;size&#62;<br>
-	&#60;simultaneous_replication_receivers&#62;&nbsp;::=&nbsp;"simultaneous_replication_receivers"&nbsp;&#60;number&#62;<br>
 	&#60;gfsd_connection_cache_statement&#62;&nbsp;::=&nbsp;"gfsd_connection_cache"&nbsp;&#60;number&#62;<br>
 	&#60;attr_cache_limit_statement&#62;&nbsp;::=&nbsp;"attr_cache_limit"&nbsp;&#60;number&#62;<br>
 	&#60;attr_cache_timeout_statement&#62;&nbsp;::=&nbsp;"attr_cache_timeout"&nbsp;&#60;number&#62;<br>
 	&#60;log_level_statement&#62;&nbsp;::=&nbsp;"log_level"&nbsp;&#60;log_priority&#62;<br>
 	&#60;log_message_verbose_level_statement&#62;&nbsp;::=&nbsp;"log_message_verbose_level"&nbsp;&#60;number&#62;<br>
+	&#60;no_file_system_node_timeout_statement&#62;&nbsp;::=&nbsp;"no_file_system_node_timeout"&nbsp;&#60;number&#62;<br>
+	&#60;gfmd_reconnection_timeout_statement&#62;&nbsp;::=&nbsp;"gfmd_reconnection_timeout"&nbsp;&#60;number&#62;<br>
 	&#60;hostspec&#62;&nbsp;::=&nbsp;&#60;ipv4_address&#62;&nbsp;|&nbsp;&#60;ipv4_address&#62;&nbsp;"/"&nbsp;&#60;address_mask&#62;&nbsp;|<br>
 		  &#60;hostname&#62;&nbsp;|&nbsp;"."&nbsp;&#60;domain_name&#62;&nbsp;|&nbsp;"*"<br>
 	&#60;pathname&#62;&nbsp;::=&nbsp;&#60;pathname_character&#62;&nbsp;&#60;pathname_character&#62;*<br>

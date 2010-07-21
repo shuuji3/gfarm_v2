@@ -12,12 +12,10 @@
 #include <gfarm/gfs.h>
 
 #include "gfutil.h"
-#include "thrsubr.h"
-
 #include "gfp_xdr.h"
-#include "config.h"
 #include "auth.h"
 
+#include "thrsubr.h"
 #include "subr.h"
 #include "peer.h"
 
@@ -28,42 +26,19 @@ static pthread_mutex_t giant_mutex;
 void
 giant_init(void)
 {
-	gfarm_mutex_init(&giant_mutex, "giant_init", "giant");
+	mutex_init(&giant_mutex, "giant_init", "giant");
 }
 
 void
 giant_lock(void)
 {
-	gfarm_mutex_lock(&giant_mutex, "giant_lock", "giant");
+	mutex_lock(&giant_mutex, "giant_lock", "giant");
 }
 
 void
 giant_unlock(void)
 {
-	gfarm_mutex_unlock(&giant_mutex, "giant_unlock", "giant");
-}
-
-static void
-gfarm_pthread_attr_setstacksize(pthread_attr_t *attr)
-{
-	int err;
-
-	if (gfarm_metadb_stack_size != GFARM_METADB_STACK_SIZE_DEFAULT){
-#ifdef HAVE_PTHREAD_ATTR_SETSTACKSIZE
-		err = pthread_attr_setstacksize(attr,
-		    gfarm_metadb_stack_size);
-		if (err != 0)
-			gflog_warning(GFARM_MSG_1000218, "gfmd.conf: "
-			    "metadb_server_stack_size %d: %s",
-			    gfarm_metadb_stack_size, strerror(err));
-#else
-		gflog_warning(GFARM_MSG_1000219, "gfmd.conf: "
-		    "metadb_server_stack_size %d: "
-		    "configuration ignored due to lack of "
-		    "pthread_attr_setstacksize()",
-		    gfarm_metadb_stack_size);
-#endif
-	}
+	mutex_unlock(&giant_mutex, "giant_unlock", "giant");
 }
 
 pthread_attr_t gfarm_pthread_attr;
@@ -109,29 +84,6 @@ create_detached_thread(void *(*thread_main)(void *), void *arg)
 	return (err == 0 ? GFARM_ERR_NO_ERROR : gfarm_errno_to_error(err));
 }
 
-/* only initialization routines are allowed to call this function */
-char *
-strdup_ck(const char *s, const char *diag)
-{
-	char *d = strdup(s);
-
-	if (d == NULL)
-		gflog_fatal(GFARM_MSG_1002313,
-		    "%s: strdup(%s): no memory", diag, s);
-	return (d);
-}
-
-char *
-strdup_log(const char *s, const char *diag)
-{
-	char *d = strdup(s);
-
-	if (d == NULL)
-		gflog_error(GFARM_MSG_1002358,
-		    "%s: strdup(%s): no memory", diag, s);
-	return (d);
-}
-
 int
 accmode_to_op(gfarm_uint32_t flag)
 {
@@ -170,19 +122,19 @@ gfm_server_get_request(struct peer *peer, const char *diag,
 
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_warning(GFARM_MSG_1000226,
-		    "%s receiving request: %s", diag, gfarm_error_string(e));
+		    "%s: %s", diag, gfarm_error_string(e));
 		peer_record_protocol_error(peer);
 		return (e);
 	}
 	if (eof) {
 		gflog_warning(GFARM_MSG_1000227,
-		    "%s receiving request: missing RPC argument", diag);
+		    "%s: missing RPC argument", diag);
 		peer_record_protocol_error(peer);
 		return (GFARM_ERR_PROTOCOL);
 	}
 	if (*format != '\0')
 		gflog_fatal(GFARM_MSG_1000228,
-		    "%s receiving request: invalid format character",
+		    "%s: invalid format character to get request",
 		    diag);
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -204,7 +156,7 @@ gfm_server_put_reply(struct peer *peer, const char *diag,
 	if (e != GFARM_ERR_NO_ERROR) {
 		va_end(ap);
 		gflog_warning(GFARM_MSG_1000230,
-		    "%s sending reply: %s", diag, gfarm_error_string(e));
+		    "%s: %s", diag, gfarm_error_string(e));
 		peer_record_protocol_error(peer);
 		return (e);
 	}
@@ -213,15 +165,13 @@ gfm_server_put_reply(struct peer *peer, const char *diag,
 		if (e != GFARM_ERR_NO_ERROR) {
 			va_end(ap);
 			gflog_warning(GFARM_MSG_1000231,
-			    "%s sending reply: %s",
-			    diag, gfarm_error_string(e));
+			    "%s: %s", diag, gfarm_error_string(e));
 			peer_record_protocol_error(peer);
 			return (e);
 		}
 		if (*format != '\0')
-			gflog_fatal(GFARM_MSG_1000232,
-			    "%s sending reply: %s", diag,
-			    "invalid format character");
+			gflog_fatal(GFARM_MSG_1000232, "%s: %s", diag,
+			    "invalid format character to put reply");
 	}
 	va_end(ap);
 	/* do not call gfp_xdr_flush() here for a compound protocol */

@@ -24,7 +24,7 @@ gfm_schedule_file_request(struct gfm_connection *gfm_server, void *closure)
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_warning(GFARM_MSG_1000106, "schedule_file request: %s",
-		    gfarm_error_string(e));
+	    gfarm_error_string(e));
 	return (e);
 }
 
@@ -67,10 +67,6 @@ gfm_schedule_file(struct gfm_connection *gfm_server, gfarm_int32_t fd,
 	if (e == GFARM_ERR_NO_ERROR) {
 		*nhostsp = closure.nhosts;
 		*infosp = closure.infos;
-	} else {
-		gflog_debug(GFARM_MSG_1001349,
-			"gfm_client_compound_fd_op() failed: %s",
-			gfarm_error_string(e));
 	}
 	return (e);
 }
@@ -99,7 +95,7 @@ gfarm_schedule_hosts_domain_by_file(const char *path, int openflags,
 		*nhostsp = closure.nhosts;
 		*infosp = closure.infos;
 	} else {
-		gflog_debug(GFARM_MSG_1002416,
+		gflog_debug(GFARM_MSG_UNFIXED,
 		    "gfarm_schedule_hosts_domain_by_file(%s, 0x%x, %s): %s",
 		    path, openflags, domain, gfarm_error_string(e));
 	}
