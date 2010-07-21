@@ -2,22 +2,14 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
 #include "gfutil.h"
-
-#include <gfarm/gflog.h>
 
 #ifndef HAVE_DAEMON
 int
 gfarm_daemon(int not_chdir, int not_close)
 {
-	int save_errno;
 	switch (fork()) {
 	case -1:
-		save_errno = errno;
-		gflog_debug(GFARM_MSG_1000766, "fork() failed: %s",
-			strerror(save_errno));
-		errno = save_errno;
 		return (-1);
 	case 0:
 		break;

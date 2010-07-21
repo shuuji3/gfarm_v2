@@ -2,15 +2,8 @@ struct process;
 
 struct inode;
 struct host;
-struct file_replicating;
 
 struct process *process_lookup(gfarm_pid_t);
-
-gfarm_error_t process_new_generation_wait(struct peer *, int,
-	gfarm_error_t (*)(struct peer *, void *, int *), void *);
-gfarm_error_t process_new_generation_done(struct process *, struct peer *,
-	int, gfarm_int32_t);
-
 void process_attach_peer(struct process *, struct peer *);
 void process_detach_peer(struct process *, struct peer *);
 
@@ -19,6 +12,7 @@ struct user *process_get_user(struct process *);
 gfarm_error_t process_verify_fd(struct process *, int);
 gfarm_error_t process_get_file_inode(struct process *, int,
 	struct inode **);
+gfarm_error_t process_get_file_flag(struct process *, int, int *);
 gfarm_error_t process_get_file_writable(struct process *, struct peer *, int);
 
 gfarm_error_t process_get_dir_offset(struct process *, struct peer *, int,
@@ -47,9 +41,6 @@ struct file_opening {
 		struct opening_file {
 			struct peer *spool_opener;
 			struct host *spool_host;
-
-			/* only used by client initiated replication */
-			struct file_replicating *replicating;
 		} f;
 		struct opening_dir {
 			gfarm_off_t offset;
@@ -88,8 +79,7 @@ gfarm_error_t process_close_file(struct process *, struct peer *, int);
 gfarm_error_t process_close_file_read(struct process *, struct peer *, int,
 	struct gfarm_timespec *);
 gfarm_error_t process_close_file_write(struct process *, struct peer *, int,
-	gfarm_off_t, struct gfarm_timespec *, struct gfarm_timespec *,
-	gfarm_int32_t *, gfarm_int64_t *, gfarm_int64_t *);
+	gfarm_off_t, struct gfarm_timespec *, struct gfarm_timespec *);
 
 gfarm_error_t process_cksum_set(struct process *, struct peer *, int,
 	const char *, size_t, const char *,
@@ -106,10 +96,8 @@ gfarm_error_t gfm_server_process_set(struct peer *, int, int);
 gfarm_error_t gfm_server_bequeath_fd(struct peer *, int, int);
 gfarm_error_t gfm_server_inherit_fd(struct peer *, int, int);
 
-gfarm_error_t process_prepare_to_replicate(struct process *, struct peer *,
-	struct host *, struct host *, int, gfarm_int32_t,
-	struct file_replicating **, struct inode **);
 gfarm_error_t process_replica_adding(struct process *, struct peer *,
-	struct host *, struct host *, int, struct inode **);
+	struct host *, char *, int, gfarm_ino_t *, gfarm_uint64_t *,
+	gfarm_int64_t *, gfarm_int32_t *);
 gfarm_error_t process_replica_added(struct process *, struct peer *,
 	struct host *, int, int, gfarm_int64_t, gfarm_int32_t, gfarm_off_t);

@@ -39,44 +39,20 @@ gfarm_url_parse_metadb(const char **pathp,
 			    &gfm_server);
 	} else {
 		path += GFARM_PREFIX_LEN;
-		if (path[0] != '/' || path[1] != '/') {
-			gflog_debug(GFARM_MSG_1001254,
-				"Host missing in url (%s): %s",
-				*pathp,
-				gfarm_error_string(
-					GFARM_ERR_GFARM_URL_HOST_IS_MISSING));
+		if (path[0] != '/' || path[1] != '/')
 			return (GFARM_ERR_GFARM_URL_HOST_IS_MISSING);
-		}
 		path += 2; /* skip "//" */
 		for (p = path;
 		    *p != '\0' &&
 		    (isalnum(*(unsigned char *)p) || *p == '-' || *p == '.');
 		    p++)
 			;
-		if (p == path) {
-			gflog_debug(GFARM_MSG_1001255,
-				"Host missing in url (%s): %s",
-				*pathp,
-				gfarm_error_string(
-					GFARM_ERR_GFARM_URL_HOST_IS_MISSING));
+		if (p == path)
 			return (GFARM_ERR_GFARM_URL_HOST_IS_MISSING);
-		}
-		if (*p != ':') {
-			gflog_debug(GFARM_MSG_1001256,
-				"Port missing in url (%s): %s",
-				*pathp,
-				gfarm_error_string(
-					GFARM_ERR_GFARM_URL_PORT_IS_MISSING));
+		if (*p != ':')
 			return (GFARM_ERR_GFARM_URL_PORT_IS_MISSING);
-		}
 		if (gfm_serverp != NULL) {
 			GFARM_MALLOC_ARRAY(gfm_server_name, p - path + 1);
-			if (gfm_server_name == NULL) {
-				gflog_debug(GFARM_MSG_1002312,
-				    "allocating gfm server name for '%s': "
-				    "no memory", *pathp);
-				return (GFARM_ERR_NO_MEMORY);
-			}
 			memcpy(gfm_server_name, path, p - path);
 			gfm_server_name[p - path] = '\0';
 		}
@@ -86,11 +62,6 @@ gfarm_url_parse_metadb(const char **pathp,
 		if (*p == '\0' || (*ep != '\0' && *ep != '/')) {
 			if (gfm_serverp != NULL)
 				free(gfm_server_name);
-			gflog_debug(GFARM_MSG_1001257,
-				"Port missing in url (%s): %s",
-				*pathp,
-				gfarm_error_string(
-					GFARM_ERR_GFARM_URL_PORT_IS_MISSING));
 			return (GFARM_ERR_GFARM_URL_PORT_IS_MISSING);
 		}
 		path = ep;
@@ -98,11 +69,6 @@ gfarm_url_parse_metadb(const char **pathp,
 		    gfm_server_port <= 0 || gfm_server_port >= 65536) {
 			if (gfm_serverp != NULL)
 				free(gfm_server_name);
-			gflog_debug(GFARM_MSG_1001258,
-				"Port invalid in url (%s): %s",
-				*pathp,
-				gfarm_error_string(
-					GFARM_ERR_GFARM_URL_PORT_IS_INVALID));
 			return (GFARM_ERR_GFARM_URL_PORT_IS_INVALID);
 		}
 		if (gfm_serverp == NULL) {
@@ -114,12 +80,8 @@ gfarm_url_parse_metadb(const char **pathp,
 			free(gfm_server_name);
 		}
 	}
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001259,
-			"error occurred during process: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	if (gfm_serverp != NULL)
 		*gfm_serverp = gfm_server;
 	*pathp = path;
@@ -192,11 +154,6 @@ gfm_lookup_dir_request(struct gfm_connection *gfm_server, const char *path,
 
 	if (e == GFARM_ERR_NO_ERROR)
 		*basep = path;
-	else {
-		gflog_debug(GFARM_MSG_1001260,
-			"error occurred during process: %s",
-			gfarm_error_string(e));
-	}
 	return (e);
 }
 
@@ -257,11 +214,6 @@ gfm_lookup_dir_result(struct gfm_connection *gfm_server, const char *path,
 
 	if (e == GFARM_ERR_NO_ERROR)
 		*basep = path;
-	else {
-		gflog_debug(GFARM_MSG_1001261,
-			"error occurred during process: %s",
-			gfarm_error_string(e));
-	}
 	return (e);
 }
 
@@ -329,12 +281,6 @@ gfm_tmp_open_request(struct gfm_connection *gfm_server,
 		e = gfm_client_open_request(gfm_server,
 		    base, strlen(base), flags);
 	}
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001262,
-			"gfm_client_open_request(%s) failed: %s",
-			path,
-			gfarm_error_string(e));
-	}
 	return (e);
 }
 
@@ -361,11 +307,6 @@ gfm_tmp_open_result(struct gfm_connection *gfm_server,
 		    &inum, &gen, &mode)) == GFARM_ERR_NO_ERROR &&
 		    typep != NULL)
 			*typep = gfs_mode_to_type(mode);
-	}
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001263,
-			"error occurred during process: %s",
-			gfarm_error_string(e));
 	}
 	return (e);
 }
@@ -398,13 +339,8 @@ gfm_name_op(const char *url, gfarm_error_t root_error_code,
 		path = url;
 
 		if ((e = gfarm_url_parse_metadb(&path, &gfm_server))
-		    != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001264,
-				"gfarm_url_parse_metadb(%s) failed: %s",
-				url,
-				gfarm_error_string(e));
+		    != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 
 		if ((e = gfm_tmp_lookup_parent_request(gfm_server, path,
 		    &base)) != GFARM_ERR_NO_ERROR) {
@@ -462,13 +398,6 @@ gfm_name_op(const char *url, gfarm_error_t root_error_code,
 
 	/* NOTE: the opened descriptor is automatically closed by gfmd */
 
-	if (e != GFARM_ERR_NO_ERROR || e_save != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001265,
-			"error occurred during process: %s",
-			gfarm_error_string(
-				e_save != GFARM_ERR_NO_ERROR ? e_save : e));
-	}
-
 	return (e_save != GFARM_ERR_NO_ERROR ? e_save : e);
 }
 
@@ -500,13 +429,8 @@ gfm_inode_op(const char *url, int flags,
 		path = url;
 
 		if ((e = gfarm_url_parse_metadb(&path, &gfm_server))
-		    != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001266,
-				"gfarm_url_parse_metadb(%s) failed: %s",
-				url,
-				gfarm_error_string(e));
+		    != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 
 		if ((e = gfm_tmp_open_request(gfm_server, path, flags))
 		    != GFARM_ERR_NO_ERROR) {
@@ -553,10 +477,5 @@ gfm_inode_op(const char *url, int flags,
 
 	/* NOTE: the opened descriptor is automatically closed by gfmd */
 
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001267,
-			"error occurred during process: %s",
-			gfarm_error_string(e));
-	}
 	return (e);
 }

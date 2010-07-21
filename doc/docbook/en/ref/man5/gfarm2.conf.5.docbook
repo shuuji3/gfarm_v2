@@ -2,7 +2,7 @@
 
 <refentry id='gfarm2.conf.5'>
 
-<refentryinfo><date>12 Apr 2010</date></refentryinfo>
+<refentryinfo><date>8 Mar 2010</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfarm2.conf</refentrytitle>
@@ -408,7 +408,7 @@ This parameter is only available in gfmd.conf, and ignored in gfarm2.conf.
 <listitem>
 <para>This directive specifies the length of job queue in the gfmd.
 It is effective to specify around the maximum number of clients that
-access the Gfarm file system at the same time.  Default is 16000.
+access the Gfarm file system at the same time.  Default is 160.
 </para>
 <para>
 This parameter is only available in gfmd.conf, and ignored in gfarm2.conf.
@@ -428,7 +428,7 @@ for gfmd to check availability of each gfsd.  Default is 180 seconds.
 </para>
 <para>
 Until gfarm-2.3.0, this parameter was only available in gfmd.conf, 
-and ignored in gfarm2.conf. But since gfarm-2.4.0, gfsd also uses
+and ignored in gfarm2.conf. But since gfarm-2.3.1, gfsd also uses
 this parameter to detect whether gfmd is down or not, this parameter
 has to be specified in both gfarm2.conf and gfmd.conf.
 </para>
@@ -1012,20 +1012,6 @@ The default size is 128M bytes.
 </varlistentry>
 
 <varlistentry>
-<term><token>simultaneous_replication_receivers</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of simultaneous
-gfmd-initiated replications to same host.
-The default is 20.
-</para>
-<para>For example,</para>
-<literallayout>
-	simultaneous_replication_receivers 40
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>gfsd_connection_cache</token> <parameter>number</parameter></term>
 <listitem>
 <para>This directive specifies maximum number of cached gfsd connections.
@@ -1095,6 +1081,36 @@ level 2 additionally outputs the function name.
 <para>For example,</para>
 <literallayout>
 	log_message_verbose_level 1
+</literallayout>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term><token>no_file_system_node_timeout</token> <parameter>seconds</parameter></term>
+<listitem>
+<para>If there is no file system node available,
+Gfarm client library periodically tries to find a file system node.
+This directive specifies the timeout to try in seconds.
+The default is 30 seconds.
+</para>
+<para>For example,</para>
+<literallayout>
+	no_file_system_node_timeout 30
+</literallayout>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term><token>gfmd_reconnection_timeout</token> <parameter>seconds</parameter></term>
+<listitem>
+<para>If the connection to the metadata server is disconnected,
+Gfarm client library periodically tries to reconnect.
+This directive specifies the timeout to try in seconds.
+The default is 30 seconds.
+</para>
+<para>For example,</para>
+<literallayout>
+	gfmd_reconnection_timeout 30
 </literallayout>
 </listitem>
 </varlistentry>
@@ -1169,7 +1185,6 @@ notation.</para>
 <!--		&nbsp;&nbsp;&lt;write_local_priority_statement&gt; | -->
 <!--		&nbsp;&nbsp;&lt;write_target_domain_statement&gt; | -->
 		&nbsp;&nbsp;&lt;minimum_free_disk_space_statement&gt; |
-		&nbsp;&nbsp;&lt;simultaneous_replication_receivers&gt; |
 		&nbsp;&nbsp;&lt;gfsd_connection_cache_statement&gt; |
 		&nbsp;&nbsp;&lt;attr_cache_limit_statement&gt; |
 		&nbsp;&nbsp;&lt;attr_cache_timeout_statement&gt; |
@@ -1245,12 +1260,13 @@ notation.</para>
 <!--	&lt;write_target_domain_statement&gt; ::= "write_target_domain" &lt;string&gt; -->
 	&lt;minimum_free_disk_space_statement&gt; ::=
 		&nbsp;&nbsp;"minimum_free_disk_space" &lt;size&gt;
-	&lt;simultaneous_replication_receivers&gt; ::= "simultaneous_replication_receivers" &lt;number&gt;
 	&lt;gfsd_connection_cache_statement&gt; ::= "gfsd_connection_cache" &lt;number&gt;
 	&lt;attr_cache_limit_statement&gt; ::= "attr_cache_limit" &lt;number&gt;
 	&lt;attr_cache_timeout_statement&gt; ::= "attr_cache_timeout" &lt;number&gt;
 	&lt;log_level_statement&gt; ::= "log_level" &lt;log_priority&gt;
 	&lt;log_message_verbose_level_statement&gt; ::= "log_message_verbose_level" &lt;number&gt;
+	&lt;no_file_system_node_timeout_statement&gt; ::= "no_file_system_node_timeout" &lt;number&gt;
+	&lt;gfmd_reconnection_timeout_statement&gt; ::= "gfmd_reconnection_timeout" &lt;number&gt;
 <!--	&lt;record_atime_statement&gt; ::= "record_atime" &lt;validity&gt; -->
 	&lt;hostspec&gt; ::= &lt;ipv4_address&gt; | &lt;ipv4_address&gt; "/" &lt;address_mask&gt; |
 		&nbsp;&nbsp;&lt;hostname&gt; | "." &lt;domain_name&gt; | "*"

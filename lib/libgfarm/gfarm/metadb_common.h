@@ -15,6 +15,3 @@ extern const struct gfarm_base_generic_info_ops
 
 void gfarm_base_generic_info_free_all(int, void *,
 	const struct gfarm_base_generic_info_ops *);
-
-
-void gfarm_host_info_free_except_hostname(struct gfarm_host_info *);

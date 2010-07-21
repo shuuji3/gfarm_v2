@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "GFARM2.CONF" "5" "12 April 2010" "Gfarm" ""
+.TH "GFARM2.CONF" "5" "23 June 2010" "Gfarm" ""
 
 .SH NAME
 gfarm2.conf \- Gfarm configuration file
@@ -292,7 +292,7 @@ For example,
 \fBmetadb_server_job_queue_length \fIlength\fB\fR
 This directive specifies the length of job queue in the gfmd.
 It is effective to specify around the maximum number of clients that
-access the Gfarm file system at the same time.  Default is 16000.
+access the Gfarm file system at the same time.  Default is 160.
 
 This parameter is only available in gfmd.conf, and ignored in gfarm2.conf.
 
@@ -307,7 +307,7 @@ This directive specifies the interval of heartbeat in seconds
 for gfmd to check availability of each gfsd.  Default is 180 seconds.
 
 Until gfarm-2.3.0, this parameter was only available in gfmd.conf, 
-and ignored in gfarm2.conf. But since gfarm-2.4.0, gfsd also uses
+and ignored in gfarm2.conf. But since gfarm-2.3.1, gfsd also uses
 this parameter to detect whether gfmd is down or not, this parameter
 has to be specified in both gfarm2.conf and gfmd.conf.
 
@@ -690,17 +690,6 @@ For example,
 	minimum_free_disk_space 1G
 .fi
 .TP
-\fBsimultaneous_replication_receivers \fInumber\fB\fR
-This directive specifies maximum number of simultaneous
-gfmd-initiated replications to same host.
-The default is 20.
-
-For example,
-
-.nf
-	simultaneous_replication_receivers 40
-.fi
-.TP
 \fBgfsd_connection_cache \fInumber\fB\fR
 This directive specifies maximum number of cached gfsd connections.
 The default is 16.
@@ -759,6 +748,30 @@ For example,
 .nf
 	log_message_verbose_level 1
 .fi
+.TP
+\fBno_file_system_node_timeout \fIseconds\fB\fR
+If there is no file system node available,
+Gfarm client library periodically tries to find a file system node.
+This directive specifies the timeout to try in seconds.
+The default is 30 seconds.
+
+For example,
+
+.nf
+	no_file_system_node_timeout 30
+.fi
+.TP
+\fBgfmd_reconnection_timeout \fIseconds\fB\fR
+If the connection to the metadata server is disconnected,
+Gfarm client library periodically tries to reconnect.
+This directive specifies the timeout to try in seconds.
+The default is 30 seconds.
+
+For example,
+
+.nf
+	gfmd_reconnection_timeout 30
+.fi
 .SH "GRAMMAR"
 .PP
 This is a grammar of gfarm2.conf described by the BNF
@@ -803,7 +816,6 @@ notation.
 		\~\~<schedule_busy_load_thresh_statement> |
 		\~\~<schedule_virtual_load_statement> |
 		\~\~<minimum_free_disk_space_statement> |
-		\~\~<simultaneous_replication_receivers> |
 		\~\~<gfsd_connection_cache_statement> |
 		\~\~<attr_cache_limit_statement> |
 		\~\~<attr_cache_timeout_statement> |
@@ -865,12 +877,13 @@ notation.
 	<schedule_virtual_load_statement> ::= "schedule_virtual_load" <load>
 	<minimum_free_disk_space_statement> ::=
 		\~\~"minimum_free_disk_space" <size>
-	<simultaneous_replication_receivers> ::= "simultaneous_replication_receivers" <number>
 	<gfsd_connection_cache_statement> ::= "gfsd_connection_cache" <number>
 	<attr_cache_limit_statement> ::= "attr_cache_limit" <number>
 	<attr_cache_timeout_statement> ::= "attr_cache_timeout" <number>
 	<log_level_statement> ::= "log_level" <log_priority>
 	<log_message_verbose_level_statement> ::= "log_message_verbose_level" <number>
+	<no_file_system_node_timeout_statement> ::= "no_file_system_node_timeout" <number>
+	<gfmd_reconnection_timeout_statement> ::= "gfmd_reconnection_timeout" <number>
 	<hostspec> ::= <ipv4_address> | <ipv4_address> "/" <address_mask> |
 		\~\~<hostname> | "." <domain_name> | "*"
 	<pathname> ::= <pathname_character> <pathname_character>*

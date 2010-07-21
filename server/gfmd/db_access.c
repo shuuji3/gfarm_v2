@@ -12,15 +12,13 @@
 #include <gfarm/gfarm.h>
 
 #include "gfutil.h"
-#include "thrsubr.h"
-
 #include "config.h"
 
-#include "subr.h"
 #include "quota_info.h"
 #include "quota.h"
 #include "db_access.h"
 #include "db_ops.h"
+#include "thrsubr.h"
 
 #define ALIGNMENT 8
 #define ALIGN(offset)	(((offset) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
@@ -50,18 +48,15 @@ struct dbq {
 gfarm_error_t
 dbq_init(struct dbq *q)
 {
-	static const char diag[] = "dbq_init";
+	static const char msg[] = "dbq_init";
 
 	GFARM_MALLOC_ARRAY(q->entries, gfarm_metadb_dbq_size);
-	if (q->entries == NULL) {
-		gflog_debug(GFARM_MSG_1001999,
-			"allocation of 'q->entries' failed");
+	if (q->entries == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
-	gfarm_mutex_init(&q->mutex, diag, "mutex");
-	gfarm_cond_init(&q->nonempty, diag, "nonempty");
-	gfarm_cond_init(&q->nonfull, diag, "nonfull");
-	gfarm_cond_init(&q->finished, diag, "finished");
+	mutex_init(&q->mutex, msg, "mutex");
+	cond_init(&q->nonempty, msg, "nonempty");
+	cond_init(&q->nonfull, msg, "nonfull");
+	cond_init(&q->finished, msg, "finished");
 	q->n = q->in = q->out = q->quitting = q->quited = 0;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -69,15 +64,15 @@ dbq_init(struct dbq *q)
 gfarm_error_t
 dbq_wait_to_finish(struct dbq *q)
 {
-	static const char diag[] = "dbq_wait_to_finish";
+	static const char msg[] = "dbq_wait_to_finish";
 
-	gfarm_mutex_lock(&q->mutex, diag, "mutex");
+	mutex_lock(&q->mutex, msg, "mutex");
 	q->quitting = 1;
 	while (!q->quited) {
-		gfarm_cond_signal(&q->nonempty, diag, "nonempty");
-		gfarm_cond_wait(&q->finished, &q->mutex, diag, "finished");
+		cond_signal(&q->nonempty, msg, "nonempty");
+		cond_wait(&q->finished, &q->mutex, msg, "finished");
 	}
-	gfarm_mutex_unlock(&q->mutex, diag, "mutex");
+	mutex_unlock(&q->mutex, msg, "mutex");
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -85,22 +80,21 @@ static gfarm_error_t
 dbq_enter(struct dbq *q, dbq_entry_func_t func, void *data)
 {
 	gfarm_error_t e;
-	static const char diag[] = "dbq_enter";
+	static const char msg[] = "dbq_enter";
 
-	gfarm_mutex_lock(&q->mutex, diag, "mutex");
+	mutex_lock(&q->mutex, msg, "mutex");
 	if (q->quitting) {
 		/*
 		 * Because dbq_wait_to_finish() is only called while
 		 * giant_lock() is held, the dbq shouldn't be partial state.
-		 * So, this doesn't cause metadata inconsistency .
+		 * So, we this shouldn't cause inconsistent metadata.
 		 */
 		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		gfarm_cond_signal(&q->nonempty, diag, "nonempty");
+		cond_signal(&q->nonempty, msg, "nonempty");
 	} else {
 		e = GFARM_ERR_NO_ERROR;
 		while (q->n >= gfarm_metadb_dbq_size) {
-			gfarm_cond_wait(&q->nonfull, &q->mutex,
-			    diag, "nonfull");
+			cond_wait(&q->nonfull, &q->mutex, msg, "nonfull");
 		}
 		q->entries[q->in].func = func;
 		q->entries[q->in].data = data;
@@ -108,9 +102,9 @@ dbq_enter(struct dbq *q, dbq_entry_func_t func, void *data)
 		if (q->in >= gfarm_metadb_dbq_size)
 			q->in = 0;
 		q->n++;
-		gfarm_cond_signal(&q->nonempty, diag, "nonempty");
+		cond_signal(&q->nonempty, msg, "nonempty");
 	}
-	gfarm_mutex_unlock(&q->mutex, diag, "mutex");
+	mutex_unlock(&q->mutex, msg, "mutex");
 	return (e);
 }
 
@@ -145,11 +139,8 @@ dbq_enter_withcallback(struct dbq *q,
 	struct dbq_callback_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002000,
-			"allocation of 'dbq_callback_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->func = func;
 	arg->data = data;
 	arg->cbfunc = cbfunc;
@@ -165,11 +156,11 @@ dbq_enter_withcallback(struct dbq *q,
 void
 db_waitctx_init(struct db_waitctx *ctx)
 {
-	static const char diag[] = "db_waitctx_init";
+	static const char msg[] = "db_waitctx_init";
 
 	if (ctx != NULL) {
-		gfarm_mutex_init(&ctx->lock, diag, "lock");
-		gfarm_cond_init(&ctx->cond, diag, "cond");
+		mutex_init(&ctx->lock, msg, "lock");
+		cond_init(&ctx->cond, msg, "cond");
 		ctx->e = UNINITIALIZED_GFARM_ERROR;
 	}
 }
@@ -177,11 +168,9 @@ db_waitctx_init(struct db_waitctx *ctx)
 void
 db_waitctx_fini(struct db_waitctx *ctx)
 {
-	static const char diag[] = "db_waitctx_fini";
-
 	if (ctx != NULL) {
-		gfarm_cond_destroy(&ctx->cond, diag, "cond");
-		gfarm_mutex_destroy(&ctx->lock, diag, "lock");
+		pthread_cond_destroy(&ctx->cond);
+		pthread_mutex_destroy(&ctx->lock);
 	}
 }
 
@@ -189,13 +178,12 @@ static void
 dbq_done_callback(gfarm_error_t e, void *c)
 {
 	struct db_waitctx *ctx = (struct db_waitctx *)c;
-	static const char diag[] = "dbq_done_callback";
 
 	if (ctx != NULL) {
-		gfarm_mutex_lock(&ctx->lock, diag, "lock");
+		pthread_mutex_lock(&ctx->lock);
 		ctx->e = e;
-		gfarm_cond_signal(&ctx->cond, diag, "cond");
-		gfarm_mutex_unlock(&ctx->lock, diag, "lock");
+		pthread_cond_signal(&ctx->cond);
+		pthread_mutex_unlock(&ctx->lock);
 	}
 }
 
@@ -203,17 +191,17 @@ gfarm_error_t
 dbq_waitret(struct db_waitctx *ctx)
 {
 	gfarm_error_t e;
-	static const char diag[] = "dbq_waitret";
+	static const char msg[] = "dbq_waitret";
 
 	if (ctx == NULL)
 		return (GFARM_ERR_NO_ERROR);
 
-	gfarm_mutex_lock(&ctx->lock, diag, "lock");
+	mutex_lock(&ctx->lock, msg, "lock");
 	while (ctx->e == UNINITIALIZED_GFARM_ERROR) {
-		gfarm_cond_wait(&ctx->cond, &ctx->lock, diag, "cond");
+		cond_wait(&ctx->cond, &ctx->lock, msg, "cond");
 	}
 	e = ctx->e;
-	gfarm_mutex_unlock(&ctx->lock, diag, "lock");
+	mutex_unlock(&ctx->lock, msg, "lock");
 	return (e);
 }
 
@@ -238,16 +226,16 @@ gfarm_error_t
 dbq_delete(struct dbq *q, struct dbq_entry *entp)
 {
 	gfarm_error_t e;
-	static const char diag[] = "dbq_delete";
+	static const char msg[] = "dbq_delete";
 
-	gfarm_mutex_lock(&q->mutex, diag, "mutex");
+	mutex_lock(&q->mutex, msg, "mutex");
 	while (q->n <= 0 && !q->quitting) {
-		gfarm_cond_wait(&q->nonempty, &q->mutex, diag, "nonempty");
+		cond_wait(&q->nonempty, &q->mutex, msg, "nonempty");
 	}
 	if (q->n <= 0) {
 		assert(q->quitting);
 		q->quited = 1;
-		gfarm_cond_signal(&q->finished, diag, "finished");
+		cond_signal(&q->finished, msg, "finished");
 		e = GFARM_ERR_NO_SUCH_OBJECT;
 	} else { /* (q->n > 0) */
 		e = GFARM_ERR_NO_ERROR;
@@ -255,10 +243,10 @@ dbq_delete(struct dbq *q, struct dbq_entry *entp)
 		if (q->out >= gfarm_metadb_dbq_size)
 			q->out = 0;
 		if (q->n-- >= gfarm_metadb_dbq_size) {
-			gfarm_cond_signal(&q->nonfull, diag, "nonfull");
+			cond_signal(&q->nonfull, msg, "nonfull");
 		}
 	}
-	gfarm_mutex_unlock(&q->mutex, diag, "mutex");
+	mutex_unlock(&q->mutex, msg, "mutex");
 	return (e);
 }
 
@@ -267,14 +255,13 @@ db_getfreenum(void)
 {
 	struct dbq *q = &dbq;
 	int freenum;
-	static const char diag[] = "db_getfreenum";
 
 	/*
 	 * This function is made only for gfm_server_findxmlattr().
 	 */
-	gfarm_mutex_lock(&q->mutex, diag, "mutex");
+	pthread_mutex_lock(&q->mutex);
 	freenum = (gfarm_metadb_dbq_size - q->n);
-	gfarm_mutex_unlock(&q->mutex, diag, "mutex");
+	pthread_mutex_unlock(&q->mutex);
 	return (freenum);
 }
 
@@ -368,11 +355,8 @@ db_host_dup(const struct gfarm_host_info *hi, size_t size)
 	sz = gfarm_size_add(&overflow, size, hsize + asize);
 	if (!overflow)
 		r = malloc(sz);
-	if (overflow || r == NULL) {
-		gflog_debug(GFARM_MSG_1002001,
-			"allocation of 'gfarm_host_info' failed or overflow");
+	if (overflow || r == NULL)
 		return (NULL);
-	}
 	r->hostname = (char *)r + size;
 	r->architecture = r->hostname + hsize;
 
@@ -392,10 +376,8 @@ db_host_add(const struct gfarm_host_info *hi)
 {
 	struct gfarm_host_info *h = db_host_dup(hi, sizeof(*h));
 
-	if (h == NULL) {
-		gflog_debug(GFARM_MSG_1002002, "db_host_dup() failed");
+	if (h == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->host_add, h));
 }
 
@@ -407,10 +389,8 @@ db_host_modify(const struct gfarm_host_info *hi,
 {
 	struct db_host_modify_arg *arg = db_host_dup(hi, sizeof(*arg));
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002003, "db_host_dup() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	arg->modflags = modflags;
 	/* XXX FIXME missing hostaliases */
@@ -423,7 +403,7 @@ db_host_modify(const struct gfarm_host_info *hi,
 gfarm_error_t
 db_host_remove(const char *hostname)
 {
-	char *h = strdup_log(hostname, "db_host_remove");
+	char *h = strdup(hostname);
 
 	if (h == NULL)
 		return (GFARM_ERR_NO_MEMORY);
@@ -454,11 +434,8 @@ db_user_dup(const struct gfarm_user_info *ui, size_t size)
 	sz = gfarm_size_add(&overflow, size, usize + rsize + hsize + gsize);
 	if (!overflow)
 		r = malloc(sz);
-	if (overflow || r == NULL) {
-		gflog_debug(GFARM_MSG_1002005,
-			"allocation of 'gfarm_user_info' failed or overflow");
+	if (overflow || r == NULL)
 		return (NULL);
-	}
 	r->username = (char *)r + size;
 	r->realname = r->username + usize;
 	r->homedir = r->realname + rsize;
@@ -476,10 +453,8 @@ db_user_add(const struct gfarm_user_info *ui)
 {
 	struct gfarm_user_info *u = db_user_dup(ui, sizeof(*u));
 
-	if (u == NULL) {
-		gflog_debug(GFARM_MSG_1002006, "db_user_dup() failed");
+	if (u == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->user_add, u));
 }
 
@@ -488,10 +463,8 @@ db_user_modify(const struct gfarm_user_info *ui, int modflags)
 {
 	struct db_user_modify_arg *arg = db_user_dup(ui, sizeof(*arg));
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002007, "db_user_dup() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->modflags = modflags;
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->user_modify, arg));
 }
@@ -499,7 +472,7 @@ db_user_modify(const struct gfarm_user_info *ui, int modflags)
 gfarm_error_t
 db_user_remove(const char *username)
 {
-	char *u = strdup_log(username, "db_user_remove");
+	char *u = strdup(username);
 
 	if (u == NULL)
 		return (GFARM_ERR_NO_MEMORY);
@@ -539,11 +512,8 @@ db_group_dup(const struct gfarm_group_info *gi, size_t size)
 		gfarm_size_add(&overflow, gsize, users_size)));
 	if (!overflow)
 		r = malloc(sz);
-	if (overflow || r == NULL) {
-		gflog_debug(GFARM_MSG_1002009,
-			"allocation of 'gfarm_group_info' failed or overflow");
+	if (overflow || r == NULL)
 		return (NULL);
-	}
 
 	r->usernames = (char **)((char *)r + size);
 	r->groupname = (char *)r->usernames +
@@ -568,10 +538,8 @@ db_group_add(const struct gfarm_group_info *gi)
 {
 	struct gfarm_group_info *g = db_group_dup(gi, sizeof(*g));
 
-	if (g == NULL) {
-		gflog_debug(GFARM_MSG_1002010, "db_group_dup() failed");
+	if (g == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->group_add, g));
 }
 
@@ -604,11 +572,8 @@ db_group_modify(const struct gfarm_group_info *gi, int modflags,
 
 	if (!overflow)
 		arg = db_group_dup(gi, size);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002011,
-			"overflow occurred or db_group_dup() failed");
+	if (overflow || arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->add_users = (char **)((char *)arg + ALIGN(sizeof(*arg)));
 	arg->del_users = (char **)((char *)arg->add_users +
 	    sizeof(*arg->add_users) * add_count);
@@ -637,7 +602,7 @@ db_group_modify(const struct gfarm_group_info *gi, int modflags,
 gfarm_error_t
 db_group_remove(const char *groupname)
 {
-	char *g = strdup_log(groupname, "db_group_remove");
+	char *g = strdup(groupname);
 
 	if (g == NULL)
 		return (GFARM_ERR_NO_MEMORY);
@@ -667,11 +632,8 @@ db_inode_dup(const struct gfs_stat *st, size_t size)
 	sz = gfarm_size_add(&overflow, size, usize + gsize);
 	if (!overflow)
 		r = malloc(sz);
-	if (overflow || r == NULL) {
-		gflog_debug(GFARM_MSG_1002013,
-			"allocation of 'gfs_stat' failed or overflow");
+	if (overflow || r == NULL)
 		return (NULL);
-	}
 	r->st_user = (char *)r + size;
 	r->st_group = r->st_user + usize;
 
@@ -694,10 +656,8 @@ db_inode_add(const struct gfs_stat *st)
 {
 	struct gfs_stat *i = db_inode_dup(st, sizeof(*i));
 
-	if (i == NULL) {
-		gflog_debug(GFARM_MSG_1002014, "db_inode_dup() failed");
+	if (i == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->inode_add, i));
 }
 
@@ -706,28 +666,9 @@ db_inode_modify(const struct gfs_stat *st)
 {
 	struct gfs_stat *i = db_inode_dup(st, sizeof(*i));
 
-	if (i == NULL) {
-		gflog_debug(GFARM_MSG_1002015, "db_inode_dup() failed");
+	if (i == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->inode_modify, i));
-}
-
-gfarm_error_t
-db_inode_gen_modify(gfarm_ino_t inum, gfarm_uint64_t gen)
-{
-	struct db_inode_uint64_modify_arg *arg;
-
-	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002290,
-			"allocation of 'db_inode_uint64_modify_arg' failed");
-		return (GFARM_ERR_NO_MEMORY);
-	}
-	arg->inum = inum;
-	arg->uint64 = gen;
-	return (dbq_enter(&dbq,
-	    (dbq_entry_func_t)ops->inode_gen_modify, arg));
 }
 
 gfarm_error_t
@@ -736,11 +677,8 @@ db_inode_nlink_modify(gfarm_ino_t inum, gfarm_uint64_t nlink)
 	struct db_inode_uint64_modify_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002016,
-			"allocation of 'db_inode_uint64_modify_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	arg->uint64 = nlink;
 	return (dbq_enter(&dbq,
@@ -753,11 +691,8 @@ db_inode_size_modify(gfarm_ino_t inum, gfarm_off_t size)
 	struct db_inode_uint64_modify_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002017,
-			"allocation of 'db_inode_uint64_modify_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	arg->uint64 = size;
 	return (dbq_enter(&dbq,
@@ -770,11 +705,8 @@ db_inode_mode_modify(gfarm_ino_t inum, gfarm_mode_t mode)
 	struct db_inode_uint32_modify_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002018,
-			"allocation of 'db_inode_uint32_modify_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	arg->uint32 = mode;
 	return (dbq_enter(&dbq,
@@ -792,12 +724,8 @@ db_inode_user_modify(gfarm_ino_t inum, const char *user)
 		gfarm_size_add(&overflow, strlen(user), 1));
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002019,
-			"allocation of 'db_inode_string_modify_arg' failed "
-			"or overflow");
+	if (overflow || arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->string = (char *)arg + sizeof(*arg);
 
 	arg->inum = inum;
@@ -817,11 +745,8 @@ db_inode_group_modify(gfarm_ino_t inum, const char *group)
 		gfarm_size_add(&overflow, strlen(group), 1));
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002020,
-			"allocation of 'db_inode_string_modify_arg' failed");
+	if (overflow || arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->string = (char *)arg + sizeof(*arg);
 
 	arg->inum = inum;
@@ -836,11 +761,8 @@ db_inode_atime_modify(gfarm_ino_t inum, struct gfarm_timespec *atime)
 	struct db_inode_timespec_modify_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002021,
-			"allocation of 'db_inode_timespec_modify_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	arg->time = *atime;
 	return (dbq_enter(&dbq,
@@ -853,11 +775,8 @@ db_inode_mtime_modify(gfarm_ino_t inum, struct gfarm_timespec *mtime)
 	struct db_inode_timespec_modify_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002022,
-			"allocation of 'db_inode_timespec_modify_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	arg->time = *mtime;
 	return (dbq_enter(&dbq,
@@ -870,11 +789,8 @@ db_inode_ctime_modify(gfarm_ino_t inum, struct gfarm_timespec *ctime)
 	struct db_inode_timespec_modify_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002023,
-			"allocation of 'db_inode_timespec_modify_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	arg->time = *ctime;
 	return (dbq_enter(&dbq,
@@ -904,12 +820,8 @@ db_inode_cksum_arg_alloc(gfarm_ino_t inum,
 	    gfarm_size_add(&overflow, len, 1));
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002024,
-			"allocation of 'db_inode_cksum_arg' failed or "
-			"overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 	arg->type = (char *)arg + sizeof(*arg);
 	arg->sum = arg->type + tsize;
 
@@ -926,11 +838,8 @@ db_inode_cksum_add(gfarm_ino_t inum,
 	struct db_inode_cksum_arg *arg =
 	    db_inode_cksum_arg_alloc(inum, type, len, sum);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002025,
-			"db_inode_cksum_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq,
 	    (dbq_entry_func_t)ops->inode_cksum_add, arg));
 }
@@ -942,11 +851,8 @@ db_inode_cksum_modify(gfarm_ino_t inum,
 	struct db_inode_cksum_arg *arg =
 	    db_inode_cksum_arg_alloc(inum, type, len, sum);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002026,
-			"db_inode_cksum_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq,
 	    (dbq_entry_func_t)ops->inode_cksum_modify, arg));
 }
@@ -957,11 +863,8 @@ db_inode_cksum_remove(gfarm_ino_t inum)
 	struct db_inode_inum_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002027,
-			"allocation of 'db_inode_inum_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	return (dbq_enter(&dbq,
 	    (dbq_entry_func_t)ops->inode_cksum_remove, arg));
@@ -986,11 +889,8 @@ db_filecopy_arg_alloc(gfarm_ino_t inum, const char *hostname)
 	sz = gfarm_size_add(&overflow, sizeof(*arg), hsize);
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002028,
-			"allocation of 'db_filecopy_arg' failed or overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 	arg->hostname = (char *)arg + sizeof(*arg);
 
 	arg->inum = inum;
@@ -1004,11 +904,8 @@ db_filecopy_add(gfarm_ino_t inum, const char *hostname)
 	struct db_filecopy_arg *arg =
 	    db_filecopy_arg_alloc(inum, hostname);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002029,
-			"db_filecopy_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->filecopy_add, arg));
 }
 
@@ -1018,11 +915,8 @@ db_filecopy_remove(gfarm_ino_t inum, const char *hostname)
 	struct db_filecopy_arg *arg =
 	    db_filecopy_arg_alloc(inum, hostname);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002030,
-			"db_filecopy_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->filecopy_remove, arg));
 }
 
@@ -1046,12 +940,8 @@ db_deadfilecopy_arg_alloc(gfarm_ino_t inum, gfarm_uint64_t igen,
 	sz = gfarm_size_add(&overflow, sizeof(*arg), hsize);
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002031,
-			"allocation of 'db_deadfilecopy_arg' failed or "
-			"overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 	arg->hostname = (char *)arg + sizeof(*arg);
 
 	arg->inum = inum;
@@ -1067,11 +957,8 @@ db_deadfilecopy_add(gfarm_ino_t inum, gfarm_uint64_t igen,
 	struct db_deadfilecopy_arg *arg =
 	    db_deadfilecopy_arg_alloc(inum, igen, hostname);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002032,
-			"db_deadfilecopy_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq,
 	    (dbq_entry_func_t)ops->deadfilecopy_add, arg));
 }
@@ -1083,11 +970,8 @@ db_deadfilecopy_remove(gfarm_ino_t inum, gfarm_uint64_t igen,
 	struct db_deadfilecopy_arg *arg =
 	    db_deadfilecopy_arg_alloc(inum, igen, hostname);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002033,
-			"db_deadfilecopy_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq,
 	    (dbq_entry_func_t)ops->deadfilecopy_remove, arg));
 }
@@ -1112,11 +996,8 @@ db_direntry_arg_alloc(
 	sz = gfarm_size_add(&overflow, sizeof(*arg), entry_len + 1);
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002034,
-			"allocation of 'db_direntry_arg' failed or overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 	arg->entry_name = (char *)arg + sizeof(*arg);
 
 	arg->dir_inum = dir_inum;
@@ -1134,11 +1015,8 @@ db_direntry_add(gfarm_ino_t dir_inum, const char *entry_name, int entry_len,
 	struct db_direntry_arg *arg =
 	    db_direntry_arg_alloc(dir_inum, entry_name, entry_len, entry_inum);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002035,
-			"db_direntry_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq,
 	    (dbq_entry_func_t)ops->direntry_add, arg));
 }
@@ -1149,11 +1027,8 @@ db_direntry_remove(gfarm_ino_t dir_inum, const char *entry_name, int entry_len)
 	struct db_direntry_arg *arg =
 	    db_direntry_arg_alloc(dir_inum, entry_name, entry_len, 0);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002036,
-			"db_direntry_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq,
 	    (dbq_entry_func_t)ops->direntry_remove, arg));
 }
@@ -1175,11 +1050,8 @@ db_symlink_arg_alloc(gfarm_ino_t inum, const char *source_path)
 	sz = gfarm_size_add(&overflow, sizeof(*arg), strlen(source_path) + 1);
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002037,
-			"allocation of 'db_symlink_arg' failed or overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 	arg->source_path = (char *)arg + sizeof(*arg);
 
 	arg->inum = inum;
@@ -1193,11 +1065,8 @@ db_symlink_add(gfarm_ino_t inum, const char *source_path)
 	struct db_symlink_arg *arg =
 	    db_symlink_arg_alloc(inum, source_path);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002038,
-			"db_symlink_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->symlink_add, arg));
 }
 
@@ -1207,11 +1076,8 @@ db_symlink_remove(gfarm_ino_t inum)
 	struct db_inode_inum_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002039,
-			"allocation of 'db_inode_inum_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	arg->inum = inum;
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->symlink_remove, arg));
 }
@@ -1235,11 +1101,8 @@ db_xattr_arg_alloc(char *attrname, size_t valsize)
 	}
 	if (!overflow)
 		arg = malloc(size);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002040,
-			"allocation of 'db_xattr_arg' failed or overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 
 	memset(arg, 0, sizeof(*arg));
 	/* NOTE: we allow valsize == 0 as a valid xattr_add/modify argment */
@@ -1258,11 +1121,8 @@ db_xattr_add(int xmlMode, gfarm_ino_t inum, char *attrname,
 	gfarm_error_t e;
 	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, size);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002041,
-			"db_xattr_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_ERROR);
-	}
 	arg->xmlMode = xmlMode;
 	arg->inum = inum;
 	memcpy(arg->value, value, size);
@@ -1288,11 +1148,8 @@ db_xattr_modify(int xmlMode, gfarm_ino_t inum, char *attrname,
 	gfarm_error_t e;
 	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, size);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002042,
-			"db_xattr_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_ERROR);
-	}
 	arg->xmlMode = xmlMode;
 	arg->inum = inum;
 	memcpy(arg->value, value, size);
@@ -1311,11 +1168,8 @@ db_xattr_remove(int xmlMode, gfarm_ino_t inum, char *attrname)
 {
 	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, 0);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002043,
-			"db_xattr_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_ERROR);
-	}
 	arg->xmlMode = xmlMode;
 	arg->inum = inum;
 	return (dbq_enter(&dbq,
@@ -1327,11 +1181,8 @@ db_xattr_removeall(int xmlMode, gfarm_ino_t inum)
 {
 	if (ops->xattr_removeall != NULL) {
 		struct db_xattr_arg *arg = db_xattr_arg_alloc(NULL, 0);
-		if (arg == NULL) {
-			gflog_debug(GFARM_MSG_1002044,
-				"db_xattr_arg_alloc() failed");
+		if (arg == NULL)
 			return (GFARM_ERR_NO_ERROR);
-		}
 		arg->xmlMode = xmlMode;
 		arg->inum = inum;
 		return (dbq_enter(&dbq,
@@ -1345,11 +1196,8 @@ db_xattr_get(int xmlMode, gfarm_ino_t inum, char *attrname,
 	void **valuep, size_t *sizep, struct db_waitctx *waitctx)
 {
 	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, 0);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002045,
-			"db_xattr_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_ERROR);
-	}
 	arg->xmlMode = xmlMode;
 	arg->inum = inum;
 	arg->valuep = valuep;
@@ -1373,11 +1221,8 @@ db_xmlattr_find(gfarm_ino_t inum, const char *expr,
 	struct db_xmlattr_find_arg *arg;
 
 	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002046,
-			"allocation of 'db_xmlattr_find_arg' failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_ERROR);
-	}
 	arg->inum = inum;
 	arg->expr = expr;
 	arg->foundcallback = foundcallback;
@@ -1399,11 +1244,8 @@ db_quota_arg_alloc(const struct quota *q, const char *name, int is_group)
 	sz = gfarm_size_add(&overflow, sizeof(*arg), name_len + 1);
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002047,
-			"allocation of 'db_quota_arg' failed or overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 	arg->name = (char *)arg + sizeof(*arg);
 
 	arg->quota = *q;
@@ -1418,11 +1260,8 @@ db_quota_set_common(struct quota *q, const char *name, int is_group)
 {
 	struct db_quota_arg *arg = db_quota_arg_alloc(q, name, is_group);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002048,
-			"db_quota_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	if (q->on_db)
 		return (dbq_enter(&dbq, (dbq_entry_func_t)ops->quota_modify,
@@ -1455,12 +1294,8 @@ db_quota_remove_arg_alloc(const char *name, int is_group)
 	sz = gfarm_size_add(&overflow, sizeof(*arg), name_len + 1);
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL) {
-		gflog_debug(GFARM_MSG_1002049,
-			"allocation of 'db_quota_remove_arg' failed or "
-			"overflow");
+	if (overflow || arg == NULL)
 		return (NULL);
-	}
 	arg->name = (char *)arg + sizeof(*arg);
 
 	arg->is_group = is_group;
@@ -1475,11 +1310,8 @@ db_quota_remove_common(const char *name, int is_group)
 	struct db_quota_remove_arg *arg
 		= db_quota_remove_arg_alloc(name, is_group);
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_1002050,
-			"db_quota_remove_arg_alloc() failed");
+	if (arg == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->quota_remove, arg));
 }
 

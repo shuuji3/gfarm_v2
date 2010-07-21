@@ -86,11 +86,8 @@ gfarm_pgsql_make_conninfo(const char **varnames, char **varvalues, int n,
 	++length; /* '\0' */
 
 	GFARM_MALLOC_ARRAY(conninfo, length);
-	if (conninfo == NULL) {
-		gflog_debug(GFARM_MSG_1002144,
-			"allocation of 'conninfo' failed");
+	if (conninfo == NULL)
 		return (NULL);
-	}
 
 	p = conninfo;
 	for (i = 0; i < n; i++) {
@@ -150,11 +147,8 @@ gfarm_pgsql_initialize(void)
 	conninfo = gfarm_pgsql_make_conninfo(
 	    varnames, varvalues, GFARM_ARRAY_LENGTH(varnames),
 	    gfarm_postgresql_conninfo);
-	if (conninfo == NULL) {
-		gflog_debug(GFARM_MSG_1002145,
-			"gfarm_pgsql_make_conninfo() failed");
+	if (conninfo == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	/*
 	 * initialize PostgreSQL
@@ -231,25 +225,11 @@ pgsql_get_string(PGresult *res, int row, const char *field_name)
 	char *s = strdup(v);
 
 	if (s == NULL) {
-		gflog_error(GFARM_MSG_1002329,
+		gflog_error(GFARM_MSG_UNFIXED,
 		    "pgsql_get_string(%s): %s: no memory", field_name, v);
 	}
 	return (s);
 }
-
-char *
-pgsql_get_string_ck(PGresult *res, int row, const char *field_name)
-{
-	char *v = PQgetvalue(res, row, PQfnumber(res, field_name));
-	char *s = strdup(v);
-
-	if (s == NULL) {
-		gflog_fatal(GFARM_MSG_1002371,
-		    "pgsql_get_string_ck(%s): %s: no memory", field_name, v);
-	}
-	return (s);
-}
-
 
 static void *
 pgsql_get_binary(PGresult *res, int row, const char *field_name, int *size)
@@ -269,11 +249,11 @@ pgsql_get_binary(PGresult *res, int row, const char *field_name, int *size)
 	if (dst != NULL)
 		memcpy(dst, src, *size);
 	else
-		gflog_error(GFARM_MSG_1002330,
+		gflog_error(GFARM_MSG_UNFIXED,
 		    "pgsql_get_binary(%s): size=%d: no memory",
 		    field_name, (int)*size);
 
-	return (dst);
+	return dst;
 }
 
 /**********************************************************************/
@@ -421,7 +401,7 @@ pgsql_should_retry(PGresult *res)
 	int retry = 0;
 
 	if (PQstatus(conn) == CONNECTION_BAD) {
-		gflog_error(GFARM_MSG_1002331,
+		gflog_error(GFARM_MSG_UNFIXED,
 		    "PostgreSQL connection is down: %s: %s",
 		    PQresultErrorField(res, PG_DIAG_SQLSTATE),
 		    PQresultErrorMessage(res));
@@ -431,7 +411,7 @@ pgsql_should_retry(PGresult *res)
 			if ((retry >= MSG_THRESHOLD &&
 			     retry % (DAY_PER_SECOND/RETRY_INTERVAL) == 0) ||
 			    IS_POWER_OF_2(retry)) {
-				gflog_error(GFARM_MSG_1002332,
+				gflog_error(GFARM_MSG_UNFIXED,
 				    "PostgreSQL connection retrying");
 			}
 			PQreset(conn);
@@ -440,7 +420,7 @@ pgsql_should_retry(PGresult *res)
 			sleep(RETRY_INTERVAL);
 		}
 		/* XXX FIXME: one transaction may be lost in this case */
-		gflog_info(GFARM_MSG_1002333,
+		gflog_info(GFARM_MSG_UNFIXED,
 		    "PostgreSQL connection recovered");
 		return (1);
 	} else if (PQresultStatus(res) == PGRES_FATAL_ERROR &&
@@ -448,7 +428,7 @@ pgsql_should_retry(PGresult *res)
 	    GFARM_PGSQL_ERRCODE_SHUTDOWN_PREFIX,
 	    strlen(GFARM_PGSQL_ERRCODE_SHUTDOWN_PREFIX)) == 0) {
 		/* does this code path happen? */
-		gflog_error(GFARM_MSG_1002334,
+		gflog_error(GFARM_MSG_UNFIXED,
 		    "PostgreSQL connection problem: %s: %s",
 		    PQresultErrorField(res, PG_DIAG_SQLSTATE),
 		    PQresultErrorMessage(res));
@@ -594,35 +574,17 @@ gfarm_pgsql_generic_get_all(
 	if (e == GFARM_ERR_NO_ERROR) {
 		n = PQntuples(res);
 		if (n == 0) {
-			gflog_debug(GFARM_MSG_1002147,
-				"select results count : 0");
 			e = GFARM_ERR_NO_SUCH_OBJECT;
 		} else if ((results = malloc(ops->info_size * n)) == NULL) {
-			gflog_debug(GFARM_MSG_1002148,
-				"allocation of 'results' failed");
 			e = GFARM_ERR_NO_MEMORY;
 		} else {
 			for (i = 0; i < n; i++) {
 				(*ops->clear)(results + i * ops->info_size);
-				e = (*set_fields)(res, i,
+				(*set_fields)(res, i,
 				    results + i * ops->info_size);
-				if (e != GFARM_ERR_NO_ERROR) {
-					gflog_debug(GFARM_MSG_1002372,
-					    "gfarm_pgsql_generic_get_all: "
-					    "%s: %d/%d: %s",
-					    sql, i, n, gfarm_error_string(e));
-					while (--i >= 0) {
-						(*ops->free)(results +
-						    i * ops->info_size);
-					}
-					free(results);
-					break;
-				}
 			}
-			if (e == GFARM_ERR_NO_ERROR) {
-				*np = n;
-				*(char **)resultsp = results;
-			}
+			*np = n;
+			*(char **)resultsp = results;
 		}
 	}
 	PQclear(res);
@@ -647,10 +609,9 @@ gfarm_pgsql_generic_grouping_get_all(
 	int ngroups;
 	char *results;
 
-	if ((e = gfarm_pgsql_start_with_retry(diag)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1002149, "pgsql restart failed");
+	if ((e = gfarm_pgsql_start_with_retry(diag)) != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
+
 	cres = PQexecParams(conn,
 		count_sql,
 		nparams,
@@ -660,16 +621,11 @@ gfarm_pgsql_generic_grouping_get_all(
 		NULL, /* param formats */
 		1); /* ask for binary results */
 	e = gfarm_pgsql_check_select(cres, count_sql, diag);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1002150,
-			"pgsql select failed : count_sql");
-	} else if ((ngroups = PQntuples(cres)) == 0) {
-		gflog_debug(GFARM_MSG_1002151,
-			"pgsql select results count is 0 : count_sql");
+	if (e != GFARM_ERR_NO_ERROR)
+		;
+	else if ((ngroups = PQntuples(cres)) == 0) {
 		e = GFARM_ERR_NO_SUCH_OBJECT;
 	} else if ((results = malloc(ops->info_size * ngroups)) == NULL) {
-		gflog_debug(GFARM_MSG_1002152,
-				"allocation of 'results' failed");
 		e = GFARM_ERR_NO_MEMORY;
 	} else {
 		rres = PQexecParams(conn,
@@ -682,8 +638,6 @@ gfarm_pgsql_generic_grouping_get_all(
 			1); /* ask for binary results */
 		e = gfarm_pgsql_check_select(rres, results_sql, diag);
 		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1002153,
-				"pgsql select failed :results_sql");
 			free(results);
 		} else {
 			int i, startrow = 0;
@@ -697,9 +651,6 @@ gfarm_pgsql_generic_grouping_get_all(
 				    rres, startrow, nmembers,
 				    results + i * ops->info_size);
 				if (e != GFARM_ERR_NO_ERROR) {
-					gflog_debug(GFARM_MSG_1002154,
-						"set_fields_with_grouping "
-						"failed");
 					while (--i >= 0) {
 						(*ops->free)(results
 						    + i * ops->info_size);
@@ -744,12 +695,8 @@ gfarm_pgsql_generic_grouping_get_all(
 	int32 = ntohl(int32); \
 }
 
-/*
- * struct user::gsi_dn may be loaded by this function,
- * but currently "COPY User TO STDOUT BINARY" is NOT used for struct user.
- */
 static char *
-get_string_or_null_from_copy_binary(const char **bufp, int *residualp)
+get_value_from_varchar_copy_binary(const char **bufp, int *residualp)
 {
 	int32_t len;
 	char *p;
@@ -766,9 +713,6 @@ get_string_or_null_from_copy_binary(const char **bufp, int *residualp)
 		    "metadb_pgsql: copy varchar %d > %d",
 		    len, *residualp);
 	GFARM_MALLOC_ARRAY(p, len + 1);
-	if (p == NULL)
-		gflog_fatal(GFARM_MSG_1002335,
-		    "metadb_pgsql: copy varchar length=%d", len);
 	memcpy(p, *bufp, len);
 	p[len] = '\0';
 	*bufp += len;
@@ -776,27 +720,15 @@ get_string_or_null_from_copy_binary(const char **bufp, int *residualp)
 	return (p);
 }
 
-static char *
-get_string_from_copy_binary(const char **bufp, int *residualp)
-{
-	char *p = get_string_or_null_from_copy_binary(bufp, residualp);
-
-	if (p == NULL)
-		gflog_fatal(GFARM_MSG_1002336,
-		    "metadb_pgsql: copy varchar: got NULL");
-	return (p);
-}
-
 static uint32_t
-get_int32_from_copy_binary(const char **bufp, int *residualp)
+get_value_from_integer_copy_binary(const char **bufp, int *residualp)
 {
 	int32_t len;
 	uint32_t val;
 
 	COPY_INT32(len, *bufp, *residualp, "metadb_pgsql: copy int32 len");
 	if (len == -1)
-		gflog_fatal(GFARM_MSG_1002337,
-		    "metadb_pgsql: copy int32: got NULL");
+		return (0); /* stopgap for NULL field */
 	if (len != sizeof(val))
 		gflog_fatal(GFARM_MSG_1000432,
 		    "metadb_pgsql: copy int32 length=%d", len);
@@ -806,15 +738,14 @@ get_int32_from_copy_binary(const char **bufp, int *residualp)
 }
 
 static uint64_t
-get_int64_from_copy_binary(const char **bufp, int *residualp)
+get_value_from_int8_copy_binary(const char **bufp, int *residualp)
 {
 	int32_t len;
 	uint64_t val;
 
 	COPY_INT32(len, *bufp, *residualp, "metadb_pgsql: copy int64 len");
 	if (len == -1)
-		gflog_fatal(GFARM_MSG_1002338,
-		    "metadb_pgsql: copy int64: got NULL");
+		return (0); /* stopgap for NULL field */
 	if (len != sizeof(val))
 		gflog_fatal(GFARM_MSG_1000433,
 		    "metadb_pgsql: copy int64 length=%d", len);
@@ -978,20 +909,15 @@ host_info_set_fields_with_grouping(
 	struct gfarm_host_info *info = vinfo;
 	int i;
 
-	info->hostname = pgsql_get_string_ck(res, startrow, "hostname");
+	info->hostname = pgsql_get_string(res, startrow, "hostname");
 	info->port = pgsql_get_int32(res, startrow, "port");
-	info->architecture = pgsql_get_string_ck(res, startrow, "architecture");
+	info->architecture = pgsql_get_string(res, startrow, "architecture");
 	info->ncpu = pgsql_get_int32(res, startrow, "ncpu");
 	info->flags = pgsql_get_int32(res, startrow, "flags");
 	info->nhostaliases = nhostaliases;
 	GFARM_MALLOC_ARRAY(info->hostaliases, nhostaliases + 1);
-	if (info->hostaliases == NULL) {
-		gflog_fatal(GFARM_MSG_1002373,
-		    "host_info_set_fields_with_grouping(%s, %d): no memory",
-		    info->hostname, nhostaliases + 1);
-	}
 	for (i = 0; i < nhostaliases; i++) {
-		info->hostaliases[i] = pgsql_get_string_ck(res, startrow + i,
+		info->hostaliases[i] = pgsql_get_string(res, startrow + i,
 		    "hostalias");
 	}
 	info->hostaliases[info->nhostaliases] = NULL;
@@ -1041,11 +967,8 @@ hostaliases_set(struct gfarm_host_info *info)
 			NULL, /* param formats */
 			0, /* ask for text results */
 			"pgsql_hostaliases_set");
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1002155,
-				"gfarm_pgsql_insert_and_log() failed");
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 	}
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1063,11 +986,9 @@ pgsql_host_update(struct gfarm_host_info *info, const char *sql,
 	char ncpu[GFARM_INT32STRLEN + 1];
 	char flags[GFARM_INT32STRLEN + 1];
 
-	if ((e = gfarm_pgsql_start_with_retry(diag)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1002156,
-			"gfarm_pgsql_start_with_retry() failed");
+	if ((e = gfarm_pgsql_start_with_retry(diag)) != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
+
 	paramValues[0] = info->hostname;
 	sprintf(port, "%d", info->port);
 	paramValues[1] = port;
@@ -1176,11 +1097,8 @@ gfarm_pgsql_host_load(void *closure,
 		&n, &infos,
 		&gfarm_base_host_info_ops, host_info_set_fields_with_grouping,
 		"pgsql_host_load");
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1002157,
-			"gfarm_pgsql_generic_grouping_get_all() failed");
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	for (i = 0; i < n; i++)
 		(*callback)(closure, &infos[i]);
@@ -1196,10 +1114,10 @@ user_info_set_field(PGresult *res, int row, void *vinfo)
 {
 	struct gfarm_user_info *info = vinfo;
 
-	info->username = pgsql_get_string_ck(res, row, "username");
-	info->homedir = pgsql_get_string_ck(res, row, "homedir");
-	info->realname = pgsql_get_string_ck(res, row, "realname");
-	info->gsi_dn = pgsql_get_string_ck(res, row, "gsiDN");
+	info->username = pgsql_get_string(res, row, "username");
+	info->homedir = pgsql_get_string(res, row, "homedir");
+	info->realname = pgsql_get_string(res, row, "realname");
+	info->gsi_dn = pgsql_get_string(res, row, "gsiDN");
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -1291,11 +1209,9 @@ gfarm_pgsql_user_load(void *closure,
 		&n, &infos,
 		&gfarm_base_user_info_ops, user_info_set_field,
 		"pgsql_user_load");
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1002158,
-			"gfarm_pgsql_generic_get_all()");
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
+
 	for (i = 0; i < n; i++)
 		(*callback)(closure, &infos[i]);
 
@@ -1312,17 +1228,12 @@ group_info_set_fields_with_grouping(
 	struct gfarm_group_info *info = vinfo;
 	int i;
 
-	info->groupname = pgsql_get_string_ck(res, startrow, "groupname");
+	info->groupname = pgsql_get_string(res, startrow, "groupname");
 	info->nusers = nusers;
 	GFARM_MALLOC_ARRAY(info->usernames, nusers + 1);
-	if (info->usernames == NULL) {
-		gflog_fatal(GFARM_MSG_1002374,
-		    "group_info_set_fields_with_grouping(%s, %d): no memory",
-		    info->groupname, nusers + 1);
-	}
 	for (i = 0; i < nusers; i++) {
 		info->usernames[i] =
-		    pgsql_get_string_ck(res, startrow + i, "username");
+		    pgsql_get_string(res, startrow + i, "username");
 	}
 	info->usernames[info->nusers] = NULL;
 	return (GFARM_ERR_NO_ERROR);
@@ -1372,11 +1283,8 @@ grpassign_set(struct gfarm_group_info *info)
 			NULL, /* param formats */
 			0, /* ask for text results */
 			"pgsql_grpassign_set");
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1002159,
-				"gfarm_pgsql_insert_and_log() failed");
+		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 	}
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -1386,9 +1294,9 @@ gfarm_pgsql_group_add(struct gfarm_group_info *info)
 {
 	const char *paramValues[1];
 	gfarm_error_t e;
-	static const char diag[] = "pgsql_group_add";
+	static const char msg[] = "pgsql_group_add";
 
-	if ((e = gfarm_pgsql_start_with_retry(diag))
+	if ((e = gfarm_pgsql_start_with_retry(msg))
 	    == GFARM_ERR_NO_ERROR) {
 
 		paramValues[0] = info->groupname;
@@ -1400,15 +1308,15 @@ gfarm_pgsql_group_add(struct gfarm_group_info *info)
 			NULL, /* param lengths */
 			NULL, /* param formats */
 			0, /* ask for text results */
-			diag);
+			msg);
 
 		if (e == GFARM_ERR_NO_ERROR)
 			e = grpassign_set(info);
 
 		if (e == GFARM_ERR_NO_ERROR)
-			e = gfarm_pgsql_commit(diag);
+			e = gfarm_pgsql_commit(msg);
 		else
-			gfarm_pgsql_rollback(diag);
+			gfarm_pgsql_rollback(msg);
 	}
 
 	free(info);
@@ -1420,7 +1328,7 @@ gfarm_pgsql_group_modify(struct db_group_modify_arg *arg)
 {
 	struct gfarm_group_info *info = &arg->gi;
 	gfarm_error_t e;
-	static const char diag[] = "gfarm_pgsql_group_modify";
+	static const char msg[] = "gfarm_pgsql_group_modify";
 
 	if ((e = gfarm_pgsql_start_with_retry("pgsql_group_modify"))
 	    == GFARM_ERR_NO_ERROR) {
@@ -1431,9 +1339,9 @@ gfarm_pgsql_group_modify(struct db_group_modify_arg *arg)
 			e = grpassign_set(info);
 
 		if (e == GFARM_ERR_NO_ERROR)
-			e = gfarm_pgsql_commit(diag);
+			e = gfarm_pgsql_commit(msg);
 		else
-			gfarm_pgsql_rollback(diag);
+			gfarm_pgsql_rollback(msg);
 	}
 	free(arg);
 	return (e);
@@ -1485,11 +1393,9 @@ gfarm_pgsql_group_load(void *closure,
 		&gfarm_base_group_info_ops,
 		group_info_set_fields_with_grouping,
 		"pgsql_group_load");
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1002160,
-			"gfarm_pgsql_generic_grouping_get_all() failed");
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
+
 	for (i = 0; i < n; i++)
 		(*callback)(closure, &infos[i]);
 
@@ -1564,7 +1470,7 @@ gfarm_pgsql_inode_add(struct gfs_stat *info)
 {
 	return pgsql_inode_call(info,
 		"INSERT INTO INode (inumber, igen, nlink, size, mode, "
-			           "username, groupname, "
+				   "username, groupname, "
 				   "atimesec, atimensec, "
 				   "mtimesec, mtimensec, "
 				   "ctimesec, ctimensec) "
@@ -1702,14 +1608,6 @@ pgsql_inode_timespec_call(struct db_inode_timespec_modify_arg *arg,
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_gen_modify(struct db_inode_uint64_modify_arg *arg)
-{
-	return pgsql_inode_uint64_call(arg,
-	    "UPDATE INode SET igen = $2 WHERE inumber = $1",
-	    "pgsql_inode_gen_modify");
-}
-
-static gfarm_error_t
 gfarm_pgsql_inode_nlink_modify(struct db_inode_uint64_modify_arg *arg)
 {
 	return pgsql_inode_uint64_call(arg,
@@ -1787,26 +1685,26 @@ inode_info_set_fields_from_copy_binary(
 		gflog_fatal(GFARM_MSG_1000444,
 		    "pgsql_inode_load: fields = %d", num_fields);
 
-	info->st_ino = get_int64_from_copy_binary(&buf, &residual);
-	info->st_gen = get_int64_from_copy_binary(&buf, &residual);
-	info->st_nlink = get_int64_from_copy_binary(&buf, &residual);
-	info->st_size = get_int64_from_copy_binary(&buf, &residual);
+	info->st_ino = get_value_from_int8_copy_binary(&buf, &residual);
+	info->st_gen = get_value_from_int8_copy_binary(&buf, &residual);
+	info->st_nlink = get_value_from_int8_copy_binary(&buf, &residual);
+	info->st_size = get_value_from_int8_copy_binary(&buf, &residual);
 	info->st_ncopy = 0;
-	info->st_mode = get_int32_from_copy_binary(&buf, &residual);
-	info->st_user = get_string_from_copy_binary(&buf, &residual);
-	info->st_group = get_string_from_copy_binary(&buf, &residual);
+	info->st_mode = get_value_from_integer_copy_binary(&buf, &residual);
+	info->st_user = get_value_from_varchar_copy_binary(&buf, &residual);
+	info->st_group = get_value_from_varchar_copy_binary(&buf, &residual);
 	info->st_atimespec.tv_sec =
-		get_int64_from_copy_binary(&buf, &residual);
+		get_value_from_int8_copy_binary(&buf, &residual);
 	info->st_atimespec.tv_nsec =
-		get_int32_from_copy_binary(&buf, &residual);
+		get_value_from_integer_copy_binary(&buf, &residual);
 	info->st_mtimespec.tv_sec =
-		get_int64_from_copy_binary(&buf, &residual);
+		get_value_from_int8_copy_binary(&buf, &residual);
 	info->st_mtimespec.tv_nsec =
-		get_int32_from_copy_binary(&buf, &residual);
+		get_value_from_integer_copy_binary(&buf, &residual);
 	info->st_ctimespec.tv_sec =
-		get_int64_from_copy_binary(&buf, &residual);
+		get_value_from_int8_copy_binary(&buf, &residual);
 	info->st_ctimespec.tv_nsec =
-		get_int32_from_copy_binary(&buf, &residual);
+		get_value_from_integer_copy_binary(&buf, &residual);
 }
 
 static gfarm_error_t
@@ -1923,9 +1821,9 @@ file_info_set_fields_from_copy_binary(
 		gflog_fatal(GFARM_MSG_1000445,
 		    "pgsql_file_info_load: fields = %d", num_fields);
 
-	info->inum = get_int64_from_copy_binary(&buf, &residual);
-	info->type = get_string_from_copy_binary(&buf, &residual);
-	info->sum = get_string_from_copy_binary(&buf, &residual);
+	info->inum = get_value_from_int8_copy_binary(&buf, &residual);
+	info->type = get_value_from_varchar_copy_binary(&buf, &residual);
+	info->sum = get_value_from_varchar_copy_binary(&buf, &residual);
 	info->len = strlen(info->sum);
 }
 
@@ -2010,8 +1908,8 @@ filecopy_set_fields_from_copy_binary(
 		gflog_fatal(GFARM_MSG_1000446,
 		    "pgsql_filecopy_load: fields = %d", num_fields);
 
-	info->inum = get_int64_from_copy_binary(&buf, &residual);
-	info->hostname = get_string_from_copy_binary(&buf, &residual);
+	info->inum = get_value_from_int8_copy_binary(&buf, &residual);
+	info->hostname = get_value_from_varchar_copy_binary(&buf, &residual);
 }
 
 static gfarm_error_t
@@ -2101,9 +1999,9 @@ deadfilecopy_set_fields_from_copy_binary(
 		    "pgsql_deadfilecopy_load: fields = %d",
 		    num_fields);
 
-	info->inum = get_int64_from_copy_binary(&buf, &residual);
-	info->igen = get_int64_from_copy_binary(&buf, &residual);
-	info->hostname = get_string_from_copy_binary(&buf, &residual);
+	info->inum = get_value_from_int8_copy_binary(&buf, &residual);
+	info->igen = get_value_from_int8_copy_binary(&buf, &residual);
+	info->hostname = get_value_from_varchar_copy_binary(&buf, &residual);
 }
 
 static gfarm_error_t
@@ -2195,10 +2093,10 @@ direntry_set_fields_from_copy_binary(
 		gflog_fatal(GFARM_MSG_1000448,
 		    "pgsql_direntry_load: fields = %d", num_fields);
 
-	info->dir_inum = get_int64_from_copy_binary(&buf, &residual);
-	info->entry_name = get_string_from_copy_binary(&buf, &residual);
+	info->dir_inum = get_value_from_int8_copy_binary(&buf, &residual);
+	info->entry_name = get_value_from_varchar_copy_binary(&buf, &residual);
 	info->entry_len = strlen(info->entry_name);
-	info->entry_inum = get_int64_from_copy_binary(&buf, &residual);
+	info->entry_inum = get_value_from_int8_copy_binary(&buf, &residual);
 }
 
 static gfarm_error_t
@@ -2282,8 +2180,8 @@ symlink_set_fields_from_copy_binary(
 		gflog_fatal(GFARM_MSG_1000449,
 		    "pgsql_symlink_load: fields = %d", num_fields);
 
-	info->inum = get_int64_from_copy_binary(&buf, &residual);
-	info->source_path = get_string_from_copy_binary(&buf, &residual);
+	info->inum = get_value_from_int8_copy_binary(&buf, &residual);
+	info->source_path = get_value_from_varchar_copy_binary(&buf, &residual);
 }
 
 static gfarm_error_t
@@ -2480,8 +2378,6 @@ pgsql_xattr_set_attrvalue_string(PGresult *res, int row, void *vinfo)
 		info->attrsize = strlen(info->attrvalue) + 1;
 		return (GFARM_ERR_NO_ERROR);
 	} else {
-		gflog_debug(GFARM_MSG_1002161,
-			"pgsql_get_string() failed");
 		info->attrsize = 0;
 		return (GFARM_ERR_NO_MEMORY);
 	}
@@ -2495,13 +2391,10 @@ pgsql_xattr_set_attrvalue_binary(PGresult *res, int row, void *vinfo)
 	info->attrvalue = pgsql_get_binary(res, row,
 			"attrvalue", &info->attrsize);
 	// NOTE: we allow attrsize==0, attrvalue==NULL
-	if ((info->attrsize > 0) && (info->attrvalue == NULL)) {
-		gflog_debug(GFARM_MSG_1002162,
-			"pgsql_get_binary() failed");
+	if ((info->attrsize > 0) && (info->attrvalue == NULL))
 		return (GFARM_ERR_NO_MEMORY);
-	} else {
+	else
 		return (GFARM_ERR_NO_ERROR);
-	}
 }
 
 static gfarm_error_t
@@ -2510,7 +2403,7 @@ gfarm_pgsql_xattr_get(struct db_xattr_arg *arg)
 	gfarm_error_t e;
 	const char *paramValues[2];
 	char inumber[GFARM_INT64STRLEN + 1];
-	const char *diag;
+	char *diag;
 	char *command;
 	int n;
 	struct xattr_info *vinfo;
@@ -2554,7 +2447,7 @@ pgsql_xattr_set_inum_and_attrname(PGresult *res, int row, void *vinfo)
 	struct xattr_info *info = vinfo;
 
 	info->inum = pgsql_get_int64(res, row, "inumber");
-	info->attrname = pgsql_get_string_ck(res, row, "attrname");
+	info->attrname = pgsql_get_string(res, row, "attrname");
 	info->namelen = strlen(info->attrname) + 1; // include '\0'
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -2585,11 +2478,9 @@ gfarm_pgsql_xattr_load(void *closure,
 		diag);
 	if (e == GFARM_ERR_NO_SUCH_OBJECT)
 		return GFARM_ERR_NO_ERROR;
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1002163,
-			"gfarm_pgsql_generic_get_all() failed");
+	if (e != GFARM_ERR_NO_ERROR)
 		return e;
-	}
+
 	for (i = 0; i < n; i++) {
 		(*callback)(&xmlMode, &vinfo[i]);
 	}
@@ -2604,14 +2495,8 @@ pgsql_xattr_set_attrname(PGresult *res, int row, void *vinfo)
 	struct xattr_info *info = vinfo;
 
 	info->attrname = pgsql_get_string(res, row, "attrname");
-	if (info->attrname == NULL) {
-		/* error is logged in pgsql_get_string() */
-		info->namelen = 0;
-		return (GFARM_ERR_NO_MEMORY);
-	} else {
-		info->namelen = strlen(info->attrname) + 1; /* include '\0' */
-		return (GFARM_ERR_NO_ERROR);
-	}
+	info->namelen = strlen(info->attrname) + 1; // include '\0'
+	return (GFARM_ERR_NO_ERROR);
 }
 
 static gfarm_error_t
@@ -2645,15 +2530,15 @@ gfarm_pgsql_xmlattr_find(struct db_xmlattr_find_arg *arg)
 		&gfarm_base_xattr_info_ops, pgsql_xattr_set_attrname,
 		diag);
 
-	if (e == GFARM_ERR_NO_ERROR) {
+	if (e == GFARM_ERR_NO_ERROR)
 		e = (*(arg->foundcallback))(arg->foundcbdata, n, vinfo);
-		if (n > 0)
-			gfarm_base_generic_info_free_all(n, vinfo,
-			    &gfarm_base_xattr_info_ops);
-	} else if (e == GFARM_ERR_NO_SUCH_OBJECT)
+	else if (e == GFARM_ERR_NO_SUCH_OBJECT)
 		e = GFARM_ERR_NO_ERROR;
+	if (n > 0)
+		gfarm_base_generic_info_free_all(n, vinfo,
+			&gfarm_base_xattr_info_ops);
 	free(arg);
-	return (e);
+	return e;
 }
 
 /**********************************************************************/
@@ -2835,28 +2720,28 @@ quota_info_set_fields_from_copy_binary(
 		gflog_fatal(GFARM_MSG_1000450,
 			    "pgsql_quota_load: fields = %d", num_fields);
 
-	info->name = get_string_from_copy_binary(&buf, &residual);
-	info->grace_period = get_int64_from_copy_binary(&buf, &residual);
-	info->space = get_int64_from_copy_binary(&buf, &residual);
-	info->space_exceed = get_int64_from_copy_binary(&buf, &residual);
-	info->space_soft = get_int64_from_copy_binary(&buf, &residual);
-	info->space_hard = get_int64_from_copy_binary(&buf, &residual);
-	info->num = get_int64_from_copy_binary(&buf, &residual);
-	info->num_exceed = get_int64_from_copy_binary(&buf, &residual);
-	info->num_soft = get_int64_from_copy_binary(&buf, &residual);
-	info->num_hard = get_int64_from_copy_binary(&buf, &residual);
-	info->phy_space = get_int64_from_copy_binary(&buf, &residual);
-	info->phy_space_exceed = get_int64_from_copy_binary(
+	info->name = get_value_from_varchar_copy_binary(&buf, &residual);
+	info->grace_period = get_value_from_int8_copy_binary(&buf, &residual);
+	info->space = get_value_from_int8_copy_binary(&buf, &residual);
+	info->space_exceed = get_value_from_int8_copy_binary(&buf, &residual);
+	info->space_soft = get_value_from_int8_copy_binary(&buf, &residual);
+	info->space_hard = get_value_from_int8_copy_binary(&buf, &residual);
+	info->num = get_value_from_int8_copy_binary(&buf, &residual);
+	info->num_exceed = get_value_from_int8_copy_binary(&buf, &residual);
+	info->num_soft = get_value_from_int8_copy_binary(&buf, &residual);
+	info->num_hard = get_value_from_int8_copy_binary(&buf, &residual);
+	info->phy_space = get_value_from_int8_copy_binary(&buf, &residual);
+	info->phy_space_exceed = get_value_from_int8_copy_binary(
 		&buf, &residual);
-	info->phy_space_soft = get_int64_from_copy_binary(
+	info->phy_space_soft = get_value_from_int8_copy_binary(
 		&buf, &residual);
-	info->phy_space_hard = get_int64_from_copy_binary(
+	info->phy_space_hard = get_value_from_int8_copy_binary(
 		&buf, &residual);
-	info->phy_num = get_int64_from_copy_binary(&buf, &residual);
-	info->phy_num_exceed = get_int64_from_copy_binary(
+	info->phy_num = get_value_from_int8_copy_binary(&buf, &residual);
+	info->phy_num_exceed = get_value_from_int8_copy_binary(
 		&buf, &residual);
-	info->phy_num_soft = get_int64_from_copy_binary(&buf, &residual);
-	info->phy_num_hard = get_int64_from_copy_binary(&buf, &residual);
+	info->phy_num_soft = get_value_from_int8_copy_binary(&buf, &residual);
+	info->phy_num_hard = get_value_from_int8_copy_binary(&buf, &residual);
 }
 
 static gfarm_error_t
@@ -2911,7 +2796,6 @@ const struct db_ops db_pgsql_ops = {
 
 	gfarm_pgsql_inode_add,
 	gfarm_pgsql_inode_modify,
-	gfarm_pgsql_inode_gen_modify,
 	gfarm_pgsql_inode_nlink_modify,
 	gfarm_pgsql_inode_size_modify,
 	gfarm_pgsql_inode_mode_modify,

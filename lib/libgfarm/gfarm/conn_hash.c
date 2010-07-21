@@ -2,7 +2,6 @@
 #include <string.h>
 
 #include <gfarm/gfarm_config.h>
-#include <gfarm/gflog.h>
 #include <gfarm/error.h>
 #include <gfarm/gfarm_misc.h>
 
@@ -68,13 +67,8 @@ gfp_conn_hash_table_init(
 
 	hashtab = gfarm_hash_table_alloc(hashtabsize,
 	    gfp_conn_hash_index, gfp_conn_hash_equal);
-	if (hashtab == NULL) {
-		gflog_debug(GFARM_MSG_1001081,
-			"allocation of hashtable(%d) failed: %s",
-			hashtabsize,
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (hashtab == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 	*hashtabp = hashtab;
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -92,26 +86,16 @@ gfp_conn_hash_enter(struct gfarm_hash_table **hashtabp, int hashtabsize,
 
 	if (*hashtabp == NULL &&
 	    (e = gfp_conn_hash_table_init(hashtabp, hashtabsize))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001082,
-			"initialization of connection hashtable (%d) failed: %s",
-			hashtabsize,
-			gfarm_error_string(e));
+	    != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	id.hostname = (char *)hostname; /* UNCONST */
 	id.port = port;
 	id.username = (char *)username; /* UNCONST */
 	entry = gfarm_hash_enter(*hashtabp, &id, sizeof(id), entrysize,
 	    &created);
-	if (entry == NULL) {
-		gflog_debug(GFARM_MSG_1001083,
-			"insertion to hashtable (%zd) failed: %s",
-			entrysize,
-			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+	if (entry == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	}
 
 	if (created) {
 		idp = gfarm_hash_entry_key(entry);
@@ -125,9 +109,6 @@ gfp_conn_hash_enter(struct gfarm_hash_table **hashtabp, int hashtabsize,
 			idp->hostname = (char *)hostname; /* UNCONST */
 			idp->username = (char *)username; /* UNCONST */
 			gfarm_hash_purge(*hashtabp, &id, sizeof(id));
-			gflog_debug(GFARM_MSG_1001084,
-				"allocation of hostname or username failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
 			return (GFARM_ERR_NO_MEMORY);
 		}
 	}
@@ -148,24 +129,15 @@ gfp_conn_hash_lookup(struct gfarm_hash_table **hashtabp, int hashtabsize,
 
 	if (*hashtabp == NULL &&
 	    (e = gfp_conn_hash_table_init(hashtabp, hashtabsize)) !=
-	    GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001085,
-			"initialization of connection hashtable (%d) failed: %s",
-			hashtabsize,
-			gfarm_error_string(e));
+	    GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 
 	id.hostname = (char *)hostname; /* UNCONST */
 	id.port = port;
 	id.username = (char *)username; /* UNCONST */
 	entry = gfarm_hash_lookup(*hashtabp, &id, sizeof(id));
-	if (entry == NULL) {
-		gflog_debug(GFARM_MSG_1001086,
-			"lookup in hashtable (%s)(%d)(%s) failed",
-			hostname, port, username);
+	if (entry == NULL)
 		return (GFARM_ERR_NO_SUCH_OBJECT);
-	}
 
 	*entry_ret = entry;
 	return (GFARM_ERR_NO_ERROR);

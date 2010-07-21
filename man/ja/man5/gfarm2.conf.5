@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "GFARM2.CONF" "5" "12 April 2010" "Gfarm" ""
+.TH "GFARM2.CONF" "5" "23 June 2010" "Gfarm" ""
 
 .SH NAME
 gfarm2.conf \- Gfarm設定ファイル
@@ -270,7 +270,7 @@ sharedsecret利用時には、この指定は単に無視されます。
 \fBmetadb_server_job_queue_length \fIキュー長\fB\fR
 メタデータサーバgfmdのジョブキューのキュー長を指定します。
 一度に接続する最大クライアントの数くらいに設定すると効果的です。
-デフォルト値は16000です。
+デフォルト値は160です。
 
 この文はgfmd.confのみで有効であり、gfarm2.confでは無視されます。
 
@@ -286,7 +286,7 @@ sharedsecret利用時には、この指定は単に無視されます。
 デフォルト値は180秒です。
 
 Gfarm-2.3.0まではこの文はgfmd.confのみで有効であり、gfarm2.confでは
-無視されていましたが、Gfarm-2.4.0以降はgfsdもこのパラメータを利用し
+無視されていましたが、Gfarm-2.3.1以降はgfsdもこのパラメータを利用し
 gfmd停止を検知するため、
 gfarm2.confとgfmd.confの両方で指定する必要があります。
 
@@ -644,17 +644,6 @@ CPU負荷のクライアントキャッシュにここで指定されるCPU負荷が加えられます。
 	minimum_free_disk_space 1G
 .fi
 .TP
-\fBsimultaneous_replication_receivers \fI同時処理数\fB\fR
-gfmd 主導の複製処理を、単一複製作成ホストに対して、
-同時いくつまで並行して行なうことを許すかを設定します。
-デフォルトは 20です。
-
-例:
-
-.nf
-	simultaneous_replication_receivers 40
-.fi
-.TP
 \fBgfsd_connection_cache \fIコネクション数\fB\fR
 gfarmライブラリがgfsdとの通信に用いるコネクションを、いくつ
 までキャッシュするかを指定します。
@@ -712,6 +701,30 @@ gfarmライブラリが属性をキャッシュしている時間を、ミリ秒単位で指定します。
 .nf
 	log_message_verbose_level 1
 .fi
+.TP
+\fBno_file_system_node_timeout \fI秒数\fB\fR
+利用可能なファイルシステムノードが存在しない場合，
+Gfarmクライアントライブラリはファイルシステムノードが利用可能になるまで試行を繰り返しますが、
+そのタイムアウト時間を秒単位で指定します。
+デフォルトは 30秒です。
+
+例:
+
+.nf
+	no_file_system_node_timeout 30
+.fi
+.TP
+\fBgfmd_reconnection_timeout \fI秒数\fB\fR
+メタデータサーバへの接続が切断された場合，
+メタデータサーバへの再接続を繰り返しますが，
+そのタイムアウト時間を秒単位で指定します。
+デフォルトは 30秒です。
+
+例:
+
+.nf
+	gfmd_reconnection_timeout 30
+.fi
 .SH "GRAMMAR"
 .PP
 gfarm2.confの文法をBNFで記述すると、下記のようになります。
@@ -755,7 +768,6 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 		\~\~<schedule_busy_load_thresh_statement> |
 		\~\~<schedule_virtual_load_statement> |
 		\~\~<minimum_free_disk_space_statement> |
-		\~\~<simultaneous_replication_receivers> |
 		\~\~<gfsd_connection_cache_statement> |
 		\~\~<attr_cache_limit_statement> |
 		\~\~<attr_cache_timeout_statement> |
@@ -817,12 +829,13 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 	<schedule_virtual_load_statement> ::= "schedule_virtual_load" <load>
 	<minimum_free_disk_space_statement> ::=
 		\~\~"minimum_free_disk_space" <size>
-	<simultaneous_replication_receivers> ::= "simultaneous_replication_receivers" <number>
 	<gfsd_connection_cache_statement> ::= "gfsd_connection_cache" <number>
 	<attr_cache_limit_statement> ::= "attr_cache_limit" <number>
 	<attr_cache_timeout_statement> ::= "attr_cache_timeout" <number>
 	<log_level_statement> ::= "log_level" <log_priority>
 	<log_message_verbose_level_statement> ::= "log_message_verbose_level" <number>
+	<no_file_system_node_timeout_statement> ::= "no_file_system_node_timeout" <number>
+	<gfmd_reconnection_timeout_statement> ::= "gfmd_reconnection_timeout" <number>
 	<hostspec> ::= <ipv4_address> | <ipv4_address> "/" <address_mask> |
 		\~\~<hostname> | "." <domain_name> | "*"
 	<pathname> ::= <pathname_character> <pathname_character>*

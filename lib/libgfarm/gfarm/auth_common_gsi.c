@@ -11,7 +11,6 @@
 #include <gfarm/gfarm_misc.h>
 
 #include "gfutil.h"
-#include "thrsubr.h"
 
 #include "gfarm_secure_session.h"
 #include "gfarm_auth.h"
@@ -24,7 +23,6 @@
 static pthread_mutex_t gsi_initialize_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int gsi_initialized;
 static int gsi_server_initialized;
-static const char gsi_initialize_diag[] = "gsi_initialize_mutex";
 
 gfarm_error_t
 gfarm_gsi_client_initialize(void)
@@ -32,12 +30,10 @@ gfarm_gsi_client_initialize(void)
 	OM_uint32 e_major;
 	OM_uint32 e_minor;
 	int rv;
-	static const char diag[] = "gfarm_gsi_client_initialize";
 
-	gfarm_mutex_lock(&gsi_initialize_mutex, diag, gsi_initialize_diag);
+	pthread_mutex_lock(&gsi_initialize_mutex);
 	if (gsi_initialized) {
-		gfarm_mutex_unlock(&gsi_initialize_mutex,
-		    diag, gsi_initialize_diag);
+		pthread_mutex_unlock(&gsi_initialize_mutex);
 		return (GFARM_ERR_NO_ERROR);
 	}
 
@@ -51,13 +47,12 @@ gfarm_gsi_client_initialize(void)
 			gfarmGssPrintMinorStatus(e_minor);
 		}
 		gfarmSecSessionFinalizeInitiator();
-		gfarm_mutex_unlock(&gsi_initialize_mutex,
-		    diag, gsi_initialize_diag);
+		pthread_mutex_unlock(&gsi_initialize_mutex);
 		return (GFARM_ERRMSG_GSI_CREDENTIAL_INITIALIZATION_FAILED);
 	}
 	gsi_initialized = 1;
 	gsi_server_initialized = 0;
-	gfarm_mutex_unlock(&gsi_initialize_mutex, diag, gsi_initialize_diag);
+	pthread_mutex_unlock(&gsi_initialize_mutex);
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -71,13 +66,10 @@ gfarm_gsi_client_cred_name(void)
 	    PTHREAD_MUTEX_INITIALIZER;
 	static int initialized = 0;
 	static char *dn;
-	static const char diag[] = "gfarm_gsi_client_cred_name";
-	static const char mutex_name[] = "client_cred_initialize_mutex";
 
-	gfarm_mutex_lock(&client_cred_initialize_mutex, diag, mutex_name);
+	pthread_mutex_lock(&client_cred_initialize_mutex);
 	if (initialized) {
-		gfarm_mutex_unlock(&client_cred_initialize_mutex,
-		    diag, mutex_name);
+		pthread_mutex_unlock(&client_cred_initialize_mutex);
 		return (dn);
 	}
 
@@ -109,7 +101,7 @@ gfarm_gsi_client_cred_name(void)
 		gfarmGssDeleteName(&name, NULL, NULL);
 	}
 	initialized = 1;
-	gfarm_mutex_unlock(&client_cred_initialize_mutex, diag, mutex_name);
+	pthread_mutex_unlock(&client_cred_initialize_mutex);
 	return (dn);
 }
 
@@ -119,13 +111,11 @@ gfarm_gsi_server_initialize(void)
 	OM_uint32 e_major;
 	OM_uint32 e_minor;
 	int rv;
-	static const char diag[] = "gfarm_gsi_server_initialize";
 
-	gfarm_mutex_lock(&gsi_initialize_mutex, diag, gsi_initialize_diag);
+	pthread_mutex_lock(&gsi_initialize_mutex);
 	if (gsi_initialized) {
 		if (gsi_server_initialized) {
-			gfarm_mutex_unlock(&gsi_initialize_mutex,
-			    diag, gsi_initialize_diag);
+			pthread_mutex_unlock(&gsi_initialize_mutex);
 			return (GFARM_ERR_NO_ERROR);
 		}
 		gfarmSecSessionFinalizeInitiator();
@@ -142,13 +132,12 @@ gfarm_gsi_server_initialize(void)
 			gfarmGssPrintMinorStatus(e_minor);
 		}
 		gfarmSecSessionFinalizeBoth();
-		gfarm_mutex_unlock(&gsi_initialize_mutex,
-		    diag, gsi_initialize_diag);
+		pthread_mutex_unlock(&gsi_initialize_mutex);
 		return (GFARM_ERRMSG_GSI_INITIALIZATION_FAILED);
 	}
 	gsi_initialized = 1;
 	gsi_server_initialized = 1;
-	gfarm_mutex_unlock(&gsi_initialize_mutex, diag, gsi_initialize_diag);
+	pthread_mutex_unlock(&gsi_initialize_mutex);
 	return (GFARM_ERR_NO_ERROR);
 }
 

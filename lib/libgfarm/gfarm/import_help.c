@@ -178,20 +178,12 @@ gfarm_hostlist_read(char *filename,
 
 	*error_linep = -1;
 	e = gfarm_stringlist_init(&host_list);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000987,
-			"gfarm_stringlist_init() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	}
 	if (strcmp(filename, "-") == 0) {
 		fp = stdin;
 	} else if ((fp = fopen(filename, "r")) == NULL) {
 		gfarm_stringlist_free(&host_list);
-		gflog_debug(GFARM_MSG_1000988,
-			"Failed to open file (%s): %s",
-			filename,
-			gfarm_error_string(GFARM_ERR_NO_SUCH_OBJECT));
 		return (GFARM_ERR_NO_SUCH_OBJECT);
 	}
 	for (i = 0; fgets(line, sizeof(line), fp) != NULL; i++) {
@@ -205,9 +197,6 @@ gfarm_hostlist_read(char *filename,
 		if (*s == '\0') {
 			e = GFARM_ERRMSG_HOSTNAME_EXPECTED;
 			*error_linep = i + 1;
-			gflog_debug(GFARM_MSG_1000989,
-				"Host name expected on file (%s) line (%d)",
-				filename, *error_linep);
 			goto error;
 		}
 		for (t = s; *t != '\0' && !isspace(*(unsigned char *)t); t++)
@@ -217,36 +206,23 @@ gfarm_hostlist_read(char *filename,
 		if (host == NULL) {
 			e = GFARM_ERR_NO_MEMORY;
 			*error_linep = i + 1;
-			gflog_debug(GFARM_MSG_1000990,
-				"allocation of string 'host' failed: %s",
-				gfarm_error_string(e));
 			goto error;
 		}
 		e = gfarm_stringlist_add(&host_list, host);
 		if (e != GFARM_ERR_NO_ERROR) {
 			free(host);
 			*error_linep = i + 1;
-			gflog_debug(GFARM_MSG_1000991,
-				"gfarm_stringlist_add() failed: %s",
-				gfarm_error_string(e));
 			goto error;
 		}
 	}
 	if (i == 0) {
 		e = GFARM_ERRMSG_EMPTY_FILE;
-		gflog_debug(GFARM_MSG_1000992,
-			"File is empty (%s)",
-			filename);
 		goto error;
 	}
 	*np = gfarm_stringlist_length(&host_list);
 	*host_table_p = gfarm_strings_alloc_from_stringlist(&host_list);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1000993,
-			"gfarm_strings_alloc_from_stringlist() failed: %s",
-			gfarm_error_string(e));
+	if (e != GFARM_ERR_NO_ERROR)
 		goto error;
-	}
 	/*
 	 * do not call gfarm_stringlist_free_deeply() here,
 	 * because the strings are passed to *host_table.
