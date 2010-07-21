@@ -32,13 +32,8 @@ gfs_statfsnode(char *host, int port,
 	for (;;) {
 		if ((e = gfm_client_connection_and_process_acquire(
 		    gfarm_metadb_server_name, gfarm_metadb_server_port,
-		    &gfm_server)) != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001380,
-				"acquirement of client connection and process "
-				"failed: %s",
-				gfarm_error_string(e));
+		    &gfm_server)) != GFARM_ERR_NO_ERROR)
 			return (e);
-		}
 
 		if ((e = gfs_client_connection_acquire_by_host(gfm_server,
 		    host, port, &gfs_server, NULL))!= GFARM_ERR_NO_ERROR)

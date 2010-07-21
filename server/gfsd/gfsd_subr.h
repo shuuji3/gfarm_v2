@@ -17,4 +17,3 @@ gfarm_error_t gfsd_spool_check(int);
 void fatal_metadb_proto_full(int,
 	const char *, int, const char *,
 	const char *, const char *, gfarm_error_t);
-

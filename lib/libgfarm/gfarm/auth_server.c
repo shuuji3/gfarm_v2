@@ -143,8 +143,6 @@ gfarm_auth_sharedsecret_md5_response(
 	 */
 	if (pwd == NULL) {
 		error = GFARM_AUTH_ERROR_INVALID_CREDENTIAL;
-		gflog_debug(GFARM_MSG_1001074,
-			"Password is null");
 		/* already logged at gfarm_authorize_sharedsecret() */
 	} else if ((e = gfarm_auth_shared_key_get(&expire_expected,
 	    shared_key_expected, pwd->pw_dir, pwd,
@@ -288,7 +286,6 @@ gfarm_authorize_sharedsecret(struct gfp_xdr *conn, int switch_to,
 	int eof;
 	enum gfarm_auth_id_type peer_type;
 	struct passwd pwbuf, *pwd;
-	int is_root = 0;
 
 	e = gfp_xdr_recv(conn, 0, &eof, "s", &global_username);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -396,25 +393,14 @@ gfarm_authorize_sharedsecret(struct gfp_xdr *conn, int switch_to,
 		 * we should create new session before calling
 		 * setlogin().
 		 */
-		if (seteuid(0) == 0) /* make sure to have root privilege */
-			is_root = 1;
-		if (setsid() == -1)
-			gflog_debug_errno(GFARM_MSG_1002346, "setsid()");
+		seteuid(0); /* make sure to have root privilege */
+		setsid();
 #ifdef HAVE_SETLOGIN
-		if (setlogin(pwd->pw_name) == -1 && is_root)
-			gflog_warning_errno(GFARM_MSG_1002347,
-			    "setlogin(%s)", pwd->pw_name);
+		setlogin(pwd->pw_name);
 #endif
-		if (initgroups(pwd->pw_name, pwd->pw_gid) == -1 && is_root)
-			gflog_error_errno(GFARM_MSG_1002348,
-			    "initgroups(%s, %d)",
-			    pwd->pw_name, (int)pwd->pw_gid);
-		if (setgid(pwd->pw_gid) == -1 && is_root)
-			gflog_error_errno(GFARM_MSG_1002349,
-			    "setgid(%d)", (int)pwd->pw_gid);
-		if (setuid(pwd->pw_uid) == -1 && is_root)
-			gflog_error_errno(GFARM_MSG_1002350,
-			    "setuid(%d)", (int)pwd->pw_uid);
+		initgroups(pwd->pw_name, pwd->pw_gid);
+		setgid(pwd->pw_gid);
+		setuid(pwd->pw_uid);
 
 		gfarm_set_global_username(global_username);
 		gfarm_set_local_username(local_username);
@@ -542,10 +528,6 @@ gfarm_authorize(struct gfp_xdr *conn,
 		if (method == GFARM_AUTH_METHOD_NONE) {
 			/* client gave up */
 			if (methods == 0) {
-				gflog_debug(GFARM_MSG_1001075,
-					"Method permission denied: %s",
-					gfarm_error_string(
-						GFARM_ERR_PERMISSION_DENIED));
 				e = GFARM_ERR_PERMISSION_DENIED;
 			} else if (try <= 1) {
 				/*
@@ -557,10 +539,6 @@ gfarm_authorize(struct gfp_xdr *conn,
 				    "doesn't match", hostname);
 				e = GFARM_ERR_PROTOCOL_NOT_SUPPORTED;
 			} else {
-				gflog_debug(GFARM_MSG_1001076,
-					"Authentication failed: %s",
-					gfarm_error_string(
-						GFARM_ERR_AUTHENTICATION));
 				e = GFARM_ERR_AUTHENTICATION;
 			}
 			return (e);
@@ -576,11 +554,6 @@ gfarm_authorize(struct gfp_xdr *conn,
 			if (e == GFARM_ERR_NO_ERROR) {
 				if (auth_methodp != NULL)
 					*auth_methodp = method;
-			} else {
-				gflog_debug(GFARM_MSG_1001077,
-					"Authentication failed host=(%s): %s",
-					hostname,
-					gfarm_error_string(e));
 			}
 			return (e);
 		}

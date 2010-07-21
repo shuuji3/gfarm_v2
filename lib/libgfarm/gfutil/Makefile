@@ -20,7 +20,6 @@ SRCS =	alloc.c \
 	logutil.c \
 	lru_cache.c \
 	send_no_sigpipe.c \
-	thrsubr.c \
 	timer.c \
 	timeval.c
 OBJS =	alloc.lo \
@@ -34,7 +33,6 @@ OBJS =	alloc.lo \
 	logutil.lo \
 	lru_cache.lo \
 	send_no_sigpipe.lo \
-	thrsubr.lo \
 	timer.lo \
 	timeval.lo
 
