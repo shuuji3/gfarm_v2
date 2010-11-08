@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h> /* sprintf */
-#include <ctype.h>
 #include <sys/time.h>
 #include <pthread.h>
 #include <errno.h>
@@ -21,9 +20,7 @@
 #include "thrsubr.h"
 
 #include "timespec.h"
-#include "patmatch.h"
 #include "gfm_proto.h"
-#include "config.h"
 
 #include "quota.h"
 #include "subr.h"
@@ -59,8 +56,6 @@ struct file_copy {
 struct xattr_entry {
 	struct xattr_entry *prev, *next;
 	char *name;
-	void *cached_attrvalue;
-	int cached_attrsize;
 };
 
 struct xattrs {
@@ -412,8 +407,6 @@ xattrs_free_entries(struct xattrs *xattrs)
 	struct xattr_entry *entry = xattrs->head, *next;
 	while (entry != NULL) {
 		free(entry->name);
-		if (entry->cached_attrvalue != NULL)
-			free(entry->cached_attrvalue);
 		next = entry->next;
 		free(entry);
 		entry = next;
@@ -633,56 +626,6 @@ inode_free(struct inode *inode)
 		    gfarm_error_string(e));
 }
 
-static void
-schedule_replication(struct inode *inode, struct host *spool_host,
-	struct file_copy *existing_targets, int n_existings, int n_shortage)
-{
-	gfarm_error_t e;
-	struct host **existings, **new_targets, *target;
-	struct file_copy *copy;
-	int n_new_targets, i = 0;
-	struct file_replicating *fr;
-
-	GFARM_MALLOC_ARRAY(existings, n_existings);
-	GFARM_MALLOC_ARRAY(new_targets, n_shortage);
-	if (existings == NULL || new_targets == NULL) {
-		free(existings);
-		free(new_targets);
-		gflog_warning(GFARM_MSG_UNFIXED,
-		    "no memory to schedule %d+%d hosts",
-		    n_existings, n_shortage);
-		return;
-	}
-	existings[i++] = spool_host;
-	for (copy = existing_targets; copy != NULL; copy = copy->host_next)
-		existings[i++] = copy->host;
-	e = host_schedule_for_replication(inode, existings, n_existings,
-	    n_shortage, new_targets, &n_new_targets);
-	if (e != GFARM_ERR_NO_ERROR) {
-		free(existings);
-		free(new_targets);
-		return;
-	}
-
-	for (i = 0; i < n_new_targets; i++) {
-		target = new_targets[i];
-		e = file_replicating_new(inode, target, NULL, &fr);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_warning(GFARM_MSG_UNFIXED,
-			    "file_replicating_new: host %s: %s",
-			    host_name(target),
-			    gfarm_error_string(e));
-		} else if ((e = async_back_channel_replication_request(
-		    host_name(spool_host), host_port(spool_host),
-		    target, inode->i_number, inode->i_gen, fr))
-		    != GFARM_ERR_NO_ERROR) {
-			file_replicating_free(fr); /* may sleep */
-		}
-	}
-	free(existings);
-	free(new_targets);
-}
-
 static gfarm_error_t
 remove_replica_entity(struct inode *, gfarm_int64_t, struct host *,
 	int, struct dead_file_copy **);
@@ -690,11 +633,9 @@ remove_replica_entity(struct inode *, gfarm_int64_t, struct host *,
 /* spool_host may be NULL, if GFARM_FILE_TRUNC_PENDING */
 static void
 inode_remove_every_other_replicas(struct inode *inode, struct host *spool_host,
-	gfarm_int64_t old_gen,
-	int start_replication, int desired_replica_number)
+	gfarm_int64_t old_gen, int start_replication)
 {
 	struct file_copy **copyp, *copy, *next, *to_be_replicated = NULL;
-	int nreplicas = 1;
 	struct dead_file_copy *deferred_cleanup;
 	struct file_replicating *fr;
 	gfarm_error_t e;
@@ -719,7 +660,6 @@ inode_remove_every_other_replicas(struct inode *inode, struct host *spool_host,
 			 */
 			copy->host_next = to_be_replicated;
 			to_be_replicated = copy;
-			++nreplicas;
 		} else {
 			e = remove_replica_entity(inode, old_gen, copy->host,
 			    copy->valid, NULL);
@@ -728,12 +668,6 @@ inode_remove_every_other_replicas(struct inode *inode, struct host *spool_host,
 			free(copy);
 		}
 	}
-
-	if (nreplicas < desired_replica_number) {
-		schedule_replication(inode, spool_host, to_be_replicated,
-		    nreplicas, desired_replica_number - nreplicas);
-	}
-
 	for (copy = to_be_replicated; copy != NULL; copy = next) {
 		e = remove_replica_entity(inode, old_gen, copy->host,
 		    copy->valid, &deferred_cleanup);
@@ -2142,7 +2076,7 @@ inode_file_update(struct file_opening *fo, gfarm_off_t size,
 	}
 
 	inode_remove_every_other_replicas(inode, spool_host, old_gen,
-	    start_replication, fo->u.f.desired_replica_number);
+	    start_replication);
 
 	return (generation_updated);
 }
@@ -3266,8 +3200,6 @@ xattr_entry_alloc(const char *attrname)
 		free(entry);
 		return NULL;
 	}
-	entry->cached_attrvalue = NULL;
-	entry->cached_attrsize = 0;
 	return entry;
 }
 
@@ -3276,15 +3208,12 @@ xattr_entry_free(struct xattr_entry *entry)
 {
 	if (entry != NULL) {
 		free(entry->name);
-		if (entry->cached_attrvalue != NULL)
-			free(entry->cached_attrvalue);
 		free(entry);
 	}
 }
 
 static struct xattr_entry *
-xattr_add(struct xattrs *xattrs, int xmlMode, const char *attrname,
-	const void *value, int size)
+xattr_add(struct xattrs *xattrs, const char *attrname)
 {
 	struct xattr_entry *entry, *tail;
 
@@ -3293,18 +3222,6 @@ xattr_add(struct xattrs *xattrs, int xmlMode, const char *attrname,
 		gflog_debug(GFARM_MSG_1001778,
 			"allocation of 'xattr_entry' failure");
 		return NULL;
-	}
-	if (!xmlMode && gfarm_xattr_caching(attrname) && value != NULL) {
-		/* since malloc(0) is not portable */
-		entry->cached_attrvalue = malloc(size == 0 ? 1 : size);
-		if (entry->cached_attrvalue == NULL) {
-			gflog_warning(GFARM_MSG_UNFIXED,
-			    "trying to cache %d bytes for attr %s: no memory",
-			    size, attrname);
-		} else {
-			memcpy(entry->cached_attrvalue, value, size);
-			entry->cached_attrsize = size;
-		}
 	}
 
 	if (xattrs->head == NULL) {
@@ -3319,7 +3236,6 @@ xattr_add(struct xattrs *xattrs, int xmlMode, const char *attrname,
 	return entry;
 }
 
-/* The memory owner is NOT changed to inode.c for now */
 void
 xattr_add_one(void *closure, struct xattr_info *info)
 {
@@ -3333,8 +3249,7 @@ xattr_add_one(void *closure, struct xattr_info *info)
 	else {
 		int xmlMode = (closure != NULL) ? *(int*)closure : 0;
 		xattrs = (xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs);
-		if (xattr_add(xattrs, xmlMode, info->attrname,
-		    info->attrvalue, info->attrsize) == NULL)
+		if (xattr_add(xattrs, info->attrname) == NULL)
 			gflog_error(GFARM_MSG_1000367, "xattr_add_one: "
 				"cannot add attrname %s to %lld",
 				info->attrname, (unsigned long long)info->inum);
@@ -3377,8 +3292,7 @@ xattr_find(struct xattrs *xattrs, const char *attrname)
 }
 
 gfarm_error_t
-inode_xattr_add(struct inode *inode, int xmlMode, const char *attrname,
-	void *value, size_t size)
+inode_xattr_add(struct inode *inode, int xmlMode, const char *attrname)
 {
 	gfarm_error_t e;
 	struct xattrs *xattrs = xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs;
@@ -3387,7 +3301,7 @@ inode_xattr_add(struct inode *inode, int xmlMode, const char *attrname,
 		gflog_debug(GFARM_MSG_1001779,
 			"xattr of inode already exists: %s", attrname);
 		e = GFARM_ERR_ALREADY_EXISTS;
-	} else if (xattr_add(xattrs, xmlMode, attrname, value, size) != NULL) {
+	} else if (xattr_add(xattrs, attrname) != NULL) {
 		e = GFARM_ERR_NO_ERROR;
 	} else {
 		gflog_debug(GFARM_MSG_1001780,
@@ -3397,145 +3311,15 @@ inode_xattr_add(struct inode *inode, int xmlMode, const char *attrname,
 	return e;
 }
 
-gfarm_error_t
-inode_xattr_modify(struct inode *inode, int xmlMode, const char *attrname,
-	void *value, size_t size)
-{
-	struct xattrs *xattrs = xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs;
-	struct xattr_entry *entry = xattr_find(xattrs, attrname);
-
-	if (entry == NULL)
-		return (GFARM_ERR_NO_SUCH_OBJECT);
-
-	if (entry->cached_attrvalue != NULL) {
-		free(entry->cached_attrvalue);
-		entry->cached_attrvalue = NULL;
-		entry->cached_attrsize = 0;
-	}
-	if (!xmlMode && gfarm_xattr_caching(attrname)) {
-		entry->cached_attrvalue = malloc(size);
-		if (entry->cached_attrvalue == NULL) {
-			gflog_warning(GFARM_MSG_UNFIXED,
-			    "trying to cache %d bytes for attr %s: no memory",
-			    (int)size, attrname);
-		} else {
-			memcpy(entry->cached_attrvalue, value, size);
-			entry->cached_attrsize = size;
-		}
-	}
-	return (GFARM_ERR_NO_ERROR);
-}
-
-gfarm_error_t
-inode_xattr_get_cache(struct inode *inode, int xmlMode,
-	const char *attrname, void **cached_valuep, size_t *cached_sizep)
+int
+inode_xattr_isexists(struct inode *inode, int xmlMode,
+		const char *attrname)
 {
 	struct xattrs *xattrs = xmlMode ? &inode->i_xmlattrs : &inode->i_xattrs;
 	struct xattr_entry *entry;
-	void *r;
 
 	entry = xattr_find(xattrs, attrname);
-	if (entry == NULL)
-		return (GFARM_ERR_NO_SUCH_OBJECT);
-
-	if (entry->cached_attrvalue == NULL ||
-	    (r = malloc(entry->cached_attrsize)) == NULL) {
-		*cached_valuep = NULL;
-		*cached_sizep = 0;
-	} else {
-		memcpy(r, entry->cached_attrvalue, entry->cached_attrsize);
-		*cached_valuep = r;
-		*cached_sizep = entry->cached_attrsize;
-	}
-
-	return (GFARM_ERR_NO_ERROR);
-}
-
-void
-inode_xattr_list_free(struct xattr_list *list, size_t n)
-{
-	int i;
-
-	for (i = 0; i < n; i++) {
-		free(list[i].name);
-		if (list[i].value != NULL)
-			free(list[i].value);
-	}
-	free(list);
-}
-
-gfarm_error_t
-inode_xattr_list_get_cached_by_patterns(gfarm_ino_t inum,
-	char **patterns, int npattern,
-	struct xattr_list **listp, size_t *np)
-{
-	struct inode *inode;
-	size_t nxattrs;
-	struct xattr_list *list;
-	struct xattrs *xattrs;
-	struct xattr_entry *entry;
-	int i, j;
-	static const char diag[] = "inode_xattr_list_get_cached_by_patterns";
-
-	inode = inode_lookup(inum);
-	if (inode == NULL)
-		return (GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY);
-
-	xattrs = &inode->i_xattrs;
-	entry = xattrs->head;
-	if (entry == NULL) {
-		*np = 0;
-		*listp = NULL;
-		return (GFARM_ERR_NO_ERROR);
-	}
-
-	nxattrs = 0;
-	for (; entry != NULL; entry = entry->next) {
-		for (j = 0; j < npattern; j++) {
-			if (gfarm_pattern_match(patterns[j], entry->name, 0)) {
-				++nxattrs;
-				break;
-			}
-		}
-	}
-	GFARM_CALLOC_ARRAY(list, nxattrs);
-	if (list == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-	for (entry = xattrs->head, i = 0;
-	     entry != NULL && i < nxattrs;
-	     entry = entry->next) {
-		for (j = 0; j < npattern; j++) {
-			if (gfarm_pattern_match(patterns[j], entry->name, 0)) {
-				list[i].name = strdup_log(entry->name, diag);
-				if (list[i].name == NULL) {
-					nxattrs = i;
-					break;
-				}
-				if (entry->cached_attrvalue == NULL) {
-					/* not cached */
-					list[i].value = NULL;
-					list[i].size = 0;
-				} else { /* cached */
-					list[i].value =
-					    malloc(entry->cached_attrsize);
-					if (list[i].value == NULL) {
-						list[i].size = 0;
-					} else {
-						memcpy(list[i].value,
-						    entry->cached_attrvalue,
-						    entry->cached_attrsize);
-						list[i].size =
-						    entry->cached_attrsize;
-					}
-				}
-				i++;
-				break;
-			}
-		}
-	}
-	*np = nxattrs;
-	*listp = list;
-	return (GFARM_ERR_NO_ERROR);
+	return (entry != NULL);
 }
 
 int
@@ -3611,61 +3395,6 @@ inode_xattr_list(struct inode *inode, int xmlMode, char **namesp, size_t *sizep)
 	*sizep = size;
 	return GFARM_ERR_NO_ERROR;
 }
-
-/* Ensure that the "gfarm.ncopy" xattr is always cached. */
-void
-inode_init_desired_number(void)
-{
-	if (!gfarm_xattr_caching("gfarm.ncopy"))
-		gfarm_xattr_caching_pattern_add("gfarm.ncopy");
-
-}
-
-/* This assumes that the "gfarm.ncopy" xattr is cached. */
-int
-inode_has_desired_number(struct inode *inode, int *desired_numberp)
-{
-	void *value;
-	size_t size;
-	char *s;
-
-	if (inode_xattr_get_cache(inode, 0, "gfarm.ncopy", &value, &size) !=
-	    GFARM_ERR_NO_ERROR)
-		return (0);
-
-	if (value == NULL)
-		return (0);
-	for (s = value; *s == ' ' || *s == '\t'; s++)
-		;
-	if (isdigit(*(unsigned char *)s)) {
-		*desired_numberp = atoi(s);
-		return (1);
-	}
-	return (0);
-}
-
-int
-inode_traverse_desired_replica_number(struct inode *dir, int *desired_numberp)
-{
-	DirEntry entry;
-
-	for (;;) {
-		if (!inode_is_dir(dir))
-			return (0);
-
-		if (inode_has_desired_number(dir, desired_numberp))
-			return (1);
-
-		if (inode_get_number(dir) == ROOT_INUMBER)
-			return (0);
-			
-		entry = dir_lookup(dir->u.c.s.d.entries, dotdot, DOTDOT_LEN);
-		if (entry == NULL)
-			return (GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY);
-		dir = dir_entry_get_inode(entry);
-	}
-}
-
 #if 1 /* DEBUG */
 void
 dir_dump(gfarm_ino_t i_number)

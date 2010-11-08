@@ -46,7 +46,7 @@
 #include "gfj_client.h"
 #include "gfpath.h"
 
-#include "gfarm_auth.h"	/* gfarmAuthInitialize(), gfarmAuthFinalize() */
+#include "../gfsl/gfarm_auth.h"
 
 #include "subr.h"
 #include "thrpool.h"
@@ -280,9 +280,6 @@ protocol_switch(struct peer *peer, int from_client, int skip, int level,
 		e = gfm_server_schedule_file_with_program(peer,
 		    from_client, skip);
 		break;
-	case GFM_PROTO_FGETATTRPLUS:
-		e = gfm_server_fgetattrplus(peer, from_client, skip);
-		break;
 	case GFM_PROTO_REMOVE:
 		e = gfm_server_remove(peer, from_client, skip);
 		break;
@@ -312,9 +309,6 @@ protocol_switch(struct peer *peer, int from_client, int skip, int level,
 		break;
 	case GFM_PROTO_GETDIRENTSPLUS:
 		e = gfm_server_getdirentsplus(peer, from_client, skip);
-		break;
-	case GFM_PROTO_GETDIRENTSPLUSXATTR:
-		e = gfm_server_getdirentsplusxattr(peer, from_client, skip);
 		break;
 	case GFM_PROTO_REOPEN:
 		e = gfm_server_reopen(peer, from_client, skip,
@@ -1191,9 +1185,6 @@ main(int argc, char **argv)
 	}
 	if (syslog_level != -1)
 		gflog_set_priority_level(syslog_level);
-
-	inode_init_desired_number();
-
 	if (port_number != NULL)
 		gfarm_metadb_server_port = strtol(port_number, NULL, 0);
 	sock = open_accepting_socket(gfarm_metadb_server_port);

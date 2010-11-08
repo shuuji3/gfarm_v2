@@ -67,15 +67,13 @@ setxattr(int xmlMode, struct inode *inode, char *attrname,
 		return GFARM_ERR_INVALID_ARGUMENT;
 	}
 	if (flags & XATTR_REPLACE) {
-		e = inode_xattr_modify(inode, xmlMode, attrname, value, size);
-		if (e != GFARM_ERR_NO_ERROR) {
+		if (!inode_xattr_isexists(inode, xmlMode, attrname)) {
 			gflog_debug(GFARM_MSG_1002068,
-			    "inode_xattr_modefy(%s): %s",
-			    attrname, gfarm_error_string(e));
-			return (e);
+				"xattr does not exist");
+			return GFARM_ERR_NO_SUCH_OBJECT;
 		}
 	} else {
-		e = inode_xattr_add(inode, xmlMode, attrname, value, size);
+		e = inode_xattr_add(inode, xmlMode, attrname);
 		if (e == GFARM_ERR_NO_ERROR)
 			*addattr = 1;
 		else if (e != GFARM_ERR_ALREADY_EXISTS
@@ -119,11 +117,10 @@ gfm_server_setxattr(struct peer *peer, int from_client, int skip, int xmlMode)
 		gflog_debug(GFARM_MSG_1002070,
 			"gfm_server_get_request() failure:%s",
 			gfarm_error_string(e));
-		return (e);
+		goto quit;
 	}
 	if (skip) {
-		free(attrname);
-		return (GFARM_ERR_NO_ERROR);
+		goto quit;
 	}
 	if (xmlMode) {
 		waitctx = &ctx;
@@ -188,6 +185,24 @@ quit:
 	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
+static gfarm_error_t
+getxattr(int xmlMode, struct inode *inode, char *attrname,
+	void **value, size_t *size, struct db_waitctx *waitctx)
+{
+	if (!isvalid_attrname(attrname)) {
+		gflog_debug(GFARM_MSG_1002077,
+			"argument 'attrname' is invalid");
+		return GFARM_ERR_INVALID_ARGUMENT;
+	}
+	if (!inode_xattr_isexists(inode, xmlMode, attrname)) {
+		gflog_debug(GFARM_MSG_1002078,
+			"xattr does not exist");
+		return GFARM_ERR_NO_SUCH_OBJECT;
+	}
+	return db_xattr_get(xmlMode, inode_get_number(inode),
+			attrname, value, size, waitctx);
+}
+
 gfarm_error_t
 gfm_server_getxattr(struct peer *peer, int from_client, int skip, int xmlMode)
 {
@@ -200,7 +215,6 @@ gfm_server_getxattr(struct peer *peer, int from_client, int skip, int xmlMode)
 	struct process *process;
 	gfarm_int32_t fd;
 	struct inode *inode;
-	int waitctx_initialized = 0, cached = 0;
 	struct db_waitctx waitctx;
 
 	e = gfm_server_get_request(peer, diag, "s", &attrname);
@@ -208,11 +222,10 @@ gfm_server_getxattr(struct peer *peer, int from_client, int skip, int xmlMode)
 		gflog_debug(GFARM_MSG_1002079,
 			"%s request failed: %s",
 			diag, gfarm_error_string(e));
-		return (e);
+		goto quit;
 	}
 	if (skip) {
-		free(attrname);
-		return (GFARM_ERR_NO_ERROR);
+		goto quit;
 	}
 #ifndef ENABLE_XMLATTR
 	if (xmlMode) {
@@ -223,6 +236,7 @@ gfm_server_getxattr(struct peer *peer, int from_client, int skip, int xmlMode)
 	}
 #endif
 
+	db_waitctx_init(&waitctx);
 	giant_lock();
 	if ((process = peer_get_process(peer)) == NULL) {
 		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
@@ -244,27 +258,12 @@ gfm_server_getxattr(struct peer *peer, int from_client, int skip, int xmlMode)
 		gflog_debug(GFARM_MSG_1002084,
 			"inode_access() failed: %s",
 			gfarm_error_string(e));
-	} else if (!isvalid_attrname(attrname)) {
-		e = GFARM_ERR_INVALID_ARGUMENT;
-		gflog_debug(GFARM_MSG_1002077,
-			"argument 'attrname' is invalid");
-	} else if ((e = inode_xattr_get_cache(inode, xmlMode, attrname,
-	    &value, &size)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "getxattr(%s): %s", attrname, gfarm_error_string(e));
-	} else if (value == NULL) { /* not cached */
-		db_waitctx_init(&waitctx);
-		waitctx_initialized = 1;
-		e = db_xattr_get(xmlMode, inode_get_number(inode),
-			attrname, &value, &size, &waitctx);
-	} else {
-		cached = 1;
-	}
+	} else
+		e = getxattr(xmlMode, inode, attrname, &value, &size, &waitctx);
 	giant_unlock();
-	if (e == GFARM_ERR_NO_ERROR && !cached)
+	if (e == GFARM_ERR_NO_ERROR)
 		e = dbq_waitret(&waitctx);
-	if (waitctx_initialized)
-		db_waitctx_fini(&waitctx);
+	db_waitctx_fini(&waitctx);
 quit:
 	e = gfm_server_put_reply(peer, diag, e, "b", size, value);
 	free(attrname);
@@ -284,8 +283,9 @@ gfm_server_listxattr(struct peer *peer, int from_client, int skip, int xmlMode)
 	gfarm_int32_t fd;
 	struct inode *inode;
 
-	if (skip)
-		return (GFARM_ERR_NO_ERROR);
+	if (skip) {
+		return GFARM_ERR_NO_ERROR;
+	}
 #ifndef ENABLE_XMLATTR
 	if (xmlMode)
 		return gfm_server_put_reply(peer, diag,
@@ -362,11 +362,10 @@ gfm_server_removexattr(struct peer *peer, int from_client, int skip,
 		gflog_debug(GFARM_MSG_1002090,
 			"%s request failure",
 			diag);
-		return (e);
+		goto quit;
 	}
 	if (skip) {
-		free(attrname);
-		return (GFARM_ERR_NO_ERROR);
+		goto quit;
 	}
 #ifndef ENABLE_XMLATTR
 	if (xmlMode) {
@@ -405,7 +404,6 @@ quit:
 	free(attrname);
 	return (gfm_server_put_reply(peer, diag, e, ""));
 }
-
 
 #ifdef ENABLE_XMLATTR
 /*
@@ -1088,20 +1086,17 @@ gfm_server_findxmlattr(struct peer *peer, int from_client, int skip)
 
 	e = gfm_server_get_request(peer, diag,
 			"siiss", &expr, &depth, &nalloc, &ck_path, &ck_name);
+#ifdef ENABLE_XMLATTR
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002110,
 			"%s request failed: %s",
 			diag, gfarm_error_string(e));
-		return (e);
+		goto quit;
 	}
 	if (skip) {
-		free(expr);
-		free(ck_path);
-		free(ck_name);
-		return (GFARM_ERR_NO_ERROR);
+		goto quit;
 	}
 
-#ifdef ENABLE_XMLATTR
 	if ((ctxp = gfs_xmlattr_ctx_alloc(nalloc)) == NULL) {
 		e = GFARM_ERR_NO_MEMORY;
 		gflog_debug(GFARM_MSG_1002111,

@@ -7,8 +7,8 @@ srcdir = .
 include $(top_srcdir)/makes/var.mk
 include $(srcdir)/../Makefile.inc
 
-CFLAGS = $(pthread_includes) $(COMMON_CFLAGS) \
-	-I$(GFUTIL_SRCDIR) -I$(GFSL_SRCDIR) -I$(GFARMLIB_SRCDIR) -I$(srcdir) \
+CFLAGS = $(pthread_includes) \
+	$(COMMON_CFLAGS) -I$(GFUTIL_SRCDIR) -I$(GFARMLIB_SRCDIR) -I$(srcdir) \
 	$(metadb_client_includes) $(optional_cflags) \
 	-DGFMD_CONFIG='"$(sysconfdir)/gfmd.conf"'
 LDLIBS = $(COMMON_LDFLAGS) $(GFARMLIB) $(metadb_client_libs) $(LIBS)
@@ -55,7 +55,6 @@ $(OBJS): $(DEPGFARMINC) \
 	$(GFUTIL_SRCDIR)/id_table.h \
 	$(GFUTIL_SRCDIR)/tree.h \
 	$(GFUTIL_SRCDIR)/thrsubr.h \
-	$(GFARMLIB_SRCDIR)/patmatch.h \
 	$(GFARMLIB_SRCDIR)/gfp_xdr.h \
 	$(GFARMLIB_SRCDIR)/io_fd.h \
 	$(GFARMLIB_SRCDIR)/sockopt.h \

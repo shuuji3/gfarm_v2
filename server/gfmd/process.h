@@ -17,7 +17,6 @@ void process_detach_peer(struct process *, struct peer *);
 struct user *process_get_user(struct process *);
 
 gfarm_error_t process_verify_fd(struct process *, int);
-gfarm_error_t process_record_desired_number(struct process *, int, int);
 gfarm_error_t process_get_file_inode(struct process *, int,
 	struct inode **);
 gfarm_error_t process_get_file_writable(struct process *, struct peer *, int);
@@ -48,7 +47,6 @@ struct file_opening {
 		struct opening_file {
 			struct peer *spool_opener;
 			struct host *spool_host;
-			int desired_replica_number;
 
 			/* only used by client initiated replication */
 			struct file_replicating *replicating;

@@ -30,7 +30,8 @@ gfarm_server_config_read(void)
 	int lineno;
 	FILE *config;
 
-	gfarm_init_config_stringlists();
+	gfarm_init_user_map();
+	gfarm_init_group_map();
 	if ((config = fopen(gfarm_config_file, "r")) == NULL) {
 		gflog_debug(GFARM_MSG_1000976,
 			"open operation on server config file (%s) failed",

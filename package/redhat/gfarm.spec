@@ -1,6 +1,6 @@
 # Part 1 data definition
 %define pkg	gfarm
-%define ver	2.4.0
+%define ver	2.3.99
 %define rel	1
 
 # a hook to make RPM version number different from %{ver}
@@ -95,6 +95,17 @@ Provides: %{pkg}-client = %{ver}-%{rel}
 %endif
 Requires: %{package_name}-libs = %{ver}
 
+%if %{gfarm_v2_not_yet}
+%package gfptool
+Summary: Parallel tools for Gfarm file system
+Group: Applications/Internet
+# always provide "gfarm-gfptool" as a virtual package.
+%if %{globus}
+Provides: %{pkg}-gfptool = %{ver}-%{rel}
+%endif
+Requires: %{package_name}-libs = %{ver}, %{package_name}-client = %{ver}
+%endif
+
 %package fsnode
 Summary: File system daemon for Gfarm file system
 Group: System Environment/Daemons
@@ -121,6 +132,16 @@ Provides: %{pkg}-devel = %{ver}-%{rel}
 %endif
 Requires: %{package_name}-libs = %{ver}
 
+%if %{gfarm_v2_not_yet}
+%package gfront
+Summary: File system browser for Gfarm file system
+Group: Applications/Internet
+# always provide "gfarm-gfront" as a virtual package.
+%if %{globus}
+Provides: %{pkg}-gfront = %{ver}-%{rel}
+%endif
+%endif
+
 %description
 The Gfarm filesystem is a distributed filesystem consisting of the
 local storage of commodity PCs.  PCs in a local area network, compute
@@ -140,31 +161,31 @@ Runtime libraries for Gfarm file system
 %description client
 Clients for Gfarm file system
 
+%if %{gfarm_v2_not_yet}
+%description gfptool
+parallel tools installed under gfarm:/bin
+%endif
+
 %description fsnode
 File system daemon for Gfarm file system
 
 %description server
 Metadata server for Gfarm file system
 
+%if %{gfarm_v2_not_yet}
+%description agent
+Metadata cache server for Gfarm file system
+%endif
+
 %description devel
 Development header files and libraries for Gfarm file system
 
+%if %{gfarm_v2_not_yet}
+%description gfront
+file system browser for gfarm
+%endif
+
 %changelog
-* Thu Jul 22 2010 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.3.2-1
-- Gfarm version 2.4.0 released
-
-* Wed Jul 21 2010 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.3.2-3
-- portability fix for old rpm that does not support nested conditionals
-- compatibility fix for Linux 2.4 and old OpenLDAP library
-
-* Tue Jul 20 2010 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.3.2-2
-- gfhost -R does not work [sf.net trac #120]
-- retry another file system node in GFARM_ERR_FILE_MIGRATED case
-  [sf.net trac #117]
-
-* Thu Jul  1 2010 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.3.2-1
-- Gfarm version 2.3.2 released
-
 * Fri Nov 28 2007 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.0.0-1
 - first release of Gfarm file system version 2
 
@@ -330,11 +351,11 @@ fi
 %{man_prefix}/man1/gfrm.1.gz
 %endif
 %{man_prefix}/man1/gfrmdir.1.gz
-%{man_prefix}/man1/gfsched.1.gz
 %if %{gfarm_v2_not_yet}
 %{man_prefix}/man1/gfront.1.gz
 %{man_prefix}/man1/gfrsh.1.gz
 %{man_prefix}/man1/gfrun.1.gz
+%{man_prefix}/man1/gfsched.1.gz
 %{man_prefix}/man1/gfsetdir.1.gz
 %{man_prefix}/man1/gfssh.1.gz
 %endif
@@ -350,16 +371,11 @@ fi
 %{man_prefix}/man1/gfwhere.1.gz
 %{man_prefix}/man1/gfwhoami.1.gz
 %{man_prefix}/man1/gfxattr.1.gz
+%if %{gfarm_v2_not_yet}
 %{man_prefix}/man3/gfarm.3.gz
 %{man_prefix}/man3/gfarm_initialize.3.gz
-%{man_prefix}/man3/gfarm_terminate.3.gz
-%{man_prefix}/man3/gfs_pio_close.3.gz
-%{man_prefix}/man3/gfs_pio_create.3.gz
-%{man_prefix}/man3/gfs_pio_open.3.gz
-%{man_prefix}/man3/gfs_pio_read.3.gz
-%{man_prefix}/man3/gfs_pio_write.3.gz
-%if %{gfarm_v2_not_yet}
 %{man_prefix}/man3/gfarm_strings_free_deeply.3.gz
+%{man_prefix}/man3/gfarm_terminate.3.gz
 %{man_prefix}/man3/gfarm_url_fragments_replicate.3.gz
 %{man_prefix}/man3/gfarm_url_hosts_schedule.3.gz
 %{man_prefix}/man3/gfarm_url_section_replicate_from_to.3.gz
@@ -373,6 +389,8 @@ fi
 %{man_prefix}/man3/gfs_glob_init.3.gz
 %{man_prefix}/man3/gfs_mkdir.3.gz
 %{man_prefix}/man3/gfs_opendir.3.gz
+%{man_prefix}/man3/gfs_pio_close.3.gz
+%{man_prefix}/man3/gfs_pio_create.3.gz
 %{man_prefix}/man3/gfs_pio_datasync.3.gz
 %{man_prefix}/man3/gfs_pio_eof.3.gz
 %{man_prefix}/man3/gfs_pio_error.3.gz
@@ -380,9 +398,11 @@ fi
 %{man_prefix}/man3/gfs_pio_getc.3.gz
 %{man_prefix}/man3/gfs_pio_getline.3.gz
 %{man_prefix}/man3/gfs_pio_gets.3.gz
+%{man_prefix}/man3/gfs_pio_open.3.gz
 %{man_prefix}/man3/gfs_pio_putc.3.gz
 %{man_prefix}/man3/gfs_pio_putline.3.gz
 %{man_prefix}/man3/gfs_pio_puts.3.gz
+%{man_prefix}/man3/gfs_pio_read.3.gz
 %{man_prefix}/man3/gfs_pio_readdelim.3.gz
 %{man_prefix}/man3/gfs_pio_readline.3.gz
 %{man_prefix}/man3/gfs_pio_seek.3.gz
@@ -392,6 +412,7 @@ fi
 %{man_prefix}/man3/gfs_pio_sync.3.gz
 %{man_prefix}/man3/gfs_pio_truncate.3.gz
 %{man_prefix}/man3/gfs_pio_ungetc.3.gz
+%{man_prefix}/man3/gfs_pio_write.3.gz
 %{man_prefix}/man3/gfs_readdir.3.gz
 %{man_prefix}/man3/gfs_realpath.3.gz
 %{man_prefix}/man3/gfs_rename.3.gz
@@ -446,11 +467,11 @@ fi
 %{man_prefix}/ja/man1/gfrm.1.gz
 %endif
 %{man_prefix}/ja/man1/gfrmdir.1.gz
-%{man_prefix}/ja/man1/gfsched.1.gz
 %if %{gfarm_v2_not_yet}
 %{man_prefix}/ja/man1/gfront.1.gz
 %{man_prefix}/ja/man1/gfrsh.1.gz
 %{man_prefix}/ja/man1/gfrun.1.gz
+%{man_prefix}/ja/man1/gfsched.1.gz
 %{man_prefix}/ja/man1/gfsetdir.1.gz
 %{man_prefix}/ja/man1/gfssh.1.gz
 %endif
@@ -466,18 +487,12 @@ fi
 %{man_prefix}/ja/man1/gfwhere.1.gz
 %{man_prefix}/ja/man1/gfwhoami.1.gz
 %{man_prefix}/ja/man1/gfxattr.1.gz
-%{man_prefix}/ja/man3/gfarm.3.gz
-%{man_prefix}/ja/man3/gfarm_initialize.3.gz
-%{man_prefix}/ja/man3/gfarm_terminate.3.gz
-%{man_prefix}/ja/man3/gfs_pio_close.3.gz
-%{man_prefix}/ja/man3/gfs_pio_create.3.gz
-%{man_prefix}/ja/man3/gfs_pio_open.3.gz
-%{man_prefix}/ja/man3/gfs_pio_read.3.gz
-%{man_prefix}/ja/man3/gfs_pio_write.3.gz
 %if %{gfarm_v2_not_yet}
+%{man_prefix}/ja/man3/gfarm.3.gz
 %{man_prefix}/ja/man3/gfarm_hostlist_read.3.gz
 %{man_prefix}/ja/man3/gfarm_import_fragment_config_read.3.gz
 %{man_prefix}/ja/man3/gfarm_import_fragment_size_alloc.3.gz
+%{man_prefix}/ja/man3/gfarm_initialize.3.gz
 %{man_prefix}/ja/man3/gfarm_stringlist_add.3.gz
 %{man_prefix}/ja/man3/gfarm_stringlist_cat.3.gz
 %{man_prefix}/ja/man3/gfarm_stringlist_elem.3.gz
@@ -485,6 +500,7 @@ fi
 %{man_prefix}/ja/man3/gfarm_stringlist_init.3.gz
 %{man_prefix}/ja/man3/gfarm_stringlist_length.3.gz
 %{man_prefix}/ja/man3/gfarm_strings_free_deeply.3.gz
+%{man_prefix}/ja/man3/gfarm_terminate.3.gz
 %{man_prefix}/ja/man3/gfarm_url_fragments_replicate.3.gz
 %{man_prefix}/ja/man3/gfarm_url_hosts_schedule.3.gz
 %{man_prefix}/ja/man3/gfarm_url_program_deliver.3.gz
@@ -500,6 +516,8 @@ fi
 %{man_prefix}/ja/man3/gfs_glob_init.3.gz
 %{man_prefix}/ja/man3/gfs_mkdir.3.gz
 %{man_prefix}/ja/man3/gfs_opendir.3.gz
+%{man_prefix}/ja/man3/gfs_pio_close.3.gz
+%{man_prefix}/ja/man3/gfs_pio_create.3.gz
 %{man_prefix}/ja/man3/gfs_pio_datasync.3.gz
 %{man_prefix}/ja/man3/gfs_pio_eof.3.gz
 %{man_prefix}/ja/man3/gfs_pio_error.3.gz
@@ -507,9 +525,11 @@ fi
 %{man_prefix}/ja/man3/gfs_pio_getc.3.gz
 %{man_prefix}/ja/man3/gfs_pio_getline.3.gz
 %{man_prefix}/ja/man3/gfs_pio_gets.3.gz
+%{man_prefix}/ja/man3/gfs_pio_open.3.gz
 %{man_prefix}/ja/man3/gfs_pio_putc.3.gz
 %{man_prefix}/ja/man3/gfs_pio_putline.3.gz
 %{man_prefix}/ja/man3/gfs_pio_puts.3.gz
+%{man_prefix}/ja/man3/gfs_pio_read.3.gz
 %{man_prefix}/ja/man3/gfs_pio_readdelim.3.gz
 %{man_prefix}/ja/man3/gfs_pio_readline.3.gz
 %{man_prefix}/ja/man3/gfs_pio_seek.3.gz
@@ -519,6 +539,7 @@ fi
 %{man_prefix}/ja/man3/gfs_pio_sync.3.gz
 %{man_prefix}/ja/man3/gfs_pio_truncate.3.gz
 %{man_prefix}/ja/man3/gfs_pio_ungetc.3.gz
+%{man_prefix}/ja/man3/gfs_pio_write.3.gz
 %{man_prefix}/ja/man3/gfs_readdir.3.gz
 %{man_prefix}/ja/man3/gfs_realpath.3.gz
 %{man_prefix}/ja/man3/gfs_rename.3.gz
@@ -575,10 +596,10 @@ fi
 %{html_prefix}/en/ref/man1/gfrm.1.html
 %endif
 %{html_prefix}/en/ref/man1/gfrmdir.1.html
-%{html_prefix}/en/ref/man1/gfsched.1.html
 %if %{gfarm_v2_not_yet}
 %{html_prefix}/en/ref/man1/gfront.1.html
 %{html_prefix}/en/ref/man1/gfrun.1.html
+%{html_prefix}/en/ref/man1/gfsched.1.html
 %{html_prefix}/en/ref/man1/gfsetdir.1.html
 %endif
 %{html_prefix}/en/ref/man1/gfstat.1.html
@@ -593,16 +614,11 @@ fi
 %{html_prefix}/en/ref/man1/gfwhere.1.html
 %{html_prefix}/en/ref/man1/gfwhoami.1.html
 %{html_prefix}/en/ref/man1/gfxattr.1.html
+%if %{gfarm_v2_not_yet}
 %{html_prefix}/en/ref/man3/gfarm.3.html
 %{html_prefix}/en/ref/man3/gfarm_initialize.3.html
-%{html_prefix}/en/ref/man3/gfarm_terminate.3.html
-%{html_prefix}/en/ref/man3/gfs_pio_close.3.html
-%{html_prefix}/en/ref/man3/gfs_pio_create.3.html
-%{html_prefix}/en/ref/man3/gfs_pio_open.3.html
-%{html_prefix}/en/ref/man3/gfs_pio_read.3.html
-%{html_prefix}/en/ref/man3/gfs_pio_write.3.html
-%if %{gfarm_v2_not_yet}
 %{html_prefix}/en/ref/man3/gfarm_strings_free_deeply.3.html
+%{html_prefix}/en/ref/man3/gfarm_terminate.3.html
 %{html_prefix}/en/ref/man3/gfarm_url_fragments_replicate.3.html
 %{html_prefix}/en/ref/man3/gfarm_url_hosts_schedule.3.html
 %{html_prefix}/en/ref/man3/gfarm_url_section_replicate_from_to.3.html
@@ -616,6 +632,8 @@ fi
 %{html_prefix}/en/ref/man3/gfs_glob_init.3.html
 %{html_prefix}/en/ref/man3/gfs_mkdir.3.html
 %{html_prefix}/en/ref/man3/gfs_opendir.3.html
+%{html_prefix}/en/ref/man3/gfs_pio_close.3.html
+%{html_prefix}/en/ref/man3/gfs_pio_create.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_datasync.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_eof.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_error.3.html
@@ -623,9 +641,11 @@ fi
 %{html_prefix}/en/ref/man3/gfs_pio_getc.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_getline.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_gets.3.html
+%{html_prefix}/en/ref/man3/gfs_pio_open.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_putc.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_putline.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_puts.3.html
+%{html_prefix}/en/ref/man3/gfs_pio_read.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_readdelim.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_readline.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_seek.3.html
@@ -635,6 +655,7 @@ fi
 %{html_prefix}/en/ref/man3/gfs_pio_sync.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_truncate.3.html
 %{html_prefix}/en/ref/man3/gfs_pio_ungetc.3.html
+%{html_prefix}/en/ref/man3/gfs_pio_write.3.html
 %{html_prefix}/en/ref/man3/gfs_readdir.3.html
 %{html_prefix}/en/ref/man3/gfs_realpath.3.html
 %{html_prefix}/en/ref/man3/gfs_rename.3.html
@@ -694,10 +715,10 @@ fi
 %{html_prefix}/ja/ref/man1/gfrm.1.html
 %endif
 %{html_prefix}/ja/ref/man1/gfrmdir.1.html
-%{html_prefix}/ja/ref/man1/gfsched.1.html
 %if %{gfarm_v2_not_yet}
 %{html_prefix}/ja/ref/man1/gfront.1.html
 %{html_prefix}/ja/ref/man1/gfrun.1.html
+%{html_prefix}/ja/ref/man1/gfsched.1.html
 %{html_prefix}/ja/ref/man1/gfsetdir.1.html
 %endif
 %{html_prefix}/ja/ref/man1/gfstat.1.html
@@ -712,18 +733,12 @@ fi
 %{html_prefix}/ja/ref/man1/gfwhere.1.html
 %{html_prefix}/ja/ref/man1/gfwhoami.1.html
 %{html_prefix}/ja/ref/man1/gfxattr.1.html
-%{html_prefix}/ja/ref/man3/gfarm.3.html
-%{html_prefix}/ja/ref/man3/gfarm_initialize.3.html
-%{html_prefix}/ja/ref/man3/gfarm_terminate.3.html
-%{html_prefix}/ja/ref/man3/gfs_pio_close.3.html
-%{html_prefix}/ja/ref/man3/gfs_pio_create.3.html
-%{html_prefix}/ja/ref/man3/gfs_pio_open.3.html
-%{html_prefix}/ja/ref/man3/gfs_pio_read.3.html
-%{html_prefix}/ja/ref/man3/gfs_pio_write.3.html
 %if %{gfarm_v2_not_yet}
+%{html_prefix}/ja/ref/man3/gfarm.3.html
 %{html_prefix}/ja/ref/man3/gfarm_hostlist_read.3.html
 %{html_prefix}/ja/ref/man3/gfarm_import_fragment_config_read.3.html
 %{html_prefix}/ja/ref/man3/gfarm_import_fragment_size_alloc.3.html
+%{html_prefix}/ja/ref/man3/gfarm_initialize.3.html
 %{html_prefix}/ja/ref/man3/gfarm_stringlist_add.3.html
 %{html_prefix}/ja/ref/man3/gfarm_stringlist_cat.3.html
 %{html_prefix}/ja/ref/man3/gfarm_stringlist_elem.3.html
@@ -731,6 +746,7 @@ fi
 %{html_prefix}/ja/ref/man3/gfarm_stringlist_init.3.html
 %{html_prefix}/ja/ref/man3/gfarm_stringlist_length.3.html
 %{html_prefix}/ja/ref/man3/gfarm_strings_free_deeply.3.html
+%{html_prefix}/ja/ref/man3/gfarm_terminate.3.html
 %{html_prefix}/ja/ref/man3/gfarm_url_fragments_replicate.3.html
 %{html_prefix}/ja/ref/man3/gfarm_url_hosts_schedule.3.html
 %{html_prefix}/ja/ref/man3/gfarm_url_program_deliver.3.html
@@ -746,6 +762,8 @@ fi
 %{html_prefix}/ja/ref/man3/gfs_glob_init.3.html
 %{html_prefix}/ja/ref/man3/gfs_mkdir.3.html
 %{html_prefix}/ja/ref/man3/gfs_opendir.3.html
+%{html_prefix}/ja/ref/man3/gfs_pio_close.3.html
+%{html_prefix}/ja/ref/man3/gfs_pio_create.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_datasync.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_eof.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_error.3.html
@@ -753,9 +771,11 @@ fi
 %{html_prefix}/ja/ref/man3/gfs_pio_getc.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_getline.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_gets.3.html
+%{html_prefix}/ja/ref/man3/gfs_pio_open.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_putc.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_putline.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_puts.3.html
+%{html_prefix}/ja/ref/man3/gfs_pio_read.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_readdelim.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_readline.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_seek.3.html
@@ -765,6 +785,7 @@ fi
 %{html_prefix}/ja/ref/man3/gfs_pio_sync.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_truncate.3.html
 %{html_prefix}/ja/ref/man3/gfs_pio_ungetc.3.html
+%{html_prefix}/ja/ref/man3/gfs_pio_write.3.html
 %{html_prefix}/ja/ref/man3/gfs_readdir.3.html
 %{html_prefix}/ja/ref/man3/gfs_realpath.3.html
 %{html_prefix}/ja/ref/man3/gfs_rename.3.html
@@ -879,11 +900,11 @@ fi
 %{prefix}/bin/gfrmdir
 %{prefix}/bin/gfusage
 %{prefix}/bin/gfuser
-%{prefix}/bin/gfsched
 %if %{gfarm_v2_not_yet}
 %{prefix}/bin/gfrsh
 %{prefix}/bin/gfrshl
 %{prefix}/bin/gfrun
+%{prefix}/bin/gfsched
 %{prefix}/bin/gfsck
 %{prefix}/bin/gfsetdir
 %{prefix}/bin/gfssh
@@ -915,6 +936,24 @@ fi
 %{prefix}/bin/ns_symlink
 %{prefix}/bin/ns_unlink
 %{prefix}/bin/ns_unlink_dir
+%endif
+
+%if %{gfarm_v2_not_yet}
+%files gfptool
+%defattr(-,root,root)
+%{prefix}/bin/gfcombine
+%{prefix}/bin/gfcombine_hook
+%{prefix}/bin/gfcp
+%{prefix}/bin/gfcp_hook
+
+%{prefix}/bin/gfgrep
+%if %{mpi}
+%{prefix}/bin/gfwc
+%endif
+
+%{prefix}/libexec/gfrepbe_client
+%{prefix}/libexec/gfrepbe_server
+%{prefix}/sbin/gfregister
 %endif
 
 %files fsnode
@@ -1039,4 +1078,11 @@ fi
 %{lib_prefix}/libnsexec.a
 %{lib_prefix}/libnsexec.la
 %{lib_prefix}/libnsexec.so
+%endif
+
+%if %{gfarm_v2_not_yet}
+%files gfront
+%defattr(-,root,root)
+%{prefix}/bin/gfront
+%{prefix}/share/java/gfront.jar
 %endif

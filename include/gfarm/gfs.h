@@ -333,5 +333,3 @@ gfarm_error_t gfs_lstat_cached(const char *, struct gfs_stat *);
 gfarm_error_t gfs_lstat_caching(const char *, struct gfs_stat *);
 
 gfarm_error_t gfs_opendir_caching(const char *, GFS_Dir *);
-
-gfarm_error_t gfarm_xattr_caching_pattern_add(const char *);

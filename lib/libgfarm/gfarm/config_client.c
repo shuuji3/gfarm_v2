@@ -115,7 +115,8 @@ gfarm_config_read(void)
 		sprintf(rc, "%s/%s", home, gfarm_client_rc);
 		rc_need_free = 1;
 	}
-	gfarm_init_config_stringlists();
+	gfarm_init_user_map();
+	gfarm_init_group_map();
 	if ((config = fopen(rc, "r")) == NULL) {
 		user_config_errno = errno;
 	} else {
@@ -522,7 +523,8 @@ gfarm_terminate(void)
 			return (e);
 	}
 #endif /* not yet in gfarm v2 */
-	gfarm_free_config_stringlists();
+	gfarm_free_user_map();
+	gfarm_free_group_map();
 	gfs_client_terminate();
 	gfm_client_terminate();
 	gflog_terminate();
