@@ -19,17 +19,13 @@
 #include "subr.h"
 #include "quota_info.h"
 #include "quota.h"
-#include "mdhost.h"
 #include "db_access.h"
 #include "db_ops.h"
-#include "db_journal.h"
-#include "db_journal_apply.h"
 
 #define ALIGNMENT 8
 #define ALIGN(offset)	(((offset) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
 
 typedef void (*dbq_entry_func_callback_t)(gfarm_error_t, void *);
-typedef gfarm_error_t (*db_enter_func_t)(dbq_entry_func_t, void *, int);
 
 struct dbq_callback_arg {
 	dbq_entry_func_t func;
@@ -41,7 +37,6 @@ struct dbq_callback_arg {
 struct dbq_entry {
 	dbq_entry_func_t func;
 	void *data;
-	gfarm_uint64_t seqnum;
 };
 
 struct dbq {
@@ -51,31 +46,6 @@ struct dbq {
 	int n, in, out, quitting, quited;
 	struct dbq_entry *entries;
 } dbq;
-
-#ifdef ENABLE_METADATA_REPLICATION
-static pthread_mutex_t db_access_mutex;
-#define DB_ACCESS_MUTEX_DIAG "db_access_mutex"
-
-static gfarm_error_t db_journal_enter(dbq_entry_func_t, void *, int);
-#else
-static gfarm_error_t dbq_enter1(dbq_entry_func_t, void *, int);
-#endif
-
-static const struct db_ops *ops =
-#ifdef ENABLE_METADATA_REPLICATION
-	&db_journal_ops;
-#else
-	&db_none_ops;
-#endif
-const struct db_ops *store_ops = &db_none_ops;
-static db_enter_func_t db_enter_op =
-#ifdef ENABLE_METADATA_REPLICATION
-	&db_journal_enter;
-#else
-	&dbq_enter1;
-#endif
-
-static int transaction_nesting = 0;
 
 gfarm_error_t
 dbq_init(struct dbq *q)
@@ -112,47 +82,11 @@ dbq_wait_to_finish(struct dbq *q)
 }
 
 static gfarm_error_t
-db_enter(dbq_entry_func_t func, void *data, int with_seqnum)
-{
-	gfarm_error_t e;
-	int transaction = 0;
-
-	if (with_seqnum && transaction_nesting == 0) {
-		transaction = 1;
-		if ((e = db_enter_op(ops->begin, NULL, with_seqnum))
-		    != GFARM_ERR_NO_ERROR)
-			return (e);
-	}
-	e = db_enter_op(func, data, with_seqnum);
-	if (transaction) {
-		if (e == GFARM_ERR_NO_ERROR)
-			e = db_enter_op(ops->end, NULL, with_seqnum);
-	}
-	return (e);
-}
-
-static gfarm_error_t
-db_enter_nosn(dbq_entry_func_t func, void *data)
-{
-	return (db_enter(func, data, 0));
-}
-
-static gfarm_error_t
-db_enter_sn(dbq_entry_func_t func, void *data)
-{
-	return (db_enter(func, data, 1));
-}
-
-static gfarm_error_t
-dbq_enter0(struct dbq *q, dbq_entry_func_t func, void *data, int with_seqnum)
+dbq_enter(struct dbq *q, dbq_entry_func_t func, void *data)
 {
 	gfarm_error_t e;
 	static const char diag[] = "dbq_enter";
-	struct dbq_entry *ent;
 
-#ifdef ENABLE_METADATA_REPLICATION
-	assert(with_seqnum == 0);
-#endif
 	gfarm_mutex_lock(&q->mutex, diag, "mutex");
 	if (q->quitting) {
 		/*
@@ -168,9 +102,8 @@ dbq_enter0(struct dbq *q, dbq_entry_func_t func, void *data, int with_seqnum)
 			gfarm_cond_wait(&q->nonfull, &q->mutex,
 			    diag, "nonfull");
 		}
-		ent = &q->entries[q->in];
-		ent->func = func;
-		ent->data = data;
+		q->entries[q->in].func = func;
+		q->entries[q->in].data = data;
 		q->in++;
 		if (q->in >= gfarm_metadb_dbq_size)
 			q->in = 0;
@@ -181,33 +114,21 @@ dbq_enter0(struct dbq *q, dbq_entry_func_t func, void *data, int with_seqnum)
 	return (e);
 }
 
-static gfarm_error_t
-dbq_enter1(dbq_entry_func_t func, void *data, int with_seqnum)
-{
-	return (dbq_enter0(&dbq, func, data, with_seqnum));
-}
-
-static gfarm_error_t
-dbq_enter(dbq_entry_func_t func, void *data)
-{
-	return (dbq_enter1(func, data, 0));
-}
-
 /* DO NOT REMOVE: this interfaces is provided for a private extension */
 /* The official gfmd source code shouldn't use these interface */
 gfarm_error_t
 gfarm_dbq_enter(dbq_entry_func_t func, void *data)
 {
-	return (dbq_enter(func, data));
+	return (dbq_enter(&dbq, func, data));
 }
 
 static gfarm_error_t
-dbq_call_callback(gfarm_uint64_t seqnum, void *a)
+dbq_call_callback(void *a)
 {
 	gfarm_error_t e;
 	struct dbq_callback_arg *arg = (struct dbq_callback_arg *)a;
 
-	e = (*arg->func)(seqnum, arg->data);
+	e = (*arg->func)(arg->data);
 	if (arg->cbfunc != NULL) {
 		(*arg->cbfunc)(e, arg->cbdata);
 	}
@@ -216,7 +137,8 @@ dbq_call_callback(gfarm_uint64_t seqnum, void *a)
 }
 
 static gfarm_error_t
-dbq_enter_withcallback(dbq_entry_func_t func, void *data,
+dbq_enter_withcallback(struct dbq *q,
+		dbq_entry_func_t func, void *data,
 		dbq_entry_func_callback_t cbfunc, void *cbdata)
 {
 	gfarm_error_t e;
@@ -232,7 +154,7 @@ dbq_enter_withcallback(dbq_entry_func_t func, void *data,
 	arg->data = data;
 	arg->cbfunc = cbfunc;
 	arg->cbdata = cbdata;
-	e = dbq_enter(dbq_call_callback, arg);
+	e = dbq_enter(q, dbq_call_callback, arg);
 	if (e != GFARM_ERR_NO_ERROR)
 		free(arg);
 	return (e);
@@ -296,10 +218,10 @@ dbq_waitret(struct db_waitctx *ctx)
 }
 
 static gfarm_error_t
-dbq_enter_for_waitret(
+dbq_enter_for_waitret(struct dbq *q,
 	dbq_entry_func_t func, void *data, struct db_waitctx *ctx)
 {
-	return (dbq_enter_withcallback(func, data,
+	return (dbq_enter_withcallback(q, func, data,
 			dbq_done_callback, ctx));
 }
 
@@ -309,7 +231,7 @@ gfarm_error_t
 gfarm_dbq_enter_for_waitret(
 	dbq_entry_func_t func, void *data, struct db_waitctx *ctx)
 {
-	return (dbq_enter_for_waitret(func, data, ctx));
+	return (dbq_enter_for_waitret(&dbq, func, data, ctx));
 }
 
 gfarm_error_t
@@ -356,42 +278,20 @@ db_getfreenum(void)
 	return (freenum);
 }
 
-#ifdef ENABLE_METADATA_REPLICATION
-static gfarm_error_t
-db_journal_enter(dbq_entry_func_t func, void *data, int with_seqnum)
-{
-	gfarm_uint64_t seqnum;
-
-	if (with_seqnum > 0 && mdhost_self_is_readonly()) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "currently in read-only mode");
-		return (GFARM_ERR_OPERATION_NOT_PERMITTED);
-	}
-	seqnum = with_seqnum ? db_journal_next_seqnum() : 0;
-	return (func(seqnum, data));
-}
-#endif
+static const struct db_ops *ops = &db_none_ops;
 
 /* DO NOT REMOVE: this interfaces is provided for a private extension */
 /* The official gfmd source code shouldn't use these interface */
 const struct db_ops *
 db_get_ops(void)
 {
-#ifdef ENABLE_METADATA_REPLICATION
-	return (store_ops);
-#else
 	return (ops);
-#endif
 }
 
 gfarm_error_t
 db_use(const struct db_ops *o)
 {
-#ifdef ENABLE_METADATA_REPLICATION
-	store_ops = o;
-#else
 	ops = o;
-#endif
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -399,110 +299,51 @@ gfarm_error_t
 db_initialize(void)
 {
 	dbq_init(&dbq);
-#ifdef ENABLE_METADATA_REPLICATION
-	gfarm_mutex_init(&db_access_mutex, "db_initialize",
-	    DB_ACCESS_MUTEX_DIAG);
-	return ((*store_ops->initialize)());
-#else
 	return ((*ops->initialize)());
-#endif
 }
 
 gfarm_error_t
 db_terminate(void)
 {
-	gfarm_error_t e;
-#ifdef ENABLE_METADATA_REPLICATION
-	static const char *diag = "db_terminate";
-#endif
-
 	gflog_info(GFARM_MSG_1000406, "try to stop database syncer");
-#ifdef ENABLE_METADATA_REPLICATION
-	gfarm_mutex_lock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
-#endif
 	dbq_wait_to_finish(&dbq);
-	gflog_info(GFARM_MSG_1000407, "terminating the database");
-	e = ops->terminate();
-#ifdef ENABLE_METADATA_REPLICATION
-	gfarm_mutex_unlock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
-#endif
-	return (e);
-}
 
-#ifdef ENABLE_METADATA_REPLICATION
-pthread_mutex_t *
-get_db_access_mutex(void)
-{
-	return (&db_access_mutex);
+	gflog_info(GFARM_MSG_1000407, "terminating the database");
+	return ((*ops->terminate)());
 }
-#endif
 
 void *
 db_thread(void *arg)
 {
 	gfarm_error_t e;
 	struct dbq_entry ent;
-#ifdef ENABLE_METADATA_REPLICATION
-	static const char *diag = "db_thread";
-#endif
 
 	for (;;) {
 		e = dbq_delete(&dbq, &ent);
 		if (e == GFARM_ERR_NO_ERROR) {
-#ifdef ENABLE_METADATA_REPLICATION
-			/* lock to avoid race condition between
-			 * db_journal_store_thread. */
-			gfarm_mutex_lock(&db_access_mutex, diag,
-			    DB_ACCESS_MUTEX_DIAG);
-#endif
-			/* Do not execute a function that writes to database
-			 * when metadata-replication enabled.
-			 * Because we pass seqnum as zero. */
-			do {
-				e = (*ent.func)(0, ent.data);
-			} while (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED);
-#ifdef ENABLE_METADATA_REPLICATION
-			gfarm_mutex_unlock(&db_access_mutex, diag,
-			    DB_ACCESS_MUTEX_DIAG);
-#endif
+			(*ent.func)(ent.data);
 		} else if (e == GFARM_ERR_NO_SUCH_OBJECT)
 			break;
 	}
+
 	return (NULL);
 }
 
 gfarm_error_t
 db_begin(const char *diag)
 {
-	gfarm_error_t e;
+	gfarm_error_t e = dbq_enter(&dbq, (dbq_entry_func_t)ops->begin, NULL);
 
-	assert(transaction_nesting == 0);
-
-	if (transaction_nesting == 0) {
-		++transaction_nesting;
-		e = db_enter_sn((dbq_entry_func_t)ops->begin, NULL);
-	} else
-		e = db_enter_nosn((dbq_entry_func_t)ops->begin, NULL);
-	if (e != GFARM_ERR_NO_ERROR) {
+	if (e != GFARM_ERR_NO_ERROR)
 		gflog_error(GFARM_MSG_1000408,
 		    "%s: db_begin(): %s", diag, gfarm_error_string(e));
-		--transaction_nesting;
-	}
 	return (e);
 }
 
 gfarm_error_t
 db_end(const char *diag)
 {
-	gfarm_error_t e;
-
-	assert(transaction_nesting == 1);
-
-	if (transaction_nesting > 0) {
-		e = db_enter_sn((dbq_entry_func_t)ops->end, NULL);
-		--transaction_nesting;
-	} else
-		e = db_enter_nosn((dbq_entry_func_t)ops->end, NULL);
+	gfarm_error_t e = dbq_enter(&dbq, (dbq_entry_func_t)ops->end, NULL);
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_error(GFARM_MSG_1000409,
@@ -549,30 +390,13 @@ db_host_dup(const struct gfarm_host_info *hi, size_t size)
 gfarm_error_t
 db_host_add(const struct gfarm_host_info *hi)
 {
-	struct gfarm_host_info *h = db_host_dup(hi, sizeof(*hi));
+	struct gfarm_host_info *h = db_host_dup(hi, sizeof(*h));
 
 	if (h == NULL) {
 		gflog_debug(GFARM_MSG_1002002, "db_host_dup() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->host_add, h));
-}
-
-struct db_host_modify_arg *
-db_host_modify_arg_alloc(const struct gfarm_host_info *hi,
-	int modflags,
-	int add_count, const char **add_aliases,
-	int del_count, const char **del_aliases)
-{
-	struct db_host_modify_arg *arg = db_host_dup(hi, sizeof(*arg));
-
-	if (arg == NULL)
-		return (NULL);
-	arg->modflags = modflags;
-	/* XXX FIXME missing hostaliases */
-	arg->add_count = 0; arg->add_aliases = NULL;
-	arg->del_count = 0; arg->del_aliases = NULL;
-	return (arg);
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->host_add, h));
 }
 
 gfarm_error_t
@@ -581,15 +405,19 @@ db_host_modify(const struct gfarm_host_info *hi,
 	int add_count, const char **add_aliases,
 	int del_count, const char **del_aliases)
 {
-	struct db_host_modify_arg *arg = db_host_modify_arg_alloc(hi, modflags,
-	    add_count, add_aliases, del_count, del_aliases);
+	struct db_host_modify_arg *arg = db_host_dup(hi, sizeof(*arg));
 
 	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "db_host_modify_arg_alloc failed");
+		gflog_debug(GFARM_MSG_1002003, "db_host_dup() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->host_modify, arg));
+
+	arg->modflags = modflags;
+	/* XXX FIXME missing hostaliases */
+	arg->add_count = 0; arg->add_aliases = NULL;
+	arg->del_count = 0; arg->del_aliases = NULL;
+
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->host_modify, arg));
 }
 
 gfarm_error_t
@@ -599,7 +427,7 @@ db_host_remove(const char *hostname)
 
 	if (h == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	return (db_enter_sn((dbq_entry_func_t)ops->host_remove, h));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->host_remove, h));
 }
 
 gfarm_error_t
@@ -652,32 +480,20 @@ db_user_add(const struct gfarm_user_info *ui)
 		gflog_debug(GFARM_MSG_1002006, "db_user_dup() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->user_add, u));
-}
-
-struct db_user_modify_arg *
-db_user_modify_arg_alloc(const struct gfarm_user_info *ui, int modflags)
-{
-	struct db_user_modify_arg *arg = db_user_dup(ui, sizeof(*arg));
-
-	if (arg == NULL)
-		return (NULL);
-	arg->modflags = modflags;
-	return (arg);
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->user_add, u));
 }
 
 gfarm_error_t
 db_user_modify(const struct gfarm_user_info *ui, int modflags)
 {
-	struct db_user_modify_arg *arg = db_user_modify_arg_alloc(
-	    ui, modflags);
+	struct db_user_modify_arg *arg = db_user_dup(ui, sizeof(*arg));
 
 	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "db_user_modify_arg_alloc failed");
+		gflog_debug(GFARM_MSG_1002007, "db_user_dup() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->user_modify, arg));
+	arg->modflags = modflags;
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->user_modify, arg));
 }
 
 gfarm_error_t
@@ -687,7 +503,7 @@ db_user_remove(const char *username)
 
 	if (u == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	return (db_enter_sn((dbq_entry_func_t)ops->user_remove, u));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->user_remove, u));
 }
 
 gfarm_error_t
@@ -756,11 +572,11 @@ db_group_add(const struct gfarm_group_info *gi)
 		gflog_debug(GFARM_MSG_1002010, "db_group_dup() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->group_add, g));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->group_add, g));
 }
 
-struct db_group_modify_arg *
-db_group_modify_arg_alloc(const struct gfarm_group_info *gi, int modflags,
+gfarm_error_t
+db_group_modify(const struct gfarm_group_info *gi, int modflags,
 	int add_count, const char **add_users,
 	int del_count, const char **del_users)
 {
@@ -788,8 +604,11 @@ db_group_modify_arg_alloc(const struct gfarm_group_info *gi, int modflags,
 
 	if (!overflow)
 		arg = db_group_dup(gi, size);
-	if (overflow || arg == NULL)
-		return (NULL);
+	if (overflow || arg == NULL) {
+		gflog_debug(GFARM_MSG_1002011,
+			"overflow occurred or db_group_dup() failed");
+		return (GFARM_ERR_NO_MEMORY);
+	}
 	arg->add_users = (char **)((char *)arg + ALIGN(sizeof(*arg)));
 	arg->del_users = (char **)((char *)arg->add_users +
 	    sizeof(*arg->add_users) * add_count);
@@ -812,23 +631,7 @@ db_group_modify_arg_alloc(const struct gfarm_group_info *gi, int modflags,
 		strcpy(arg->add_users[i], add_users[i]);
 	for (i = 0; i < del_count; i++)
 		strcpy(arg->del_users[i], del_users[i]);
-	return (arg);
-}
-
-gfarm_error_t
-db_group_modify(const struct gfarm_group_info *gi, int modflags,
-	int add_count, const char **add_users,
-	int del_count, const char **del_users)
-{
-	struct db_group_modify_arg *arg = db_group_modify_arg_alloc(
-	    gi, modflags, add_count, add_users, del_count, del_users);
-
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "db_group_modify_arg_alloc failed");
-		return (GFARM_ERR_NO_MEMORY);
-	}
-	return (db_enter_sn((dbq_entry_func_t)ops->group_modify, arg));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->group_modify, arg));
 }
 
 gfarm_error_t
@@ -838,7 +641,7 @@ db_group_remove(const char *groupname)
 
 	if (g == NULL)
 		return (GFARM_ERR_NO_MEMORY);
-	return (db_enter_sn((dbq_entry_func_t)ops->group_remove, g));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->group_remove, g));
 }
 
 gfarm_error_t
@@ -895,7 +698,7 @@ db_inode_add(const struct gfs_stat *st)
 		gflog_debug(GFARM_MSG_1002014, "db_inode_dup() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_add, i));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->inode_add, i));
 }
 
 gfarm_error_t
@@ -907,7 +710,7 @@ db_inode_modify(const struct gfs_stat *st)
 		gflog_debug(GFARM_MSG_1002015, "db_inode_dup() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_modify, i));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->inode_modify, i));
 }
 
 gfarm_error_t
@@ -923,7 +726,8 @@ db_inode_gen_modify(gfarm_ino_t inum, gfarm_uint64_t gen)
 	}
 	arg->inum = inum;
 	arg->uint64 = gen;
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_gen_modify, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_gen_modify, arg));
 }
 
 gfarm_error_t
@@ -939,7 +743,8 @@ db_inode_nlink_modify(gfarm_ino_t inum, gfarm_uint64_t nlink)
 	}
 	arg->inum = inum;
 	arg->uint64 = nlink;
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_nlink_modify, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_nlink_modify, arg));
 }
 
 gfarm_error_t
@@ -955,7 +760,8 @@ db_inode_size_modify(gfarm_ino_t inum, gfarm_off_t size)
 	}
 	arg->inum = inum;
 	arg->uint64 = size;
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_size_modify, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_size_modify, arg));
 }
 
 gfarm_error_t
@@ -971,11 +777,12 @@ db_inode_mode_modify(gfarm_ino_t inum, gfarm_mode_t mode)
 	}
 	arg->inum = inum;
 	arg->uint32 = mode;
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_mode_modify, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_mode_modify, arg));
 }
 
-struct db_inode_string_modify_arg *
-db_inode_string_modify_arg_alloc(gfarm_ino_t inum, const char *str)
+gfarm_error_t
+db_inode_user_modify(gfarm_ino_t inum, const char *user)
 {
 	struct db_inode_string_modify_arg *arg;
 	size_t sz;
@@ -985,49 +792,52 @@ db_inode_string_modify_arg_alloc(gfarm_ino_t inum, const char *str)
 	arg = NULL;
 #endif
 	sz = gfarm_size_add(&overflow, sizeof(*arg),
-		gfarm_size_add(&overflow, strlen(str), 1));
+		gfarm_size_add(&overflow, strlen(user), 1));
 	if (!overflow)
 		arg = malloc(sz);
-	if (overflow || arg == NULL)
-		return (NULL);
+	if (overflow || arg == NULL) {
+		gflog_debug(GFARM_MSG_1002019,
+			"allocation of 'db_inode_string_modify_arg' failed "
+			"or overflow");
+		return (GFARM_ERR_NO_MEMORY);
+	}
 	arg->string = (char *)arg + sizeof(*arg);
 
 	arg->inum = inum;
-	strcpy(arg->string, str);
-	return (arg);
-}
-
-gfarm_error_t
-db_inode_user_modify(gfarm_ino_t inum, const char *user)
-{
-	struct db_inode_string_modify_arg *arg =
-	    db_inode_string_modify_arg_alloc(inum, user);
-
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "db_inode_string_modify_arg_alloc failed");
-		return (GFARM_ERR_NO_MEMORY);
-	}
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_user_modify, arg));
+	strcpy(arg->string, user);
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_user_modify, arg));
 }
 
 gfarm_error_t
 db_inode_group_modify(gfarm_ino_t inum, const char *group)
 {
-	struct db_inode_string_modify_arg *arg =
-	    db_inode_string_modify_arg_alloc(inum, group);
+	struct db_inode_string_modify_arg *arg;
+	size_t sz;
+	int overflow = 0;
 
-	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "db_inode_string_modify_arg_alloc failed");
+#ifdef __GNUC__ /* workaround gcc warning: might be used uninitialized */
+	arg = NULL;
+#endif
+	sz = gfarm_size_add(&overflow, sizeof(*arg),
+		gfarm_size_add(&overflow, strlen(group), 1));
+	if (!overflow)
+		arg = malloc(sz);
+	if (overflow || arg == NULL) {
+		gflog_debug(GFARM_MSG_1002020,
+			"allocation of 'db_inode_string_modify_arg' failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_group_modify, arg));
+	arg->string = (char *)arg + sizeof(*arg);
+
+	arg->inum = inum;
+	strcpy(arg->string, group);
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_group_modify, arg));
 }
 
-static gfarm_error_t
-db_inode_time_modify(gfarm_ino_t inum, struct gfarm_timespec *t,
-	dbq_entry_func_t op)
+gfarm_error_t
+db_inode_atime_modify(gfarm_ino_t inum, struct gfarm_timespec *atime)
 {
 	struct db_inode_timespec_modify_arg *arg;
 
@@ -1038,29 +848,43 @@ db_inode_time_modify(gfarm_ino_t inum, struct gfarm_timespec *t,
 		return (GFARM_ERR_NO_MEMORY);
 	}
 	arg->inum = inum;
-	arg->time = *t;
-	return (db_enter_sn(op, arg));
-}
-
-gfarm_error_t
-db_inode_atime_modify(gfarm_ino_t inum, struct gfarm_timespec *atime)
-{
-	return (db_inode_time_modify(inum, atime,
-		(dbq_entry_func_t)ops->inode_atime_modify));
+	arg->time = *atime;
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_atime_modify, arg));
 }
 
 gfarm_error_t
 db_inode_mtime_modify(gfarm_ino_t inum, struct gfarm_timespec *mtime)
 {
-	return (db_inode_time_modify(inum, mtime,
-		(dbq_entry_func_t)ops->inode_mtime_modify));
+	struct db_inode_timespec_modify_arg *arg;
+
+	GFARM_MALLOC(arg);
+	if (arg == NULL) {
+		gflog_debug(GFARM_MSG_1002022,
+			"allocation of 'db_inode_timespec_modify_arg' failed");
+		return (GFARM_ERR_NO_MEMORY);
+	}
+	arg->inum = inum;
+	arg->time = *mtime;
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_mtime_modify, arg));
 }
 
 gfarm_error_t
 db_inode_ctime_modify(gfarm_ino_t inum, struct gfarm_timespec *ctime)
 {
-	return (db_inode_time_modify(inum, ctime,
-		(dbq_entry_func_t)ops->inode_ctime_modify));
+	struct db_inode_timespec_modify_arg *arg;
+
+	GFARM_MALLOC(arg);
+	if (arg == NULL) {
+		gflog_debug(GFARM_MSG_1002023,
+			"allocation of 'db_inode_timespec_modify_arg' failed");
+		return (GFARM_ERR_NO_MEMORY);
+	}
+	arg->inum = inum;
+	arg->time = *ctime;
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_ctime_modify, arg));
 }
 
 gfarm_error_t
@@ -1068,6 +892,7 @@ db_inode_load(void *closure, void (*callback)(void *, struct gfs_stat *))
 {
 	return ((*ops->inode_load)(closure, callback));
 }
+
 
 struct db_inode_cksum_arg *
 db_inode_cksum_arg_alloc(gfarm_ino_t inum,
@@ -1112,7 +937,8 @@ db_inode_cksum_add(gfarm_ino_t inum,
 			"db_inode_cksum_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_cksum_add, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_cksum_add, arg));
 }
 
 gfarm_error_t
@@ -1127,7 +953,8 @@ db_inode_cksum_modify(gfarm_ino_t inum,
 			"db_inode_cksum_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_cksum_modify, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_cksum_modify, arg));
 }
 
 gfarm_error_t
@@ -1142,7 +969,8 @@ db_inode_cksum_remove(gfarm_ino_t inum)
 		return (GFARM_ERR_NO_MEMORY);
 	}
 	arg->inum = inum;
-	return (db_enter_sn((dbq_entry_func_t)ops->inode_cksum_remove, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->inode_cksum_remove, arg));
 }
 
 gfarm_error_t
@@ -1190,7 +1018,7 @@ db_filecopy_add(gfarm_ino_t inum, const char *hostname)
 			"db_filecopy_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->filecopy_add, arg));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->filecopy_add, arg));
 }
 
 gfarm_error_t
@@ -1204,7 +1032,7 @@ db_filecopy_remove(gfarm_ino_t inum, const char *hostname)
 			"db_filecopy_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->filecopy_remove, arg));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->filecopy_remove, arg));
 }
 
 gfarm_error_t
@@ -1256,7 +1084,8 @@ db_deadfilecopy_add(gfarm_ino_t inum, gfarm_uint64_t igen,
 			"db_deadfilecopy_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->deadfilecopy_add, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->deadfilecopy_add, arg));
 }
 
 gfarm_error_t
@@ -1271,7 +1100,8 @@ db_deadfilecopy_remove(gfarm_ino_t inum, gfarm_uint64_t igen,
 			"db_deadfilecopy_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->deadfilecopy_remove, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->deadfilecopy_remove, arg));
 }
 
 gfarm_error_t
@@ -1324,7 +1154,8 @@ db_direntry_add(gfarm_ino_t dir_inum, const char *entry_name, int entry_len,
 			"db_direntry_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->direntry_add, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->direntry_add, arg));
 }
 
 gfarm_error_t
@@ -1338,7 +1169,8 @@ db_direntry_remove(gfarm_ino_t dir_inum, const char *entry_name, int entry_len)
 			"db_direntry_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->direntry_remove, arg));
+	return (dbq_enter(&dbq,
+	    (dbq_entry_func_t)ops->direntry_remove, arg));
 }
 
 gfarm_error_t
@@ -1384,7 +1216,7 @@ db_symlink_add(gfarm_ino_t inum, const char *source_path)
 			"db_symlink_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->symlink_add, arg));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->symlink_add, arg));
 }
 
 gfarm_error_t
@@ -1399,7 +1231,7 @@ db_symlink_remove(gfarm_ino_t inum)
 		return (GFARM_ERR_NO_MEMORY);
 	}
 	arg->inum = inum;
-	return (db_enter_sn((dbq_entry_func_t)ops->symlink_remove, arg));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->symlink_remove, arg));
 }
 
 gfarm_error_t
@@ -1408,9 +1240,8 @@ db_symlink_load(void *closure, void (*callback)(void *, gfarm_ino_t, char *))
 	return ((*ops->symlink_load)(closure, callback));
 }
 
-struct db_xattr_arg *
-db_xattr_arg_alloc(int xmlMode, gfarm_ino_t inum, const char *attrname,
-	void *value, size_t valsize)
+static struct db_xattr_arg *
+db_xattr_arg_alloc(char *attrname, size_t valsize)
 {
 	struct db_xattr_arg *arg;
 	size_t size;
@@ -1437,16 +1268,6 @@ db_xattr_arg_alloc(int xmlMode, gfarm_ino_t inum, const char *attrname,
 	if (attrname != NULL) {
 		arg->attrname = (char *)(arg + 1) + valsize;
 		strcpy(arg->attrname, attrname);
-	} else
-		arg->attrname = NULL;
-	arg->xmlMode = xmlMode;
-	arg->inum = inum;
-	if (value != NULL) {
-		memcpy(arg->value, value, valsize);
-		arg->size = valsize;
-	} else {
-		arg->value = NULL;
-		arg->size = 0;
 	}
 	return (arg);
 }
@@ -1456,31 +1277,28 @@ db_xattr_add(int xmlMode, gfarm_ino_t inum, char *attrname,
 	void *value, size_t size, struct db_waitctx *waitctx)
 {
 	gfarm_error_t e;
-	struct db_xattr_arg *arg = db_xattr_arg_alloc(xmlMode, inum,
-	    attrname, value, size);
+	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, size);
 
 	if (arg == NULL) {
 		gflog_debug(GFARM_MSG_1002041,
 			"db_xattr_arg_alloc() failed");
 		return (GFARM_ERR_NO_ERROR);
 	}
+	arg->xmlMode = xmlMode;
+	arg->inum = inum;
+	memcpy(arg->value, value, size);
+	arg->size = size;
 	if (waitctx != NULL) {
-#ifdef ENABLE_METADATA_REPLICATION
-		/* XXX FIXME we cannot wait for db transaction to be
-		 * committed when the journal function is enabled. */
-		e = db_enter_sn((dbq_entry_func_t)ops->xattr_add, arg);
-		waitctx->e = e;
-#else
 		/*
 		 * NOTE: EINVAL returns from PostgreSQL if value is
 		 * invalid XML data. We must wait to check it.
 		 * Same as db_xattr_modify().
 		 */
-		e = dbq_enter_for_waitret(
+		e = dbq_enter_for_waitret(&dbq,
 			(dbq_entry_func_t)ops->xattr_add, arg, waitctx);
-#endif
 	} else
-		e = db_enter_sn((dbq_entry_func_t)ops->xattr_add, arg);
+		e = dbq_enter(&dbq,
+			(dbq_entry_func_t)ops->xattr_add, arg);
 	return (e);
 }
 
@@ -1489,55 +1307,55 @@ db_xattr_modify(int xmlMode, gfarm_ino_t inum, char *attrname,
 	void *value, size_t size, struct db_waitctx *waitctx)
 {
 	gfarm_error_t e;
-	struct db_xattr_arg *arg = db_xattr_arg_alloc(xmlMode, inum,
-	    attrname, value, size);
+	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, size);
 
 	if (arg == NULL) {
 		gflog_debug(GFARM_MSG_1002042,
 			"db_xattr_arg_alloc() failed");
 		return (GFARM_ERR_NO_ERROR);
 	}
-	if (waitctx != NULL) {
-#ifdef ENABLE_METADATA_REPLICATION
-		/* XXX FIXME we cannot wait for db transaction to be
-		 * committed when the journal function is enabled. */
-		e = db_enter_sn((dbq_entry_func_t)ops->xattr_modify, arg);
-		waitctx->e = e;
-#else
-		e = dbq_enter_for_waitret(
+	arg->xmlMode = xmlMode;
+	arg->inum = inum;
+	memcpy(arg->value, value, size);
+	arg->size = size;
+	if (waitctx != NULL)
+		e = dbq_enter_for_waitret(&dbq,
 			(dbq_entry_func_t)ops->xattr_modify, arg, waitctx);
-#endif
-	} else
-		e = db_enter_sn((dbq_entry_func_t)ops->xattr_modify, arg);
+	else
+		e = dbq_enter(&dbq,
+			(dbq_entry_func_t)ops->xattr_modify, arg);
 	return (e);
 }
 
 gfarm_error_t
 db_xattr_remove(int xmlMode, gfarm_ino_t inum, char *attrname)
 {
-	struct db_xattr_arg *arg = db_xattr_arg_alloc(xmlMode, inum,
-	    attrname, NULL, 0);
+	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, 0);
 
 	if (arg == NULL) {
 		gflog_debug(GFARM_MSG_1002043,
 			"db_xattr_arg_alloc() failed");
 		return (GFARM_ERR_NO_ERROR);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->xattr_remove, arg));
+	arg->xmlMode = xmlMode;
+	arg->inum = inum;
+	return (dbq_enter(&dbq,
+		(dbq_entry_func_t)ops->xattr_remove, arg));
 }
 
 gfarm_error_t
 db_xattr_removeall(int xmlMode, gfarm_ino_t inum)
 {
 	if (ops->xattr_removeall != NULL) {
-		struct db_xattr_arg *arg = db_xattr_arg_alloc(xmlMode, inum,
-		    NULL, NULL, 0);
+		struct db_xattr_arg *arg = db_xattr_arg_alloc(NULL, 0);
 		if (arg == NULL) {
 			gflog_debug(GFARM_MSG_1002044,
 				"db_xattr_arg_alloc() failed");
 			return (GFARM_ERR_NO_ERROR);
 		}
-		return (db_enter_sn(
+		arg->xmlMode = xmlMode;
+		arg->inum = inum;
+		return (dbq_enter(&dbq,
 			(dbq_entry_func_t)ops->xattr_removeall, arg));
 	} else
 		return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
@@ -1547,16 +1365,17 @@ gfarm_error_t
 db_xattr_get(int xmlMode, gfarm_ino_t inum, char *attrname,
 	void **valuep, size_t *sizep, struct db_waitctx *waitctx)
 {
-	struct db_xattr_arg *arg = db_xattr_arg_alloc(xmlMode, inum,
-	    attrname, NULL, 0);
+	struct db_xattr_arg *arg = db_xattr_arg_alloc(attrname, 0);
 	if (arg == NULL) {
 		gflog_debug(GFARM_MSG_1002045,
 			"db_xattr_arg_alloc() failed");
 		return (GFARM_ERR_NO_ERROR);
 	}
+	arg->xmlMode = xmlMode;
+	arg->inum = inum;
 	arg->valuep = valuep;
 	arg->sizep = sizep;
-	return (dbq_enter_for_waitret(
+	return (dbq_enter_for_waitret(&dbq,
 		(dbq_entry_func_t)ops->xattr_get, arg, waitctx));
 }
 
@@ -1584,13 +1403,13 @@ db_xmlattr_find(gfarm_ino_t inum, const char *expr,
 	arg->expr = expr;
 	arg->foundcallback = foundcallback;
 	arg->foundcbdata = foundcbdata;
-	return (dbq_enter_withcallback(
+	return (dbq_enter_withcallback(&dbq,
 		(dbq_entry_func_t)ops->xmlattr_find, arg,
 		(dbq_entry_func_callback_t)callback, cbdata));
 }
 
 /* quota */
-struct db_quota_arg *
+static struct db_quota_arg *
 db_quota_arg_alloc(const struct quota *q, const char *name, int is_group)
 {
 	struct db_quota_arg *arg;
@@ -1630,10 +1449,11 @@ db_quota_set_common(struct quota *q, const char *name, int is_group)
 	}
 
 	if (q->on_db)
-		return (db_enter_sn((dbq_entry_func_t)ops->quota_modify,
-			arg));
+		return (dbq_enter(&dbq, (dbq_entry_func_t)ops->quota_modify,
+				  arg));
 	else
-		return (db_enter_sn((dbq_entry_func_t)ops->quota_add, arg));
+		return (dbq_enter(&dbq, (dbq_entry_func_t)ops->quota_add,
+				  arg));
 }
 
 gfarm_error_t
@@ -1648,7 +1468,7 @@ db_quota_group_set(struct quota *q, const char *groupname)
 	return (db_quota_set_common(q, groupname, 1));
 }
 
-struct db_quota_remove_arg *
+static struct db_quota_remove_arg *
 db_quota_remove_arg_alloc(const char *name, int is_group)
 {
 	struct db_quota_remove_arg *arg;
@@ -1687,7 +1507,7 @@ db_quota_remove_common(const char *name, int is_group)
 			"db_quota_remove_arg_alloc() failed");
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	return (db_enter_sn((dbq_entry_func_t)ops->quota_remove, arg));
+	return (dbq_enter(&dbq, (dbq_entry_func_t)ops->quota_remove, arg));
 }
 
 gfarm_error_t
@@ -1715,42 +1535,3 @@ db_quota_group_load(void *closure,
 {
 	return ((*ops->quota_load)(closure, 1, callback));
 }
-
-#ifdef ENABLE_METADATA_REPLICATION
-
-gfarm_error_t
-db_seqnum_add(char *name, gfarm_uint64_t value)
-{
-	struct db_seqnum_arg a;
-
-	a.name = name;
-	a.value = value;
-	/* a is not freed */
-	return (ops->seqnum_add(&a));
-}
-
-gfarm_error_t
-db_seqnum_modify(char *name, gfarm_uint64_t value)
-{
-	struct db_seqnum_arg a;
-
-	a.name = name;
-	a.value = value;
-	/* a is not freed */
-	return (ops->seqnum_modify(&a));
-}
-
-gfarm_error_t
-db_seqnum_remove(char *name)
-{
-	return (ops->seqnum_remove(name));
-}
-
-gfarm_error_t
-db_seqnum_load(void *closure,
-	      void (*callback)(void *, struct db_seqnum_arg *))
-{
-	return ((*ops->seqnum_load)(closure, callback));
-}
-
-#endif /* ENABLE_METADATA_REPLICATION */

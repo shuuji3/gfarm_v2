@@ -18,7 +18,6 @@
 
 #include "inode.h"
 #include "subr.h"
-#include "rpcsubr.h"
 #include "db_access.h"
 #include "user.h"
 #include "group.h"
@@ -193,8 +192,8 @@ user_enter(struct gfarm_user_info *ui, struct user **upp)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-static gfarm_error_t
-user_remove_internal(const char *username, int update_quota)
+gfarm_error_t
+user_remove(const char *username)
 {
 	struct gfarm_hash_entry *entry;
 	struct user *u;
@@ -216,8 +215,7 @@ user_remove_internal(const char *username, int update_quota)
 	if (u->ui.gsi_dn != NULL && u->ui.gsi_dn[0] != '\0')
 		gfarm_hash_purge(user_dn_hashtab,
 		    &u->ui.gsi_dn, sizeof(u->ui.gsi_dn));
-	if (update_quota)
-		quota_user_remove(u);
+	quota_user_remove(u);
 
 	/* free group assignment */
 	while ((ga = u->groups.group_next) != &u->groups)
@@ -231,28 +229,10 @@ user_remove_internal(const char *username, int update_quota)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-static gfarm_error_t
-user_remove(const char *username)
-{
-	return (user_remove_internal(username, 1));
-}
-
-gfarm_error_t
-user_remove_in_cache(const char *username)
-{
-	return (user_remove_internal(username, 0));
-}
-
 char *
 user_name(struct user *u)
 {
 	return (user_is_active(u) ? u->ui.username : REMOVED_USER_NAME);
-}
-
-char *
-user_realname(struct user *u)
-{
-	return (user_is_active(u) ? u->ui.realname : REMOVED_USER_NAME);
 }
 
 char *
@@ -722,7 +702,7 @@ gfm_server_user_info_get_by_gsi_dn(
 	return (e);
 }
 
-gfarm_error_t
+static gfarm_error_t
 user_info_verify(struct gfarm_user_info *ui, const char *diag)
 {
 	if (strlen(ui->username) > GFARM_LOGIN_NAME_MAX ||
@@ -790,20 +770,6 @@ gfm_server_user_info_set(struct peer *peer, int from_client, int skip)
 	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
-void
-user_modify(struct user *u, struct gfarm_user_info *ui)
-{
-	free(u->ui.realname);
-	free(u->ui.homedir);
-	free(u->ui.gsi_dn);
-	u->ui.realname = ui->realname;
-	ui->realname = NULL;
-	u->ui.homedir = ui->homedir;
-	ui->homedir = NULL;
-	u->ui.gsi_dn = ui->gsi_dn;
-	ui->gsi_dn = NULL;
-}
-
 gfarm_error_t
 gfm_server_user_info_modify(struct peer *peer, int from_client, int skip)
 {
@@ -847,7 +813,12 @@ gfm_server_user_info_modify(struct peer *peer, int from_client, int skip)
 			gfarm_error_string(e));
 		needs_free = 1;
 	} else {
-		user_modify(u, &ui);
+		free(u->ui.realname);
+		free(u->ui.homedir);
+		free(u->ui.gsi_dn);
+		u->ui.realname = ui.realname;
+		u->ui.homedir = ui.homedir;
+		u->ui.gsi_dn = ui.gsi_dn;
 		free(ui.username);
 	}
 	if (needs_free)

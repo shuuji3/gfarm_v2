@@ -18,8 +18,7 @@ SUBDIRS=	\
 	lib/libgfarm/gfarm/gfs_stat_cached \
 	lib/libgfarm/gfarm/gfs_xattr \
 	lib/libgfarm/gfarm/gfs_getxattr_cached \
-	lib/libgfarm/gfarm/gfm_inode_or_name_op_test \
-	server/gfmd/db_journal
+	lib/libgfarm/gfarm/gfm_inode_or_name_op_test
 
 check test: all
 	@echo ""

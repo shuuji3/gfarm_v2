@@ -134,8 +134,6 @@ static const char *errcode_string[GFARM_ERR_NUMBER] = {
 	"not a regular file",
 	"is a regular file",
 	"path is root",
-	"internal error",
-	"db access should be retried",
 };
 
 static const char *errmsg_string[GFARM_ERRMSG_END - GFARM_ERRMSG_BEGIN] = {

@@ -16,7 +16,6 @@
 #include "auth.h"
 
 #include "subr.h"
-#include "rpcsubr.h"
 #include "db_access.h"
 #include "user.h"
 #include "group.h"
@@ -166,8 +165,8 @@ group_enter(char *groupname, struct group **gpp)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-static gfarm_error_t
-group_remove_internal(const char *groupname, int update_quota)
+gfarm_error_t
+group_remove(const char *groupname)
 {
 	struct gfarm_hash_entry *entry;
 	struct group *g;
@@ -186,8 +185,7 @@ group_remove_internal(const char *groupname, int update_quota)
 		    "\"%s\" group is invalidated", groupname);
 		return (GFARM_ERR_NO_SUCH_GROUP);
 	}
-	if (update_quota)
-		quota_group_remove(g);
+	quota_group_remove(g);
 	/*
 	 * do not purge the hash entry.  Instead, invalidate it so
 	 * that it can be activated later.
@@ -200,18 +198,6 @@ group_remove_internal(const char *groupname, int update_quota)
 	g->users.user_prev = g->users.user_next = &g->users;
 
 	return (GFARM_ERR_NO_ERROR);
-}
-
-static gfarm_error_t
-group_remove(const char *groupname)
-{
-	return (group_remove_internal(groupname, 1));
-}
-
-gfarm_error_t
-group_remove_in_cache(const char *groupname)
-{
-	return (group_remove_internal(groupname, 0));
 }
 
 char *
@@ -243,7 +229,7 @@ group_all(void *closure, void (*callback)(void *, struct group *),
 }
 
 /* The memory owner of `*gi' is changed to group.c */
-gfarm_error_t
+static gfarm_error_t
 group_info_add(struct gfarm_group_info *gi)
 {
 	struct group *g;
@@ -265,8 +251,10 @@ group_info_add(struct gfarm_group_info *gi)
 			    "group_add_one: unknown user %s",
 			    gi->usernames[i]);
 			(void)group_remove(g->groupname);
-			e = GFARM_ERR_NO_SUCH_USER;
-			goto free_gi;
+			/* do not free gi->groupname */
+			gi->groupname = NULL;
+			gfarm_group_info_free(gi);
+			return (GFARM_ERR_NO_SUCH_USER);
 		}
 		e = grpassign_add(u, g);
 		if (e != GFARM_ERR_NO_ERROR) {
@@ -275,14 +263,18 @@ group_info_add(struct gfarm_group_info *gi)
 			    gi->usernames[i], g->groupname,
 			    gfarm_error_string(e));
 			(void)group_remove(g->groupname);
-			goto free_gi;
+			/* do not free gi->groupname */
+			gi->groupname = NULL;
+			gfarm_group_info_free(gi);
+			return (e);
 		}
 	}
-free_gi:
+	for (i = 0; i < gi->nusers; i++)
+		free(gi->usernames[i]);
+	if (gi->usernames != NULL)
+		free(gi->usernames);
 	/* do not free gi->groupname */
-	gi->groupname = NULL;
-	gfarm_group_info_free(gi);
-	return (e);
+	return (GFARM_ERR_NO_ERROR);
 }
 
 /* The memory owner of `*gi' is changed to group.c */
@@ -663,7 +655,7 @@ get_group(struct peer *peer, const char *diag, struct gfarm_group_info *gp)
 	return (e);
 }
 
-gfarm_error_t
+static gfarm_error_t
 group_user_check(struct gfarm_group_info *gi, const char *diag)
 {
 	int i;
@@ -716,7 +708,7 @@ gfm_server_group_info_set(struct peer *peer, int from_client, int skip)
 			gfarm_error_string(e));
 	/*
 	 * We have to call this before group_info_add(),
-	 * because group_info_add_and() frees the memory of gi
+	 * because group_info_add() frees the memory of gi
 	 */
 	} else if ((e = db_group_add(&gi)) != GFARM_ERR_NO_ERROR) {
 		gflog_error(GFARM_MSG_1000254,
@@ -738,37 +730,6 @@ gfm_server_group_info_set(struct peer *peer, int from_client, int skip)
 	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
-void
-group_modify(struct group *group, struct gfarm_group_info *gi,
-	const char *diag)
-{
-	gfarm_error_t e;
-	struct group_assignment *ga;
-	int i;
-
-	/* free group_assignment */
-	while ((ga = group->users.user_next) != &group->users)
-		grpassign_remove(ga);
-
-	for (i = 0; i < gi->nusers; i++) {
-		const char *username = gi->usernames[i];
-		struct user *u = user_lookup(username);
-
-		if (u == NULL || user_is_invalidated(u)) {
-			gflog_warning(GFARM_MSG_1000255,
-			    "%s: unknown user %s", diag,
-			    username);
-		} else if ((e = grpassign_add(u, group))
-		    != GFARM_ERR_NO_ERROR) {
-			gflog_warning(GFARM_MSG_1000256,
-			    "%s: grpassign(%s, %s): %s", diag,
-			    username, gi->groupname,
-			    gfarm_error_string(e));
-			break; /* no memory */
-		}
-	}
-}
-
 gfarm_error_t
 gfm_server_group_info_modify(struct peer *peer, int from_client, int skip)
 {
@@ -776,6 +737,8 @@ gfm_server_group_info_modify(struct peer *peer, int from_client, int skip)
 	struct gfarm_group_info gi;
 	struct user *user = peer_get_user(peer);
 	struct group *group;
+	struct group_assignment *ga;
+	int i;
 	static const char diag[] = "GFM_PROTO_GROUP_INFO_MODIFY";
 
 	e = get_group(peer, diag, &gi);
@@ -803,7 +766,29 @@ gfm_server_group_info_modify(struct peer *peer, int from_client, int skip)
 		gflog_debug(GFARM_MSG_1001542,
 			"group_user_check() failed: %s", gfarm_error_string(e));
 	else {
-		group_modify(group, &gi, diag);
+		/* free group_assignment */
+		while ((ga = group->users.user_next) != &group->users)
+			grpassign_remove(ga);
+
+		for (i = 0; i < gi.nusers; i++) {
+			struct user *u = user_lookup(gi.usernames[i]);
+
+			if (u == NULL || user_is_invalidated(u)) {
+				gflog_warning(GFARM_MSG_1000255,
+				    "%s: unknown user %s", diag,
+				    gi.usernames[i]);
+				continue;
+			}
+			e = grpassign_add(u, group);
+			if (e != GFARM_ERR_NO_ERROR) {
+				gflog_warning(GFARM_MSG_1000256,
+				    "%s: grpassign(%s, %s): %s", diag,
+				    gi.usernames[i], gi.groupname,
+				    gfarm_error_string(e));
+				break; /* XXX - no memory */
+			}
+		}
+
 		/* change all entries */
 		e = db_group_modify(&gi, 0, 0, NULL, 0, NULL);
 		if (e != GFARM_ERR_NO_ERROR)

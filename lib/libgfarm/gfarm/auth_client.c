@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <pwd.h>
 #include <gfarm/gfarm_config.h>
 #include <gfarm/gflog.h>
 #include <gfarm/error.h>
@@ -27,11 +26,11 @@ struct gfarm_auth_client_method {
 	enum gfarm_auth_method method;
 	gfarm_error_t (*request)(struct gfp_xdr *,
 		const char *, const char *, enum gfarm_auth_id_type,
-		const char *, struct passwd *);
+		const char *);
 	gfarm_error_t (*request_multiplexed)(struct gfarm_eventqueue *,
 		struct gfp_xdr *, const char *, const char *,
 		enum gfarm_auth_id_type, const char *,
-		void (*)(void *), void *, void **, struct passwd *);
+		void (*)(void *), void *, void **);
 	gfarm_error_t (*result_multiplexed)(void *);
 } gfarm_auth_trial_table[] = {
 	/*
@@ -57,8 +56,7 @@ struct gfarm_auth_client_method {
 gfarm_error_t
 gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 	const char *service_tag, const char *hostname,
-	enum gfarm_auth_id_type self_type, const char *user,
-	struct passwd *pwd)
+	enum gfarm_auth_id_type self_type, const char *user)
 {
 	/*
 	 * too weak authentication.
@@ -76,7 +74,7 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 	int try = 0;
 
 	/* XXX NOTYET deal with self_type == GFARM_AUTH_ID_TYPE_SPOOL_HOST */
-	home = pwd ? pwd->pw_dir : gfarm_get_local_homedir();
+	home = gfarm_get_local_homedir();
 	if (user == NULL || home == NULL)
 		return (GFARM_ERRMSG_AUTH_REQUEST_SHAREDSECRET_IMPLEMENTATION_ERROR);
 
@@ -90,7 +88,7 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 	}
 
 	do {
-		e = gfarm_auth_shared_key_get(&expire, shared_key, home, pwd,
+		e = gfarm_auth_shared_key_get(&expire, shared_key, home, NULL,
 		    key_create, 0);
 		key_create = GFARM_AUTH_SHARED_KEY_CREATE_FORCE;
 		if (e != GFARM_ERR_NO_ERROR) {
@@ -224,7 +222,7 @@ gfarm_error_t
 gfarm_auth_request(struct gfp_xdr *conn,
 	const char *service_tag, const char *name, struct sockaddr *addr,
 	enum gfarm_auth_id_type self_type, const char *user,
-	enum gfarm_auth_method *auth_methodp, struct passwd *pwd)
+	enum gfarm_auth_method *auth_methodp)
 {
 	gfarm_error_t e, e_save = GFARM_ERR_NO_ERROR;
 	int i, eof;
@@ -327,7 +325,7 @@ gfarm_auth_request(struct gfp_xdr *conn,
 			    GFARM_ERRMSG_AUTH_REQUEST_IMPLEMENTATION_ERROR);
 		}
 		e = (*gfarm_auth_trial_table[i].request)(conn,
-		    service_tag, name, self_type, user, pwd);
+		    service_tag, name, self_type, user);
 		if (e == GFARM_ERR_NO_ERROR) {
 			if (auth_methodp != NULL)
 				*auth_methodp = method;
@@ -360,7 +358,6 @@ struct gfarm_auth_request_sharedsecret_state {
 	void *closure;
 
 	char *home;
-	struct passwd *pwd;
 
 	/* for loop */
 	int try;
@@ -614,7 +611,7 @@ gfarm_auth_request_sharedsecret_send_keytype(int events, int fd,
 	struct timeval timeout;
 
 	state->error_save = gfarm_auth_shared_key_get(
-	    &state->expire, state->shared_key, state->home, state->pwd,
+	    &state->expire, state->shared_key, state->home, NULL,
 	    state->try == 0 ?
 	    GFARM_AUTH_SHARED_KEY_CREATE :
 	    GFARM_AUTH_SHARED_KEY_CREATE_FORCE, 0);
@@ -649,7 +646,7 @@ gfarm_auth_request_sharedsecret_multiplexed(struct gfarm_eventqueue *q,
 	const char *service_tag, const char *hostname,
 	enum gfarm_auth_id_type self_type, const char *user,
 	void (*continuation)(void *), void *closure,
-	void **statepp, struct passwd *pwd)
+	void **statepp)
 {
 	gfarm_error_t e;
 	char *home;
@@ -657,7 +654,7 @@ gfarm_auth_request_sharedsecret_multiplexed(struct gfarm_eventqueue *q,
 	int rv, sock = gfp_xdr_fd(conn);
 
 	/* XXX NOTYET deal with self_type == GFARM_AUTH_ID_TYPE_SPOOL_HOST */
-	home = pwd ? pwd->pw_dir : gfarm_get_local_homedir();
+	home = gfarm_get_local_homedir();
 	if (user == NULL || home == NULL) /* not properly initialized */
 		return (GFARM_ERRMSG_AUTH_REQUEST_SHAREDSECRET_MULTIPLEXED_IMPLEMENTATION_ERROR);
 
@@ -719,7 +716,6 @@ gfarm_auth_request_sharedsecret_multiplexed(struct gfarm_eventqueue *q,
 	state->continuation = continuation;
 	state->closure = closure;
 	state->home = home;
-	state->pwd = pwd;
 	state->try = 0;
 	state->error = state->error_save = GFARM_ERR_NO_ERROR;
 	*statepp = state;
@@ -757,7 +753,6 @@ struct gfarm_auth_request_state {
 	const char *service_tag;
 	const char *name;
 	char *user;
-	struct passwd *pwd;
 	struct sockaddr *addr;
 	enum gfarm_auth_id_type self_type;
 	void (*continuation)(void *);
@@ -841,7 +836,7 @@ gfarm_auth_request_dispatch_method(int events, int fd, void *closure,
 			    request_multiplexed)(state->q, state->conn,
 			    state->service_tag, state->name, state->self_type,
 			    state->user, gfarm_auth_request_dispatch_result,
-			    state, &state->method_state, state->pwd);
+			    state, &state->method_state);
 			if (state->last_error == GFARM_ERR_NO_ERROR) {
 				/*
 				 * call gfarm_auth_request_$method, then
@@ -951,7 +946,7 @@ gfarm_auth_request_multiplexed(struct gfarm_eventqueue *q,
 	const char *service_tag, const char *name, struct sockaddr *addr,
 	enum gfarm_auth_id_type self_type, const char *user,
 	void (*continuation)(void *), void *closure,
-	struct gfarm_auth_request_state **statepp, struct passwd *pwd)
+	struct gfarm_auth_request_state **statepp)
 {
 	gfarm_error_t e;
 	int rv, sock = gfp_xdr_fd(conn);
@@ -1032,7 +1027,6 @@ gfarm_auth_request_multiplexed(struct gfarm_eventqueue *q,
 	state->conn = conn;
 	state->service_tag = service_tag;
 	state->name = name;
-	state->pwd = pwd;
 	state->addr = addr;
 	state->self_type = self_type;
 	state->methods = methods;

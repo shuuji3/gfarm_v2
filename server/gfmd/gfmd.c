@@ -52,10 +52,7 @@
 #include "thrpool.h"
 #include "callout.h"
 #include "db_access.h"
-#include "db_journal.h"
-#include "db_journal_apply.h"
 #include "host.h"
-#include "mdhost.h"
 #include "user.h"
 #include "group.h"
 #include "peer.h"
@@ -65,7 +62,6 @@
 #include "fs.h"
 #include "job.h"
 #include "back_channel.h"
-#include "gfmd_channel.h"
 #include "xattr.h"
 #include "quota.h"
 #include "gfmd.h"
@@ -367,16 +363,6 @@ protocol_switch(struct peer *peer, int from_client, int skip, int level,
 		/* should not call gfp_xdr_flush() due to race */
 		*requestp = request;
 		return (e);
-	case GFM_PROTO_SWITCH_GFMD_CHANNEL:
-#ifdef ENABLE_METADATA_REPLICATION
-		e = gfm_server_switch_gfmd_channel(peer,
-		    from_client, skip);
-#else
-		e = GFARM_ERR_OPERATION_NOT_SUPPORTED;
-#endif
-		/* should not call gfp_xdr_flush() due to race */
-		*requestp = request;
-		return (e);
 	case GFM_PROTO_GLOB:
 		e = gfm_server_glob(peer, from_client, skip);
 		break;
@@ -634,8 +620,7 @@ protocol_service(struct peer *peer)
 #ifdef COMPAT_GFARM_2_3
 	    request == GFM_PROTO_SWITCH_BACK_CHANNEL ||
 #endif
-	    request == GFM_PROTO_SWITCH_ASYNC_BACK_CHANNEL ||
-	    request == GFM_PROTO_SWITCH_GFMD_CHANNEL) {
+	    request == GFM_PROTO_SWITCH_ASYNC_BACK_CHANNEL) {
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001482,
 				"failed to process GFM_PROTO_SWITCH_BACK_"
@@ -890,8 +875,6 @@ try_auth(void *arg)
 	return (NULL);
 }
 
-static int open_accepting_socket(int);
-
 void
 accepting_loop(int accepting_socket)
 {
@@ -921,7 +904,7 @@ accepting_loop(int accepting_socket)
 	}
 }
 
-static int
+int
 open_accepting_socket(int port)
 {
 	gfarm_error_t e;
@@ -953,7 +936,7 @@ open_accepting_socket(int port)
 }
 
 static void
-write_pid(void)
+write_pid()
 {
 	FILE *pid_fp;
 
@@ -970,113 +953,6 @@ write_pid(void)
 	if (fclose(pid_fp) != 0)
 		gflog_error_errno(GFARM_MSG_1002352, "fclose(%s)", pid_file);
 }
-
-#ifdef ENABLE_METADATA_REPLICATION
-static void
-start_db_journal_threads(void)
-{
-	gfarm_error_t e;
-
-	if (mdhost_self_is_master()) {
-		if ((e = create_detached_thread(db_journal_store_thread, NULL))
-		    != GFARM_ERR_NO_ERROR)
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "create_detached_thread(db_journal_store_thread): "
-			    "%s", gfarm_error_string(e));
-	} else {
-		if ((e = create_detached_thread(db_journal_recvq_thread, NULL))
-		    != GFARM_ERR_NO_ERROR)
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "create_detached_thread(db_ournal_recvq_thread): "
-			    "%s", gfarm_error_string(e));
-		if ((e = create_detached_thread(db_journal_apply_thread, NULL))
-		    != GFARM_ERR_NO_ERROR)
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "create_detached_thread(db_journal_apply_thread): "
-			    "%s", gfarm_error_string(e));
-	}
-}
-
-static void
-start_gfmdc_threads(void)
-{
-	gfarm_error_t e;
-
-	if (mdhost_self_is_master()) {
-		if (gfarm_get_journal_sync_slave())
-			return;
-		if ((e = create_detached_thread(gfmdc_journal_asyncsend_thread,
-		    NULL)) != GFARM_ERR_NO_ERROR)
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "create_detached_thread(gfmdc_master_thread): %s",
-			    gfarm_error_string(e));
-	} else if ((e = create_detached_thread(gfmdc_connect_thread, NULL))
-	    != GFARM_ERR_NO_ERROR)
-		gflog_fatal(GFARM_MSG_UNFIXED,
-		    "create_detached_thread(gfmdc_slave_thread): %s",
-		    gfarm_error_string(e));
-}
-
-static pthread_mutex_t transform_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t transform_cond = PTHREAD_COND_INITIALIZER;
-
-#define TRANSFORM_MUTEX_DIAG "transform_mutex"
-#define TRANSFORM_COND_DIAG "transform_cond"
-
-static void
-transform_to_master(void)
-{
-	struct mdhost *master;
-	static const char *diag = "transform_to_master";
-
-	if (mdhost_self_is_master()) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "cannot transform to the master gfmd "
-		    "because this is already the master gfmd");
-		return;
-	}
-	master = mdhost_lookup_master();
-	if (mdhost_is_up(master))
-		mdhost_disconnect(master, NULL);
-	gflog_info(GFARM_MSG_UNFIXED,
-	    "start transforming to the master gfmd ...");
-	giant_lock();
-
-	mdhost_set_self_as_master();
-	dead_file_copy_init_load();
-
-	giant_unlock();
-
-	gfarm_cond_signal(&transform_cond, diag, TRANSFORM_COND_DIAG);
-
-	db_journal_cancel_read();
-	db_journal_cancel_recvq();
-
-	start_db_journal_threads();
-	start_gfmdc_threads();
-
-	gflog_info(GFARM_MSG_UNFIXED,
-	    "end transforming to the master gfmd");
-}
-
-static int
-wait_transform_to_master(void)
-{
-	static const char *diag = "accepting_loop";
-
-	/* Wait until this process transforms to the master.
-	 * This behavior will be deleted when the feature are
-	 * implemented that requests to a slave gfmd are forwarded
-	 * to a master gfmd.
-	 */
-	gfarm_mutex_lock(&transform_mutex, diag, TRANSFORM_MUTEX_DIAG);
-	while (!mdhost_self_is_master())
-		gfarm_cond_wait(&transform_cond, &transform_mutex, diag,
-		    TRANSFORM_COND_DIAG);
-	gfarm_mutex_unlock(&transform_mutex, diag, TRANSFORM_MUTEX_DIAG);
-	return (open_accepting_socket(gfarm_metadb_server_port));
-}
-#endif
 
 static void
 dummy_sighandler(int signo)
@@ -1120,7 +996,6 @@ sigs_set(sigset_t *sigs)
 #ifdef SIGINFO
 	sig_add(sigs, SIGINFO, "SIGINFO");
 #endif
-	sig_add(sigs, SIGUSR1, "SIGUSR1");
 	sig_add(sigs, SIGUSR2, "SIGUSR2");
 }
 
@@ -1134,7 +1009,7 @@ sigs_handler(void *p)
 
 #ifdef __linux__
 	/* A Linux Thread is a process having its own process id. */
-	write_pid();
+	write_pid(pid_file);
 #endif
 	for (;;) {
 		if (sigwait(sigs, &sig) == -1)
@@ -1151,7 +1026,6 @@ sigs_handler(void *p)
 #ifdef SIGINFO
 		     && sig != SIGINFO
 #endif
-		     && sig != SIGUSR1
 		     && sig != SIGUSR2)) {
 			gflog_info(GFARM_MSG_1000198,
 			    "spurious signal %d received: ignoring...", sig);
@@ -1168,11 +1042,6 @@ sigs_handler(void *p)
 #endif
 			continue;
 
-		case SIGUSR1:
-#ifdef ENABLE_METADATA_REPLICATION
-			transform_to_master();
-#endif
-			continue;
 #ifdef SIGINFO
 		case SIGINFO:
 			/*FALLTHRU*/
@@ -1195,7 +1064,7 @@ sigs_handler(void *p)
 	giant_lock();
 
 	gflog_info(GFARM_MSG_1000201, "shutting down peers");
-	if (!mdhost_self_is_readonly() && db_begin(diag) == GFARM_ERR_NO_ERROR)
+	if (db_begin(diag) == GFARM_ERR_NO_ERROR)
 		transaction = 1;
 	/*
 	 * the following internally calls inode_close*() and
@@ -1250,11 +1119,7 @@ gfmd_modules_init_default(int table_size)
 	callout_module_init(CALLOUT_NTHREADS);
 
 	back_channel_init();
-#ifdef ENABLE_METADATA_REPLICATION
-	gfmdc_init(); /* must be called before db_journal_init() */
-	db_journal_apply_init();
-	db_journal_init(mdhost_self_is_master());
-#endif
+
 	/* directory service */
 	host_init();
 	user_init();
@@ -1270,7 +1135,7 @@ gfmd_modules_init_default(int table_size)
 	quota_init();
 
 	/* must be after hosts and filesystem */
-	dead_file_copy_init(mdhost_self_is_master());
+	dead_file_copy_init();
 
 	peer_init(table_size, sync_protocol_thread_pool, protocol_main);
 	job_table_init(table_size);
@@ -1358,17 +1223,13 @@ main(int argc, char **argv)
 
 	if (port_number != NULL)
 		gfarm_metadb_server_port = strtol(port_number, NULL, 0);
-	mdhost_init();
-	if (mdhost_self_is_master())
-		sock = open_accepting_socket(gfarm_metadb_server_port);
-	else
-		sock = -1;
+	sock = open_accepting_socket(gfarm_metadb_server_port);
 
 	/*
 	 * We do this before calling gfarm_daemon()
 	 * to print the error message to stderr.
 	 */
-	write_pid();
+	write_pid(pid_file);
 
 	giant_init();
 
@@ -1421,7 +1282,7 @@ main(int argc, char **argv)
 	 * We do this after calling gfarm_daemon(),
 	 * because it changes pid.
 	 */
-	write_pid();
+	write_pid(pid_file);
 
 	/*
 	 * We don't want SIGPIPE, but want EPIPE on write(2)/close(2).
@@ -1460,24 +1321,10 @@ main(int argc, char **argv)
 		    "create_detached_thread(resumer): %s",
 		    gfarm_error_string(e));
 
-#ifdef ENABLE_METADATA_REPLICATION
-	start_db_journal_threads();
-	db_journal_boot_apply();
-#endif
-	if (!mdhost_self_is_readonly()) {
-		/* these functions write db, thus, must be after db_thread  */
-		inode_remove_orphan(); /* should be before
-					  inode_check_and_repair() */
-		inode_check_and_repair();
-	}
-#ifdef ENABLE_METADATA_REPLICATION
-	gflog_info(GFARM_MSG_UNFIXED,
-	    "metadata replication %s mode",
-	    mdhost_self_is_master() ? "master" : "slave");
-	start_gfmdc_threads();
-	if (sock == -1)
-		sock = wait_transform_to_master();
-#endif
+	/* these functions write db, thus, must be after db_thread  */
+	inode_remove_orphan(); /* should be before inode_check_and_repair() */
+	inode_check_and_repair();
+
 	accepting_loop(sock);
 
 	/*NOTREACHED*/

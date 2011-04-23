@@ -303,7 +303,7 @@ handle_removal_result(struct dead_file_copy *dfc)
 		    (long long)dfc->inum, (long long)dfc->igen,
 		    host_name(dfc->host), gfarm_error_string(dfc->result));
 		host_busyq_enqueue(dfc);
-	} else if (!host_is_valid(dfc->host)) {
+	} else if (!host_is_active(dfc->host)) {
 		dead_file_copy_free(dfc); /* sleeps to wait for dbq.mutex */
 	} else {
 		gfarm_mutex_lock(&dfc->mutex, diag, "dfc state");
@@ -772,7 +772,7 @@ dead_file_copy_count_by_inode(gfarm_ino_t inum, gfarm_uint64_t igen,
 		/* dfc->inum == igen case is handled by an invalid file_copy */
 		if (dfc->inum == inum && dfc->inum != igen &&
 		    (up_only ?
-		    host_is_up(dfc->host) : host_is_valid(dfc->host)))
+		    host_is_up(dfc->host) : host_is_active(dfc->host)))
 			n++;
 	}
 
@@ -816,7 +816,7 @@ dead_file_copy_info_by_inode(gfarm_ino_t inum, gfarm_uint64_t igen, int up_only,
 				continue;
 			flag = GFM_PROTO_REPLICA_FLAG_DEAD_COPY;
 		} else {
-			if (!host_is_valid(dfc->host))
+			if (!host_is_active(dfc->host))
 				continue;
 			if (host_is_up(dfc->host))
 				flag = GFM_PROTO_REPLICA_FLAG_DEAD_COPY;
@@ -1020,7 +1020,7 @@ dead_file_copy_add_one(void *closure,
 }
 
 void
-dead_file_copy_init_load(void)
+dead_file_copy_init(void)
 {
 	gfarm_error_t e;
 
@@ -1030,15 +1030,6 @@ dead_file_copy_init_load(void)
 		    "loading deadfilecopy: %s", gfarm_error_string(e));
 
 	host_busyq_scanner_init();
-}
-
-void
-dead_file_copy_init(int is_master)
-{
-	gfarm_error_t e;
-
-	if (is_master)
-		dead_file_copy_init_load();
 
 	e = create_detached_thread(removal_finalizer, NULL);
 	if (e != GFARM_ERR_NO_ERROR)

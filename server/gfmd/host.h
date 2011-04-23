@@ -4,7 +4,6 @@
 
 void host_init(void);
 
-struct abstract_host;
 struct host;
 struct sockaddr;
 struct peer;
@@ -16,26 +15,28 @@ struct host_status {
 	gfarm_off_t disk_used, disk_avail;
 };
 
-struct abstract_host *host_to_abstract_host(struct host *);
-
 struct host *host_lookup(const char *);
 struct host *host_addr_lookup(const char *, struct sockaddr *);
 
 int host_status_callout_retry(struct host *);
+void host_peer_set(struct host *, struct peer *, int);
 void host_disconnect(struct host *, struct peer *);
+void host_disconnect_request(struct host *, struct peer *);
 struct callout *host_status_callout(struct host *);
 struct peer *host_peer(struct host *);
+gfarm_error_t host_sender_lock(struct host *, struct peer **);
+gfarm_error_t host_sender_trylock(struct host *, struct peer **);
+void host_sender_unlock(struct host *, struct peer *);
+gfarm_error_t host_receiver_lock(struct host *, struct peer **);
+void host_receiver_unlock(struct host *, struct peer *);
 
 char *host_name(struct host *);
 int host_port(struct host *);
-char *host_architecture(struct host *);
-int host_ncpu(struct host *);
-int host_flags(struct host *);
 int host_supports_async_protocols(struct host *);
 int host_is_disk_available(struct host *, gfarm_off_t);
 
 #ifdef COMPAT_GFARM_2_3
-void host_set_callback(struct abstract_host *, struct peer *,
+void host_set_callback(struct host *, struct peer *,
 	gfarm_int32_t (*)(void *, void *, size_t),
 	void (*)(void *, void *), void *);
 int host_get_result_callback(struct host *, struct peer *,
@@ -45,8 +46,10 @@ int host_get_disconnect_callback(struct host *,
 #endif
 
 int host_is_up(struct host *);
-int host_is_valid(struct host *);
+int host_is_active(struct host *);
 
+void host_peer_busy(struct host *);
+void host_peer_unbusy(struct host *);
 int host_check_busy(struct host *host, gfarm_int64_t);
 
 int host_unique_sort(int, struct host **);
@@ -70,11 +73,6 @@ int host_schedule_one_except(struct peer *, int, struct host **,
 void host_status_reply_waiting(struct host *);
 int host_status_reply_is_waiting(struct host *);
 void host_status_update(struct host *, struct host_status *);
-
-struct gfarm_host_info;
-gfarm_error_t host_enter(struct gfarm_host_info *, struct host **);
-void host_modify(struct host *, struct gfarm_host_info *);
-gfarm_error_t host_remove_in_cache(const char *);
 
 gfarm_error_t gfm_server_host_info_get_all(struct peer *, int, int);
 gfarm_error_t gfm_server_host_info_get_by_architecture(struct peer *, int,int);

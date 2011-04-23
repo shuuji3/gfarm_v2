@@ -29,7 +29,6 @@ void gfarm_host_sched_info_free(int, struct gfarm_host_sched_info *);
 
 int gfm_client_is_connection_error(gfarm_error_t);
 struct gfp_xdr *gfm_client_connection_conn(struct gfm_connection *);
-void gfm_client_connection_unset_conn(struct gfm_connection *);
 int gfm_client_connection_fd(struct gfm_connection *);
 enum gfarm_auth_method gfm_client_connection_auth_method(
 	struct gfm_connection *);
@@ -51,9 +50,6 @@ gfarm_error_t gfm_client_connection_and_process_acquire(const char *, int,
 	const char *, struct gfm_connection **);
 gfarm_error_t gfm_client_connect(const char *, int, const char *,
 	struct gfm_connection **, const char *);
-struct passwd;
-gfarm_error_t gfm_client_connect_with_seteuid(const char *, int, const char *,
-	struct gfm_connection **, const char *, struct passwd *, int);
 void gfm_client_connection_free(struct gfm_connection *);
 void gfm_client_terminate(void);
 
@@ -307,8 +303,6 @@ gfarm_error_t gfm_client_lock_info_result(struct gfm_connection *,
 gfarm_error_t gfm_client_switch_back_channel(struct gfm_connection *);
 #endif
 gfarm_error_t gfm_client_switch_async_back_channel(struct gfm_connection *,
-	gfarm_int32_t, gfarm_int64_t, gfarm_int32_t *);
-gfarm_error_t gfm_client_switch_gfmd_channel(struct gfm_connection *,
 	gfarm_int32_t, gfarm_int64_t, gfarm_int32_t *);
 
 /* gfs_pio from client */

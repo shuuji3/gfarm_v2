@@ -38,12 +38,6 @@
 #include "db_access.h"
 #include "db_ops.h"
 
-#ifdef ENABLE_METADATA_REPLICATION
-#define FREE_ARG(x)
-#else
-#define FREE_ARG(x) free(x)
-#endif
-
 /* ERROR:  duplicate key violates unique constraint */
 #define GFARM_PGSQL_ERRCODE_UNIQUE_VIOLATION	"23505"
 
@@ -56,18 +50,6 @@
  * 57P03: CANNOT CONNECT
  */
 #define GFARM_PGSQL_ERRCODE_SHUTDOWN_PREFIX	"57P"
-
-typedef gfarm_error_t (*gfarm_pgsql_dml_sn_t)(gfarm_uint64_t,
-	const char *, int, const Oid *, const char *const *,
-	const int *, const int *, int, const char *);
-
-typedef gfarm_error_t (*gfarm_pgsql_dml_t)(
-	const char *, int, const Oid *, const char *const *,
-	const int *, const int *, int, const char *);
-
-#ifdef ENABLE_METADATA_REPLICATION
-static gfarm_error_t gfarm_pgsql_seqnum_modify(struct db_seqnum_arg *);
-#endif
 
 /**********************************************************************/
 
@@ -296,8 +278,132 @@ pgsql_get_binary(PGresult *res, int row, const char *field_name, int *size)
 
 /**********************************************************************/
 
+static gfarm_error_t
+gfarm_pgsql_check_misc(PGresult *res, const char *command, const char *diag)
+{
+	gfarm_error_t e;
+
+	if (PQresultStatus(res) == PGRES_COMMAND_OK) {
+		e = GFARM_ERR_NO_ERROR;
+	} else {
+		e = GFARM_ERR_UNKNOWN;
+		gflog_error(GFARM_MSG_1000423, "%s: %s: %s", diag, command,
+		    PQresultErrorMessage(res));
+	}
+	return (e);
+}
+
+static gfarm_error_t
+gfarm_pgsql_check_select(PGresult *res, const char *command, const char *diag)
+{
+	gfarm_error_t e;
+
+	if (PQresultStatus(res) == PGRES_TUPLES_OK) {
+		e = GFARM_ERR_NO_ERROR;
+	} else {
+		e = GFARM_ERR_UNKNOWN;
+		gflog_error(GFARM_MSG_1000424, "%s: %s: %s", diag, command,
+		    PQresultErrorMessage(res));
+	}
+	return (e);
+}
+
+static gfarm_error_t
+gfarm_pgsql_check_insert(PGresult *res, const char *command, const char *diag)
+{
+	gfarm_error_t e;
+
+	if (PQresultStatus(res) == PGRES_COMMAND_OK) {
+		e = GFARM_ERR_NO_ERROR;
+	} else {
+		char *err = PQresultErrorField(res, PG_DIAG_SQLSTATE);
+		if (strcmp(err, GFARM_PGSQL_ERRCODE_UNIQUE_VIOLATION) == 0) {
+			e = GFARM_ERR_ALREADY_EXISTS;
+		} else if (strcmp(err, GFARM_PGSQL_ERRCODE_INVALID_XML_CONTENT) == 0) {
+			e = GFARM_ERR_INVALID_ARGUMENT;
+		} else {
+			e = GFARM_ERR_UNKNOWN;
+		}
+		gflog_error(GFARM_MSG_1000425, "%s: %s: %s", diag, command,
+		    PQresultErrorMessage(res));
+	}
+	return (e);
+}
+
+/* this interface is exported for a use from a private extension */
+gfarm_error_t
+gfarm_pgsql_check_update_or_delete(PGresult *res,
+	const char *command, const char *diag)
+{
+	gfarm_error_t e;
+	char *pge;
+
+	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+		if ((pge = PQresultErrorField(res, PG_DIAG_SQLSTATE))!= NULL &&
+		    strcmp(pge, GFARM_PGSQL_ERRCODE_INVALID_XML_CONTENT) == 0)
+			e = GFARM_ERR_INVALID_ARGUMENT;
+		else
+			e = GFARM_ERR_UNKNOWN;
+		gflog_error(GFARM_MSG_1000426, "%s: %s: %s", diag, command,
+		    PQresultErrorMessage(res));
+	} else if (strtol(PQcmdTuples(res), NULL, 0) == 0) {
+		e = GFARM_ERR_NO_SUCH_OBJECT;
+		gflog_error(GFARM_MSG_1000427,
+		    "%s: %s: %s", diag, command, "no such object");
+	} else {
+		e = GFARM_ERR_NO_ERROR;
+	}
+	return (e);
+}
+
+static gfarm_error_t
+gfarm_pgsql_exec_and_log(const char *command, const char *diag)
+{
+	PGresult *res = PQexec(conn, command);
+	gfarm_error_t e = gfarm_pgsql_check_misc(res, command, diag);
+
+	PQclear(res);
+	return (e);
+}
+
+static gfarm_error_t
+gfarm_pgsql_exec_params_and_log(const char *command,
+	int nParams,
+	const Oid *paramTypes,
+	const char *const *paramValues,
+	const int *paramLengths,
+	const int *paramFormats,
+	int resultFormat,
+	const char *diag)
+{
+	PGresult *res = PQexecParams(conn, command, nParams,
+	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat);
+	gfarm_error_t e = gfarm_pgsql_check_misc(res, command, diag);
+
+	PQclear(res);
+	return (e);
+}
+
+static gfarm_error_t
+gfarm_pgsql_insert_and_log(const char *command,
+	int nParams,
+	const Oid *paramTypes,
+	const char *const *paramValues,
+	const int *paramLengths,
+	const int *paramFormats,
+	int resultFormat,
+	const char *diag)
+{
+	PGresult *res = PQexecParams(conn, command, nParams, paramTypes,
+	    paramValues, paramLengths, paramFormats, resultFormat);
+	gfarm_error_t e = gfarm_pgsql_check_insert(res, command, diag);
+
+	PQclear(res);
+	return (e);
+}
+
 #define IS_POWER_OF_2(n)	(((n) & (n - 1)) == 0)
-#define DAY_PER_SECOND		(24 * 3600)
+#define	DAY_PER_SECOND		(24 * 3600)
 #define RETRY_INTERVAL		10
 #define MSG_THRESHOLD		4096
 
@@ -336,8 +442,6 @@ pgsql_should_retry(PGresult *res)
 		/* XXX FIXME: one transaction may be lost in this case */
 		gflog_info(GFARM_MSG_1002333,
 		    "PostgreSQL connection recovered");
-		transaction_nesting = 0;
-		transaction_ok = 0;
 		return (1);
 	} else if (PQresultStatus(res) == PGRES_FATAL_ERROR &&
 	    strncmp(PQresultErrorField(res, PG_DIAG_SQLSTATE),
@@ -352,157 +456,6 @@ pgsql_should_retry(PGresult *res)
 		return (1);
 	}
 	return (0); /* retry is not necessary */
-}
-
-static gfarm_error_t
-gfarm_pgsql_check_misc(PGresult *res, const char *command, const char *diag)
-{
-	gfarm_error_t e;
-
-	if (PQresultStatus(res) == PGRES_COMMAND_OK) {
-		e = GFARM_ERR_NO_ERROR;
-	} else if (pgsql_should_retry(res)) {
-		e = GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED;
-	} else {
-		e = GFARM_ERR_UNKNOWN;
-		gflog_error(GFARM_MSG_1000423, "%s: %s: %s", diag, command,
-		    PQresultErrorMessage(res));
-	}
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_check_select(PGresult *res, const char *command, const char *diag)
-{
-	gfarm_error_t e;
-
-	if (PQresultStatus(res) == PGRES_TUPLES_OK) {
-		e = GFARM_ERR_NO_ERROR;
-	} else if (pgsql_should_retry(res)) {
-		e = GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED;
-	} else {
-		e = GFARM_ERR_UNKNOWN;
-		gflog_error(GFARM_MSG_1000424, "%s: %s: %s", diag, command,
-		    PQresultErrorMessage(res));
-	}
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_check_insert(PGresult *res,
-	const char *command, const char *diag)
-{
-	gfarm_error_t e;
-
-	if (PQresultStatus(res) == PGRES_COMMAND_OK) {
-		e = GFARM_ERR_NO_ERROR;
-	} else if (pgsql_should_retry(res)) {
-		e = GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED;
-	} else {
-		char *err = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-		if (strcmp(err, GFARM_PGSQL_ERRCODE_UNIQUE_VIOLATION) == 0) {
-			e = GFARM_ERR_ALREADY_EXISTS;
-		} else if (strcmp(err, GFARM_PGSQL_ERRCODE_INVALID_XML_CONTENT) == 0) {
-			e = GFARM_ERR_INVALID_ARGUMENT;
-		} else {
-			e = GFARM_ERR_UNKNOWN;
-		}
-		gflog_error(GFARM_MSG_1000425, "%s: %s: %s", diag, command,
-		    PQresultErrorMessage(res));
-	}
-	return (e);
-}
-
-/* this interface is exported for a use from a private extension */
-gfarm_error_t
-gfarm_pgsql_check_update_or_delete(PGresult *res,
-	const char *command, const char *diag)
-{
-	gfarm_error_t e;
-	char *pge;
-
-	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-		if (pgsql_should_retry(res))
-			return (GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED);
-		else if ((pge = PQresultErrorField(res, PG_DIAG_SQLSTATE))
-		    != NULL &&
-		    strcmp(pge, GFARM_PGSQL_ERRCODE_INVALID_XML_CONTENT) == 0)
-			e = GFARM_ERR_INVALID_ARGUMENT;
-		else
-			e = GFARM_ERR_UNKNOWN;
-		gflog_error(GFARM_MSG_1000426, "%s: %s: %s", diag, command,
-		    PQresultErrorMessage(res));
-	} else if (strtol(PQcmdTuples(res), NULL, 0) == 0) {
-		e = GFARM_ERR_NO_SUCH_OBJECT;
-		gflog_error(GFARM_MSG_1000427,
-		    "%s: %s: %s", diag, command, "no such object");
-	} else {
-		e = GFARM_ERR_NO_ERROR;
-	}
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_exec_and_log(const char *command, const char *diag)
-{
-	PGresult *res = PQexec(conn, command);
-	gfarm_error_t e = gfarm_pgsql_check_misc(res, command, diag);
-
-	if (e != GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-		PQclear(res);
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_exec_params_and_log(const char *command,
-	int nParams,
-	const Oid *paramTypes,
-	const char *const *paramValues,
-	const int *paramLengths,
-	const int *paramFormats,
-	int resultFormat,
-	const char *diag)
-{
-	PGresult *res = PQexecParams(conn, command, nParams,
-	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat);
-	gfarm_error_t e = gfarm_pgsql_check_misc(res, command, diag);
-
-	if (e != GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-		PQclear(res);
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_insert_and_log(const char *command,
-	int nParams,
-	const Oid *paramTypes,
-	const char *const *paramValues,
-	const int *paramLengths,
-	const int *paramFormats,
-	int resultFormat,
-	const char *diag)
-{
-	PGresult *res = PQexecParams(conn, command, nParams,
-	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat);
-	gfarm_error_t e = gfarm_pgsql_check_insert(res, command, diag);
-
-	if (e != GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-		PQclear(res);
-	return (e);
-}
-
-static PGresult *
-gfarm_pgsql_exec_params(const char *command,
-	int nParams,
-	const Oid *paramTypes,
-	const char *const *paramValues,
-	const int *paramLengths,
-	const int *paramFormats,
-	int resultFormat)
-{
-	return (PQexecParams(conn, command, nParams,
-	    paramTypes, paramValues, paramLengths, paramFormats,
-	    resultFormat));
 }
 
 static PGresult *
@@ -523,29 +476,6 @@ gfarm_pgsql_exec_params_with_retry(const char *command,
 	} while (PQresultStatus(res) != PGRES_COMMAND_OK &&
 	    pgsql_should_retry(res));
 	return (res);
-}
-
-static gfarm_error_t
-gfarm_pgsql_start(const char *diag)
-{
-	PGresult *res;
-
-	if (transaction_nesting++ > 0)
-		return (GFARM_ERR_NO_ERROR);
-
-	transaction_ok = 1;
-	res = PQexec(conn, "START TRANSACTION");
-
-	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-		gflog_error(GFARM_MSG_UNFIXED, "%s transaction BEGIN: %s",
-		    diag, PQresultErrorMessage(res));
-		return (pgsql_should_retry(res) ?
-			GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED :
-			GFARM_ERR_UNKNOWN);
-	}
-
-	PQclear(res);
-	return (GFARM_ERR_NO_ERROR);
 }
 
 /* this interface is exported for a use from a private extension */
@@ -572,106 +502,26 @@ gfarm_pgsql_start_with_retry(const char *diag)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-static gfarm_error_t
-gfarm_pgsql_commit_sn(gfarm_uint64_t seqnum, const char *diag)
+/* this interface is exported for a use from a private extension */
+gfarm_error_t
+gfarm_pgsql_commit(const char *diag)
 {
 	if (--transaction_nesting > 0)
 		return (GFARM_ERR_NO_ERROR);
 
 	assert(transaction_nesting == 0);
 
-#ifdef ENABLE_METADATA_REPLICATION
-	if (seqnum > 0) {
-		gfarm_error_t e;
-		struct db_seqnum_arg a;
-
-		a.name = "";
-		a.value = seqnum;
-		if ((e = gfarm_pgsql_seqnum_modify(&a))
-		    != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "gfarm_pgsql_seqnum_modify : %s",
-			    gfarm_error_string(e));
-			return (e);
-		}
-	}
-#endif
-	return (gfarm_pgsql_exec_and_log(transaction_ok ?
-	    "COMMIT" : "ROLLBACK", diag));
+	return (gfarm_pgsql_exec_and_log(transaction_ok ? "COMMIT" : "ROLLBACK",
+	    diag));
 }
 
 /* this interface is exported for a use from a private extension */
 gfarm_error_t
-gfarm_pgsql_commit(const char *diag)
-{
-	return (gfarm_pgsql_commit_sn(0, diag));
-}
-
-/* this interface is exported for a use from a private extension */
-static gfarm_error_t
 gfarm_pgsql_rollback(const char *diag)
 {
 	transaction_ok = 0;
 
-	return (gfarm_pgsql_commit_sn(0, diag));
-}
-
-static gfarm_error_t
-gfarm_pgsql_insert0(gfarm_uint64_t seqnum,
-	const char *command,
-	int nParams,
-	const Oid *paramTypes,
-	const char *const *paramValues,
-	const int *paramLengths,
-	const int *paramFormats,
-	int resultFormat,
-	gfarm_error_t (*start_op)(const char *),
-	PGresult *(*exec_params_op)(const char *, int, const Oid *,
-	    const char *const *, const int *, const int *, int),
-	const char *diag)
-{
-	PGresult *res;
-	gfarm_error_t e;
-
-	if (transaction_nesting == 0) {
-		e = start_op(diag);
-		if (e != GFARM_ERR_NO_ERROR)
-			return (e);
-		res = PQexecParams(conn, command, nParams, paramTypes,
-		    paramValues, paramLengths, paramFormats, resultFormat);
-		e = gfarm_pgsql_check_insert(res, command, diag);
-		if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-			return (e);
-		if (e == GFARM_ERR_NO_ERROR)
-			e = gfarm_pgsql_commit_sn(seqnum, diag);
-		else
-			gfarm_pgsql_rollback(diag);
-	} else {
-		res = exec_params_op(command, nParams, paramTypes,
-		    paramValues, paramLengths, paramFormats, resultFormat);
-		e = gfarm_pgsql_check_insert(res, command, diag);
-		if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-			return (e);
-	}
-	PQclear(res);
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_insert(gfarm_uint64_t seqnum,
-	const char *command,
-	int nParams,
-	const Oid *paramTypes,
-	const char *const *paramValues,
-	const int *paramLengths,
-	const int *paramFormats,
-	int resultFormat,
-	const char *diag)
-{
-	return (gfarm_pgsql_insert0(seqnum, command, nParams, paramTypes,
-	    paramValues, paramLengths, paramFormats, resultFormat,
-	    gfarm_pgsql_start, gfarm_pgsql_exec_params,
-	    diag));
+	return (gfarm_pgsql_commit(diag));
 }
 
 /* this interface is exported for a use from a private extension */
@@ -685,70 +535,12 @@ gfarm_pgsql_insert_with_retry(const char *command,
 	int resultFormat,
 	const char *diag)
 {
-	return (gfarm_pgsql_insert0(0, command, nParams, paramTypes,
-	    paramValues, paramLengths, paramFormats, resultFormat,
-	    gfarm_pgsql_start_with_retry, gfarm_pgsql_exec_params_with_retry,
-	    diag));
-}
-
-static gfarm_error_t
-gfarm_pgsql_update_or_delete0(gfarm_uint64_t seqnum,
-	const char *command,
-	int nParams,
-	const Oid *paramTypes,
-	const char *const *paramValues,
-	const int *paramLengths,
-	const int *paramFormats,
-	int resultFormat,
-	gfarm_error_t (*start_op)(const char *),
-	PGresult *(*exec_params_op)(const char *, int, const Oid *,
-	    const char *const *, const int *, const int *, int),
-	const char *diag)
-{
-	PGresult *res;
-	gfarm_error_t e;
-
-	if (transaction_nesting == 0) {
-		e = start_op(diag);
-		if (e != GFARM_ERR_NO_ERROR)
-			return (e);
-		res = PQexecParams(conn, command, nParams,
-		    paramTypes, paramValues, paramLengths, paramFormats,
-		    resultFormat);
-		e = gfarm_pgsql_check_update_or_delete(res, command, diag);
-		if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-			return (e);
-		if (e == GFARM_ERR_NO_ERROR)
-			e = gfarm_pgsql_commit_sn(seqnum, diag);
-		else
-			gfarm_pgsql_rollback(diag);
-	} else {
-		res = exec_params_op(command, nParams,
-		    paramTypes, paramValues, paramLengths, paramFormats,
-		    resultFormat);
-		e = gfarm_pgsql_check_update_or_delete(res, command, diag);
-		if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-			return (e);
-	}
+	PGresult *res = gfarm_pgsql_exec_params_with_retry(command, nParams,
+	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat);
+	gfarm_error_t e = gfarm_pgsql_check_insert(res, command, diag);
 
 	PQclear(res);
 	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_update_or_delete(gfarm_uint64_t seqnum,
-	const char *command,
-	int nParams,
-	const Oid *paramTypes,
-	const char *const *paramValues,
-	const int *paramLengths,
-	const int *paramFormats,
-	int resultFormat,
-	const char *diag)
-{
-	return (gfarm_pgsql_update_or_delete0(seqnum, command, nParams,
-	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat,
-	    gfarm_pgsql_start, gfarm_pgsql_exec_params, diag));
 }
 
 /* this interface is exported for a use from a private extension */
@@ -762,14 +554,18 @@ gfarm_pgsql_update_or_delete_with_retry(const char *command,
 	int resultFormat,
 	const char *diag)
 {
-	return (gfarm_pgsql_update_or_delete0(0, command, nParams,
-	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat,
-	    gfarm_pgsql_start_with_retry, gfarm_pgsql_exec_params_with_retry,
-	    diag));
+	PGresult *res = gfarm_pgsql_exec_params_with_retry(command, nParams,
+	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat);
+	gfarm_error_t e =
+		gfarm_pgsql_check_update_or_delete(res, command, diag);
+
+	PQclear(res);
+	return (e);
 }
 
-static gfarm_error_t
-gfarm_pgsql_generic_get_all_no_retry(
+/* this interface is exported for a use from a private extension */
+gfarm_error_t
+gfarm_pgsql_generic_get_all(
 	const char *sql,
 	int nparams,
 	const char **paramValues,
@@ -784,16 +580,17 @@ gfarm_pgsql_generic_get_all_no_retry(
 	int n, i;
 	char *results;
 
-	res = PQexecParams(conn, sql,
-		nparams,
-		NULL, /* param types */
-		paramValues,
-		NULL, /* param lengths */
-		NULL, /* param formats */
-		1); /* ask for binary results */
+	do {
+		res = PQexecParams(conn, sql,
+			nparams,
+			NULL, /* param types */
+			paramValues,
+			NULL, /* param lengths */
+			NULL, /* param formats */
+			1); /* ask for binary results */
+	} while (PQresultStatus(res) != PGRES_TUPLES_OK &&
+	    pgsql_should_retry(res));
 	e = gfarm_pgsql_check_select(res, sql, diag);
-	if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-		return (e);
 	if (e == GFARM_ERR_NO_ERROR) {
 		n = PQntuples(res);
 		if (n == 0) {
@@ -811,8 +608,8 @@ gfarm_pgsql_generic_get_all_no_retry(
 				    results + i * ops->info_size);
 				if (e != GFARM_ERR_NO_ERROR) {
 					gflog_debug(GFARM_MSG_1002372,
-					    "gfarm_pgsql_generic_get_all"
-					    "_no_retry: %s: %d/%d: %s",
+					    "gfarm_pgsql_generic_get_all: "
+					    "%s: %d/%d: %s",
 					    sql, i, n, gfarm_error_string(e));
 					while (--i >= 0) {
 						(*ops->free)(results +
@@ -834,27 +631,7 @@ gfarm_pgsql_generic_get_all_no_retry(
 
 /* this interface is exported for a use from a private extension */
 gfarm_error_t
-gfarm_pgsql_generic_get_all(
-	const char *sql,
-	int nparams,
-	const char **paramValues,
-	int *np,
-	void *resultsp,
-	const struct gfarm_base_generic_info_ops *ops,
-	gfarm_error_t (*set_fields)(PGresult *, int, void *),
-	const char *diag)
-{
-	gfarm_error_t e;
-
-	do {
-		e = gfarm_pgsql_generic_get_all_no_retry(sql, nparams,
-		    paramValues, np, resultsp, ops, set_fields, diag);
-	} while (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED);
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_generic_grouping_get_all_no_retry(
+gfarm_pgsql_generic_grouping_get_all(
 	const char *count_sql,
 	const char *results_sql,
 	int nparams,
@@ -862,7 +639,7 @@ gfarm_pgsql_generic_grouping_get_all_no_retry(
 	int *np,
 	void *resultsp,
 	const struct gfarm_base_generic_info_ops *ops,
-	gfarm_error_t (*set_fields_with_grouping)(PGresult *, int, int, void *),
+	gfarm_error_t (*set_fields_with_grouping)(PGresult *, int,int, void *),
 	const char *diag)
 {
 	PGresult *cres, *rres;
@@ -870,7 +647,7 @@ gfarm_pgsql_generic_grouping_get_all_no_retry(
 	int ngroups;
 	char *results;
 
-	if ((e = gfarm_pgsql_start(diag)) != GFARM_ERR_NO_ERROR) {
+	if ((e = gfarm_pgsql_start_with_retry(diag)) != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002149, "pgsql restart failed");
 		return (e);
 	}
@@ -886,8 +663,6 @@ gfarm_pgsql_generic_grouping_get_all_no_retry(
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002150,
 			"pgsql select failed : count_sql");
-		if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-			return (e);
 	} else if ((ngroups = PQntuples(cres)) == 0) {
 		gflog_debug(GFARM_MSG_1002151,
 			"pgsql select results count is 0 : count_sql");
@@ -910,8 +685,6 @@ gfarm_pgsql_generic_grouping_get_all_no_retry(
 			gflog_debug(GFARM_MSG_1002153,
 				"pgsql select failed :results_sql");
 			free(results);
-			if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-				return (e);
 		} else {
 			int i, startrow = 0;
 
@@ -946,33 +719,10 @@ gfarm_pgsql_generic_grouping_get_all_no_retry(
 	PQclear(cres);
 
 	if (e == GFARM_ERR_NO_ERROR)
-		e = gfarm_pgsql_commit_sn(0, diag);
+		e = gfarm_pgsql_commit(diag);
 	else
 		gfarm_pgsql_rollback(diag);
 
-	return (e);
-}
-
-/* this interface is exported for a use from a private extension */
-gfarm_error_t
-gfarm_pgsql_generic_grouping_get_all(
-	const char *count_sql,
-	const char *results_sql,
-	int nparams,
-	const char **paramValues,
-	int *np,
-	void *resultsp,
-	const struct gfarm_base_generic_info_ops *ops,
-	gfarm_error_t (*set_fields_with_grouping)(PGresult *, int, int, void *),
-	const char *diag)
-{
-	gfarm_error_t e;
-
-	do {
-		e = gfarm_pgsql_generic_grouping_get_all_no_retry(count_sql,
-		    results_sql, nparams, paramValues, np, resultsp, ops,
-		    set_fields_with_grouping, diag);
-	} while (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED);
 	return (e);
 }
 
@@ -1203,16 +953,16 @@ gfarm_pgsql_generic_load(
 /**********************************************************************/
 
 static gfarm_error_t
-gfarm_pgsql_begin(gfarm_uint64_t seqnum, void *arg)
+gfarm_pgsql_begin(void *arg)
 {
 	assert(transaction_nesting == 0);
-	return (gfarm_pgsql_start("pgsql_begin"));
+	return (gfarm_pgsql_start_with_retry("pgsql_begin"));
 }
 
 static gfarm_error_t
-gfarm_pgsql_end(gfarm_uint64_t seqnum, void *arg)
+gfarm_pgsql_end(void *arg)
 {
-	gfarm_error_t e = gfarm_pgsql_commit_sn(seqnum,
+	gfarm_error_t e = gfarm_pgsql_commit(
 	    transaction_ok ? "gfarm_pgsql_end(OK)" : "gfarm_pgsql_end(NG)");
 
 	assert(transaction_nesting == 0);
@@ -1301,8 +1051,7 @@ hostaliases_set(struct gfarm_host_info *info)
 }
 
 static gfarm_error_t
-pgsql_host_update(gfarm_uint64_t seqnum, struct gfarm_host_info *info,
-	const char *sql,
+pgsql_host_update(struct gfarm_host_info *info, const char *sql,
 	gfarm_error_t (*check)(PGresult *, const char *, const char *),
 	int remove_all_aliases_first,
 	const char *diag)
@@ -1314,9 +1063,9 @@ pgsql_host_update(gfarm_uint64_t seqnum, struct gfarm_host_info *info,
 	char ncpu[GFARM_INT32STRLEN + 1];
 	char flags[GFARM_INT32STRLEN + 1];
 
-	if ((e = gfarm_pgsql_start(diag)) != GFARM_ERR_NO_ERROR) {
+	if ((e = gfarm_pgsql_start_with_retry(diag)) != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002156,
-			"gfarm_pgsql_start() failed");
+			"gfarm_pgsql_start_with_retry() failed");
 		return (e);
 	}
 	paramValues[0] = info->hostname;
@@ -1335,9 +1084,7 @@ pgsql_host_update(gfarm_uint64_t seqnum, struct gfarm_host_info *info,
 		NULL, /* param lengths */
 		NULL, /* param formats */
 		0); /* ask for text results */
-	if ((e = (*check)(res, sql, diag))
-	    == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
-		return (e);
+	e = (*check)(res, sql, diag);
 	PQclear(res);
 
 	if (e == GFARM_ERR_NO_ERROR && remove_all_aliases_first)
@@ -1347,50 +1094,50 @@ pgsql_host_update(gfarm_uint64_t seqnum, struct gfarm_host_info *info,
 		e = hostaliases_set(info);
 
 	if (e == GFARM_ERR_NO_ERROR)
-		e = gfarm_pgsql_commit_sn(seqnum, diag);
+		e = gfarm_pgsql_commit(diag);
 	else
 		gfarm_pgsql_rollback(diag);
 	return (e);
 }
 
 static gfarm_error_t
-gfarm_pgsql_host_add(gfarm_uint64_t seqnum, struct gfarm_host_info *info)
+gfarm_pgsql_host_add(struct gfarm_host_info *info)
 {
 	gfarm_error_t e;
 
-	e = pgsql_host_update(seqnum, info,
+	e = pgsql_host_update(info,
 		"INSERT INTO Host (hostname, port, architecture, ncpu, flags) "
 		    "VALUES ($1, $2, $3, $4, $5)",
 		gfarm_pgsql_check_insert, 0, "pgsql_host_add");
 
-	FREE_ARG(info);
-	return (e);
+	free(info);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_host_modify(gfarm_uint64_t seqnum, struct db_host_modify_arg *arg)
+gfarm_pgsql_host_modify(struct db_host_modify_arg *arg)
 {
 	gfarm_error_t e;
 	/* XXX FIXME: should use modflags, add_aliases and del_aliases */
 
-	e = pgsql_host_update(seqnum, &arg->hi,
+	e = pgsql_host_update(&arg->hi,
 		"UPDATE Host "
 		    "SET port = $2, architecture = $3, ncpu = $4, flags = $5 "
 		    "WHERE hostname = $1",
 		gfarm_pgsql_check_update_or_delete, 1, "pgsql_host_modify");
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_host_remove(gfarm_uint64_t seqnum, char *hostname)
+gfarm_pgsql_host_remove(char *hostname)
 {
 	gfarm_error_t e;
 	const char *paramValues[1];
 
 	paramValues[0] = hostname;
-	e = gfarm_pgsql_update_or_delete(seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		"DELETE FROM Host WHERE hostname = $1",
 		1, /* number of params */
 		NULL, /* param types */
@@ -1400,8 +1147,8 @@ gfarm_pgsql_host_remove(gfarm_uint64_t seqnum, char *hostname)
 		0, /* ask for text results */
 		"pgsql_host_remove");
 
-	FREE_ARG(hostname);
-	return (e);
+	free(hostname);
+	return e;
 }
 
 static gfarm_error_t
@@ -1412,7 +1159,7 @@ gfarm_pgsql_host_load(void *closure,
 	int i, n;
 	struct gfarm_host_info *infos;
 
-	e = gfarm_pgsql_generic_grouping_get_all_no_retry(
+	e = gfarm_pgsql_generic_grouping_get_all(
 		"SELECT Host.hostname, count(hostalias) "
 		    "FROM Host LEFT OUTER JOIN HostAliases "
 			"ON Host.hostname = HostAliases.hostname "
@@ -1431,7 +1178,7 @@ gfarm_pgsql_host_load(void *closure,
 		"pgsql_host_load");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002157,
-		    "gfarm_pgsql_generic_grouping_get_all_no_retry() failed");
+			"gfarm_pgsql_generic_grouping_get_all() failed");
 		return (e);
 	}
 
@@ -1457,8 +1204,11 @@ user_info_set_field(PGresult *res, int row, void *vinfo)
 }
 
 static gfarm_error_t
-pgsql_user_call(gfarm_uint64_t seqnum, struct gfarm_user_info *info,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_user_call(struct gfarm_user_info *info, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	const char *paramValues[4];
 
@@ -1467,7 +1217,6 @@ pgsql_user_call(gfarm_uint64_t seqnum, struct gfarm_user_info *info,
 	paramValues[2] = info->realname;
 	paramValues[3] = info->gsi_dn;
 	return (*op)(
-		seqnum,
 		sql,
 		4, /* number of params */
 		NULL, /* param types */
@@ -1479,42 +1228,42 @@ pgsql_user_call(gfarm_uint64_t seqnum, struct gfarm_user_info *info,
 }
 
 static gfarm_error_t
-gfarm_pgsql_user_add(gfarm_uint64_t seqnum, struct gfarm_user_info *info)
+gfarm_pgsql_user_add(struct gfarm_user_info *info)
 {
 	gfarm_error_t e;
-	e = pgsql_user_call(seqnum, info,
+	e = pgsql_user_call(info,
 		"INSERT INTO GfarmUser (username, homedir, realname, gsiDN) "
 		     "VALUES ($1, $2, $3, $4)",
-		gfarm_pgsql_insert,
+		gfarm_pgsql_insert_with_retry,
 		"pgsql_user_add");
 
-	FREE_ARG(info);
-	return (e);
+	free(info);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_user_modify(gfarm_uint64_t seqnum, struct db_user_modify_arg *arg)
+gfarm_pgsql_user_modify(struct db_user_modify_arg *arg)
 {
 	gfarm_error_t e;
-	e = pgsql_user_call(seqnum, &arg->ui,
+	e = pgsql_user_call(&arg->ui,
 		"UPDATE GfarmUser "
 		     "SET homedir = $2, realname = $3, gsiDN = $4 "
 		     "WHERE username = $1",
-		gfarm_pgsql_update_or_delete,
+		gfarm_pgsql_update_or_delete_with_retry,
 		"pgsql_user_modify");
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_user_remove(gfarm_uint64_t seqnum, char *username)
+gfarm_pgsql_user_remove(char *username)
 {
 	gfarm_error_t e;
 	const char *paramValues[1];
 
 	paramValues[0] = username;
-	e = gfarm_pgsql_update_or_delete(seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		"DELETE FROM GfarmUser WHERE username = $1",
 		1, /* number of params */
 		NULL, /* param types */
@@ -1524,8 +1273,8 @@ gfarm_pgsql_user_remove(gfarm_uint64_t seqnum, char *username)
 		0, /* ask for text results */
 		"pgsql_user_remove");
 
-	FREE_ARG(username);
-	return (e);
+	free(username);
+	return e;
 }
 
 static gfarm_error_t
@@ -1536,7 +1285,7 @@ gfarm_pgsql_user_load(void *closure,
 	int i, n;
 	struct gfarm_user_info *infos;
 
-	e = gfarm_pgsql_generic_get_all_no_retry(
+	e = gfarm_pgsql_generic_get_all(
 		"SELECT * FROM GfarmUser",
 		0, NULL,
 		&n, &infos,
@@ -1544,7 +1293,7 @@ gfarm_pgsql_user_load(void *closure,
 		"pgsql_user_load");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002158,
-			"gfarm_pgsql_generic_get_all_no_retry()");
+			"gfarm_pgsql_generic_get_all()");
 		return (e);
 	}
 	for (i = 0; i < n; i++)
@@ -1633,13 +1382,13 @@ grpassign_set(struct gfarm_group_info *info)
 }
 
 static gfarm_error_t
-gfarm_pgsql_group_add(gfarm_uint64_t seqnum, struct gfarm_group_info *info)
+gfarm_pgsql_group_add(struct gfarm_group_info *info)
 {
 	const char *paramValues[1];
 	gfarm_error_t e;
 	static const char diag[] = "pgsql_group_add";
 
-	if ((e = gfarm_pgsql_start(diag))
+	if ((e = gfarm_pgsql_start_with_retry(diag))
 	    == GFARM_ERR_NO_ERROR) {
 
 		paramValues[0] = info->groupname;
@@ -1657,24 +1406,23 @@ gfarm_pgsql_group_add(gfarm_uint64_t seqnum, struct gfarm_group_info *info)
 			e = grpassign_set(info);
 
 		if (e == GFARM_ERR_NO_ERROR)
-			e = gfarm_pgsql_commit_sn(seqnum, diag);
+			e = gfarm_pgsql_commit(diag);
 		else
 			gfarm_pgsql_rollback(diag);
 	}
 
-	FREE_ARG(info);
+	free(info);
 	return (e);
 }
 
 static gfarm_error_t
-gfarm_pgsql_group_modify(gfarm_uint64_t seqnum,
-	struct db_group_modify_arg *arg)
+gfarm_pgsql_group_modify(struct db_group_modify_arg *arg)
 {
 	struct gfarm_group_info *info = &arg->gi;
 	gfarm_error_t e;
 	static const char diag[] = "gfarm_pgsql_group_modify";
 
-	if ((e = gfarm_pgsql_start("pgsql_group_modify"))
+	if ((e = gfarm_pgsql_start_with_retry("pgsql_group_modify"))
 	    == GFARM_ERR_NO_ERROR) {
 
 		e = grpassign_remove(info->groupname);
@@ -1683,22 +1431,22 @@ gfarm_pgsql_group_modify(gfarm_uint64_t seqnum,
 			e = grpassign_set(info);
 
 		if (e == GFARM_ERR_NO_ERROR)
-			e = gfarm_pgsql_commit_sn(seqnum, diag);
+			e = gfarm_pgsql_commit(diag);
 		else
 			gfarm_pgsql_rollback(diag);
 	}
-	FREE_ARG(arg);
+	free(arg);
 	return (e);
 }
 
 static gfarm_error_t
-gfarm_pgsql_group_remove(gfarm_uint64_t seqnum, char *groupname)
+gfarm_pgsql_group_remove(char *groupname)
 {
 	gfarm_error_t e;
 	const char *paramValues[1];
 
 	paramValues[0] = groupname;
-	e = gfarm_pgsql_update_or_delete(seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		"DELETE FROM GfarmGroup WHERE groupname = $1",
 		1, /* number of params */
 		NULL, /* param types */
@@ -1708,8 +1456,8 @@ gfarm_pgsql_group_remove(gfarm_uint64_t seqnum, char *groupname)
 		0, /* ask for text results */
 		"pgsql_group_remove");
 
-	FREE_ARG(groupname);
-	return (e);
+	free(groupname);
+	return e;
 }
 
 static gfarm_error_t
@@ -1720,7 +1468,7 @@ gfarm_pgsql_group_load(void *closure,
 	int i, n;
 	struct gfarm_group_info *infos;
 
-	e = gfarm_pgsql_generic_grouping_get_all_no_retry(
+	e = gfarm_pgsql_generic_grouping_get_all(
 		"SELECT GfarmGroup.groupname, count(username) "
 		    "FROM GfarmGroup LEFT OUTER JOIN GfarmGroupAssignment "
 		    "ON GfarmGroup.groupname = GfarmGroupAssignment.groupname "
@@ -1739,7 +1487,7 @@ gfarm_pgsql_group_load(void *closure,
 		"pgsql_group_load");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002160,
-		    "gfarm_pgsql_generic_grouping_get_all_no_retry() failed");
+			"gfarm_pgsql_generic_grouping_get_all() failed");
 		return (e);
 	}
 	for (i = 0; i < n; i++)
@@ -1752,8 +1500,11 @@ gfarm_pgsql_group_load(void *closure,
 /**********************************************************************/
 
 static gfarm_error_t
-pgsql_inode_call(gfarm_uint64_t seqnum, struct gfs_stat *info,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_inode_call(struct gfs_stat *info, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[13];
@@ -1795,7 +1546,6 @@ pgsql_inode_call(gfarm_uint64_t seqnum, struct gfs_stat *info,
 	paramValues[12] = ctimensec;
 
 	e = (*op)(
-		seqnum,
 		sql,
 		13, /* number of params */
 		NULL, /* param types */
@@ -1805,14 +1555,14 @@ pgsql_inode_call(gfarm_uint64_t seqnum, struct gfs_stat *info,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(info);
-	return (e);
+	free(info);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_add(gfarm_uint64_t seqnum, struct gfs_stat *info)
+gfarm_pgsql_inode_add(struct gfs_stat *info)
 {
-	return (pgsql_inode_call(seqnum, info,
+	return pgsql_inode_call(info,
 		"INSERT INTO INode (inumber, igen, nlink, size, mode, "
 			           "username, groupname, "
 				   "atimesec, atimensec, "
@@ -1820,28 +1570,27 @@ gfarm_pgsql_inode_add(gfarm_uint64_t seqnum, struct gfs_stat *info)
 				   "ctimesec, ctimensec) "
 		    "VALUES ($1, $2, $3, $4, $5, "
 			    "$6, $7, $8, $9 ,$10, $11, $12, $13)",
-		gfarm_pgsql_insert,
-		"pgsql_inode_add"));
+		gfarm_pgsql_insert_with_retry,
+		"pgsql_inode_add");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_modify(gfarm_uint64_t seqnum, struct gfs_stat *info)
+gfarm_pgsql_inode_modify(struct gfs_stat *info)
 {
-	return (pgsql_inode_call(seqnum, info,
+	return pgsql_inode_call(info,
 		"UPDATE INode SET igen = $2, nlink = $3, size = $4, "
 				"mode = $5, username = $6, groupname = $7, "
 				"atimesec = $8,  atimensec = $9, "
 				"mtimesec = $10, mtimensec = $11, "
 				"ctimesec = $12, ctimensec = $13 "
 		    "WHERE inumber = $1",
-		gfarm_pgsql_update_or_delete,
-		"pgsql_inode_modify"));
+		gfarm_pgsql_update_or_delete_with_retry,
+		"pgsql_inode_modify");
 }
 
 static gfarm_error_t
-pgsql_inode_uint64_call(gfarm_uint64_t seqnum,
-	struct db_inode_uint64_modify_arg *arg, const char *sql,
-	const char *diag)
+pgsql_inode_uint64_call(struct db_inode_uint64_modify_arg *arg,
+	const char *sql, const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[2];
@@ -1853,8 +1602,7 @@ pgsql_inode_uint64_call(gfarm_uint64_t seqnum,
 	sprintf(uint64, "%" GFARM_PRId64, arg->uint64);
 	paramValues[1] = uint64;
 
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		sql,
 		2, /* number of params */
 		NULL, /* param types */
@@ -1864,13 +1612,12 @@ pgsql_inode_uint64_call(gfarm_uint64_t seqnum,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-pgsql_inode_uint32_call(gfarm_uint64_t seqnum,
-	struct db_inode_uint32_modify_arg *arg,
+pgsql_inode_uint32_call(struct db_inode_uint32_modify_arg *arg,
 	const char *sql, const char *diag)
 {
 	gfarm_error_t e;
@@ -1883,8 +1630,7 @@ pgsql_inode_uint32_call(gfarm_uint64_t seqnum,
 	sprintf(uint32, "%d", arg->uint32);
 	paramValues[1] = uint32;
 
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		sql,
 		2, /* number of params */
 		NULL, /* param types */
@@ -1894,13 +1640,12 @@ pgsql_inode_uint32_call(gfarm_uint64_t seqnum,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-pgsql_inode_string_call(gfarm_uint64_t seqnum,
-	struct db_inode_string_modify_arg *arg,
+pgsql_inode_string_call(struct db_inode_string_modify_arg *arg,
 	const char *sql, const char *diag)
 {
 	gfarm_error_t e;
@@ -1911,8 +1656,7 @@ pgsql_inode_string_call(gfarm_uint64_t seqnum,
 	paramValues[0] = inumber;
 	paramValues[1] = arg->string;
 
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		sql,
 		2, /* number of params */
 		NULL, /* param types */
@@ -1922,13 +1666,12 @@ pgsql_inode_string_call(gfarm_uint64_t seqnum,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-pgsql_inode_timespec_call(gfarm_uint64_t seqnum,
-	struct db_inode_timespec_modify_arg *arg,
+pgsql_inode_timespec_call(struct db_inode_timespec_modify_arg *arg,
 	const char *sql, const char *diag)
 {
 	gfarm_error_t e;
@@ -1944,8 +1687,7 @@ pgsql_inode_timespec_call(gfarm_uint64_t seqnum,
 	sprintf(nsec, "%d", arg->time.tv_nsec);
 	paramValues[2] = nsec;
 
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		sql,
 		3, /* number of params */
 		NULL, /* param types */
@@ -1955,89 +1697,80 @@ pgsql_inode_timespec_call(gfarm_uint64_t seqnum,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_gen_modify(gfarm_uint64_t seqnum,
-	struct db_inode_uint64_modify_arg *arg)
+gfarm_pgsql_inode_gen_modify(struct db_inode_uint64_modify_arg *arg)
 {
-	return (pgsql_inode_uint64_call(seqnum, arg,
+	return pgsql_inode_uint64_call(arg,
 	    "UPDATE INode SET igen = $2 WHERE inumber = $1",
-	    "pgsql_inode_gen_modify"));
+	    "pgsql_inode_gen_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_nlink_modify(gfarm_uint64_t seqnum,
-	struct db_inode_uint64_modify_arg *arg)
+gfarm_pgsql_inode_nlink_modify(struct db_inode_uint64_modify_arg *arg)
 {
-	return (pgsql_inode_uint64_call(seqnum, arg,
+	return pgsql_inode_uint64_call(arg,
 	    "UPDATE INode SET nlink = $2 WHERE inumber = $1",
-	    "pgsql_inode_nlink_modify"));
+	    "pgsql_inode_nlink_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_size_modify(gfarm_uint64_t seqnum,
-	struct db_inode_uint64_modify_arg *arg)
+gfarm_pgsql_inode_size_modify(struct db_inode_uint64_modify_arg *arg)
 {
-	return (pgsql_inode_uint64_call(seqnum, arg,
+	return pgsql_inode_uint64_call(arg,
 	    "UPDATE INode SET size = $2 WHERE inumber = $1",
-	    "pgsql_inode_size_modify"));
+	    "pgsql_inode_size_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_mode_modify(gfarm_uint64_t seqnum,
-	struct db_inode_uint32_modify_arg *arg)
+gfarm_pgsql_inode_mode_modify(struct db_inode_uint32_modify_arg *arg)
 {
-	return (pgsql_inode_uint32_call(seqnum, arg,
+	return pgsql_inode_uint32_call(arg,
 	    "UPDATE INode SET mode = $2 WHERE inumber = $1",
-	    "pgsql_inode_mode_modify"));
+	    "pgsql_inode_mode_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_user_modify(gfarm_uint64_t seqnum,
-	struct db_inode_string_modify_arg *arg)
+gfarm_pgsql_inode_user_modify(struct db_inode_string_modify_arg *arg)
 {
-	return (pgsql_inode_string_call(seqnum, arg,
+	return pgsql_inode_string_call(arg,
 	    "UPDATE INode SET username = $2 WHERE inumber = $1",
-	    "pgsql_inode_user_modify"));
+	    "pgsql_inode_user_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_group_modify(gfarm_uint64_t seqnum,
-	struct db_inode_string_modify_arg *arg)
+gfarm_pgsql_inode_group_modify(struct db_inode_string_modify_arg *arg)
 {
-	return (pgsql_inode_string_call(seqnum, arg,
+	return pgsql_inode_string_call(arg,
 	    "UPDATE INode SET groupname = $2 WHERE inumber = $1",
-	    "pgsql_inode_group_modify"));
+	    "pgsql_inode_group_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_atime_modify(gfarm_uint64_t seqnum,
-	struct db_inode_timespec_modify_arg *arg)
+gfarm_pgsql_inode_atime_modify(struct db_inode_timespec_modify_arg *arg)
 {
-	return (pgsql_inode_timespec_call(seqnum, arg,
+	return pgsql_inode_timespec_call(arg,
 	  "UPDATE INode SET atimesec = $2, atimensec = $3 WHERE inumber = $1",
-	    "pgsql_inode_atime_modify"));
+	    "pgsql_inode_atime_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_mtime_modify(gfarm_uint64_t seqnum,
-	struct db_inode_timespec_modify_arg *arg)
+gfarm_pgsql_inode_mtime_modify(struct db_inode_timespec_modify_arg *arg)
 {
-	return (pgsql_inode_timespec_call(seqnum, arg,
+	return pgsql_inode_timespec_call(arg,
 	  "UPDATE INode SET mtimesec = $2, mtimensec = $3 WHERE inumber = $1",
-	  "pgsql_inode_mtime_modify"));
+	  "pgsql_inode_mtime_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_inode_ctime_modify(gfarm_uint64_t seqnum,
-	struct db_inode_timespec_modify_arg *arg)
+gfarm_pgsql_inode_ctime_modify(struct db_inode_timespec_modify_arg *arg)
 {
-	return (pgsql_inode_timespec_call(seqnum, arg,
+	return pgsql_inode_timespec_call(arg,
 	  "UPDATE INode SET ctimesec = $2, ctimensec = $3 WHERE inumber = $1",
-	  "pgsql_inode_ctime_modify"));
+	  "pgsql_inode_ctime_modify");
 }
 
 static void
@@ -2094,8 +1827,11 @@ gfarm_pgsql_inode_load(
 /**********************************************************************/
 
 static gfarm_error_t
-pgsql_inode_cksum_call(gfarm_uint64_t seqnum, struct db_inode_cksum_arg *arg,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_inode_cksum_call(struct db_inode_cksum_arg *arg, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[3];
@@ -2106,7 +1842,6 @@ pgsql_inode_cksum_call(gfarm_uint64_t seqnum, struct db_inode_cksum_arg *arg,
 	paramValues[1] = arg->type;
 	paramValues[2] = arg->sum;
 	e = (*op)(
-		seqnum,
 		sql,
 		3, /* number of params */
 		NULL, /* param types */
@@ -2116,13 +1851,16 @@ pgsql_inode_cksum_call(gfarm_uint64_t seqnum, struct db_inode_cksum_arg *arg,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-pgsql_inode_inum_call(gfarm_uint64_t seqnum, struct db_inode_inum_arg *arg,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_inode_inum_call(struct db_inode_inum_arg *arg, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[1];
@@ -2131,7 +1869,6 @@ pgsql_inode_inum_call(gfarm_uint64_t seqnum, struct db_inode_inum_arg *arg,
 	sprintf(inumber, "%" GFARM_PRId64, arg->inum);
 	paramValues[0] = inumber;
 	e = (*op)(
-		seqnum,
 		sql,
 		1, /* number of params */
 		NULL, /* param types */
@@ -2141,39 +1878,35 @@ pgsql_inode_inum_call(gfarm_uint64_t seqnum, struct db_inode_inum_arg *arg,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_file_info_add(gfarm_uint64_t seqnum,
-	struct db_inode_cksum_arg *arg)
+gfarm_pgsql_file_info_add(struct db_inode_cksum_arg *arg)
 {
-	return (pgsql_inode_cksum_call(seqnum, arg,
+	return pgsql_inode_cksum_call(arg,
 		"INSERT INTO FileInfo (inumber, checksumType, checksum) "
 		     "VALUES ($1, $2, $3)",
-		gfarm_pgsql_insert, "pgsql_cksum_add"));
+		gfarm_pgsql_insert_with_retry, "pgsql_cksum_add");
 }
 
 static gfarm_error_t
-gfarm_pgsql_file_info_modify(gfarm_uint64_t seqnum,
-	struct db_inode_cksum_arg *arg)
+gfarm_pgsql_file_info_modify(struct db_inode_cksum_arg *arg)
 {
-	return (pgsql_inode_cksum_call(seqnum, arg,
+	return pgsql_inode_cksum_call(arg,
 		"UPDATE FileInfo SET checksumType = $2, checksum = $3 "
 		    "WHERE inumber = $1",
-		gfarm_pgsql_update_or_delete,
-		"pgsql_cksum_modify"));
+		gfarm_pgsql_update_or_delete_with_retry, "pgsql_cksum_modify");
 }
 
 static gfarm_error_t
-gfarm_pgsql_file_info_remove(gfarm_uint64_t seqnum,
-	struct db_inode_inum_arg *arg)
+gfarm_pgsql_file_info_remove(struct db_inode_inum_arg *arg)
 {
-	return (pgsql_inode_inum_call(seqnum, arg,
+	return pgsql_inode_inum_call(arg,
 		"DELETE FROM FileInfo WHERE inumber = $1",
-		gfarm_pgsql_update_or_delete,
-		"pgsql_cksum_remove"));
+		gfarm_pgsql_update_or_delete_with_retry,
+		"pgsql_cksum_remove");
 }
 
 static void
@@ -2218,8 +1951,11 @@ gfarm_pgsql_file_info_load(
 /**********************************************************************/
 
 static gfarm_error_t
-pgsql_filecopy_call(gfarm_uint64_t seqnum, struct db_filecopy_arg *arg,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_filecopy_call(struct db_filecopy_arg *arg, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[2];
@@ -2229,7 +1965,6 @@ pgsql_filecopy_call(gfarm_uint64_t seqnum, struct db_filecopy_arg *arg,
 	paramValues[0] = inumber;
 	paramValues[1] = arg->hostname;
 	e = (*op)(
-		seqnum,
 		sql,
 		2, /* number of params */
 		NULL, /* param types */
@@ -2239,28 +1974,26 @@ pgsql_filecopy_call(gfarm_uint64_t seqnum, struct db_filecopy_arg *arg,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_filecopy_add(gfarm_uint64_t seqnum,
-	struct db_filecopy_arg *arg)
+gfarm_pgsql_filecopy_add(struct db_filecopy_arg *arg)
 {
-	return (pgsql_filecopy_call(seqnum, arg,
+	return pgsql_filecopy_call(arg,
 		"INSERT INTO FileCopy (inumber, hostname) VALUES ($1, $2)",
-		gfarm_pgsql_insert,
-		"pgsql_filecopy_add"));
+		gfarm_pgsql_insert_with_retry,
+		"pgsql_filecopy_add");
 }
 
 static gfarm_error_t
-gfarm_pgsql_filecopy_remove(gfarm_uint64_t seqnum,
-	struct db_filecopy_arg *arg)
+gfarm_pgsql_filecopy_remove(struct db_filecopy_arg *arg)
 {
-	return (pgsql_filecopy_call(seqnum, arg,
+	return pgsql_filecopy_call(arg,
 		"DELETE FROM FileCopy WHERE inumber = $1 AND hostname = $2",
-		gfarm_pgsql_update_or_delete,
-		"pgsql_filecopy_remove"));
+		gfarm_pgsql_update_or_delete_with_retry,
+		"pgsql_filecopy_remove");
 }
 
 static void
@@ -2303,8 +2036,11 @@ gfarm_pgsql_filecopy_load(
 /**********************************************************************/
 
 static gfarm_error_t
-pgsql_deadfilecopy_call(gfarm_uint64_t seqnum, struct db_deadfilecopy_arg *arg,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_deadfilecopy_call(struct db_deadfilecopy_arg *arg, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[3];
@@ -2317,7 +2053,6 @@ pgsql_deadfilecopy_call(gfarm_uint64_t seqnum, struct db_deadfilecopy_arg *arg,
 	paramValues[1] = igen;
 	paramValues[2] = arg->hostname;
 	e = (*op)(
-		seqnum,
 		sql,
 		3, /* number of params */
 		NULL, /* param types */
@@ -2327,30 +2062,28 @@ pgsql_deadfilecopy_call(gfarm_uint64_t seqnum, struct db_deadfilecopy_arg *arg,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
-}
-
-gfarm_error_t
-gfarm_pgsql_deadfilecopy_add(gfarm_uint64_t seqnum,
-	struct db_deadfilecopy_arg *arg)
-{
-	return (pgsql_deadfilecopy_call(seqnum, arg,
-		"INSERT INTO DeadFileCopy (inumber, igen, hostname) "
-			"VALUES ($1, $2, $3)",
-		gfarm_pgsql_insert,
-		"pgsql_deadfilecopy_add"));
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_deadfilecopy_remove(gfarm_uint64_t seqnum,
-	struct db_deadfilecopy_arg *arg)
+gfarm_pgsql_deadfilecopy_add(struct db_deadfilecopy_arg *arg)
 {
-	return (pgsql_deadfilecopy_call(seqnum, arg,
+	return pgsql_deadfilecopy_call(arg,
+		"INSERT INTO DeadFileCopy (inumber, igen, hostname) "
+			"VALUES ($1, $2, $3)",
+		gfarm_pgsql_insert_with_retry,
+		"pgsql_deadfilecopy_add");
+}
+
+static gfarm_error_t
+gfarm_pgsql_deadfilecopy_remove(struct db_deadfilecopy_arg *arg)
+{
+	return pgsql_deadfilecopy_call(arg,
 		"DELETE FROM DeadFileCopy "
 			"WHERE inumber = $1 AND igen = $2 AND hostname = $3",
-		gfarm_pgsql_update_or_delete,
-		"pgsql_deadfilecopy_remove"));
+		gfarm_pgsql_update_or_delete_with_retry,
+		"pgsql_deadfilecopy_remove");
 }
 
 static void
@@ -2396,8 +2129,7 @@ gfarm_pgsql_deadfilecopy_load(
 /**********************************************************************/
 
 static gfarm_error_t
-gfarm_pgsql_direntry_add(gfarm_uint64_t seqnum,
-	struct db_direntry_arg *arg)
+gfarm_pgsql_direntry_add(struct db_direntry_arg *arg)
 {
 	gfarm_error_t e;
 	const char *paramValues[3];
@@ -2409,7 +2141,7 @@ gfarm_pgsql_direntry_add(gfarm_uint64_t seqnum,
 	paramValues[1] = arg->entry_name;
 	sprintf(entry_inumber, "%" GFARM_PRId64, arg->entry_inum);
 	paramValues[2] = entry_inumber;
-	e = gfarm_pgsql_insert(seqnum,
+	e = gfarm_pgsql_insert_with_retry(
 		"INSERT INTO DirEntry (dirINumber, entryName, entryINumber) "
 		"VALUES ($1, $2, $3)",
 		3, /* number of params */
@@ -2420,13 +2152,12 @@ gfarm_pgsql_direntry_add(gfarm_uint64_t seqnum,
 		0, /* ask for text results */
 		"direntry_add");
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_direntry_remove(gfarm_uint64_t seqnum,
-	struct db_direntry_arg *arg)
+gfarm_pgsql_direntry_remove(struct db_direntry_arg *arg)
 {
 	gfarm_error_t e;
 	const char *paramValues[2];
@@ -2435,7 +2166,7 @@ gfarm_pgsql_direntry_remove(gfarm_uint64_t seqnum,
 	sprintf(dir_inumber, "%" GFARM_PRId64, arg->dir_inum);
 	paramValues[0] = dir_inumber;
 	paramValues[1] = arg->entry_name;
-	e = gfarm_pgsql_update_or_delete(seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		"DELETE FROM DirEntry "
 			"WHERE dirINumber = $1 AND entryName = $2",
 		2, /* number of params */
@@ -2446,8 +2177,8 @@ gfarm_pgsql_direntry_remove(gfarm_uint64_t seqnum,
 		0, /* ask for text results */
 		"direntry_remove");
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static void
@@ -2492,8 +2223,11 @@ gfarm_pgsql_direntry_load(
 /**********************************************************************/
 
 static gfarm_error_t
-pgsql_symlink_call(gfarm_uint64_t seqnum, struct db_symlink_arg *arg,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_symlink_call(struct db_symlink_arg *arg, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[2];
@@ -2503,7 +2237,6 @@ pgsql_symlink_call(gfarm_uint64_t seqnum, struct db_symlink_arg *arg,
 	paramValues[0] = inumber;
 	paramValues[1] = arg->source_path;
 	e = (*op)(
-		seqnum,
 		sql,
 		2, /* number of params */
 		NULL, /* param types */
@@ -2513,28 +2246,26 @@ pgsql_symlink_call(gfarm_uint64_t seqnum, struct db_symlink_arg *arg,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_symlink_add(gfarm_uint64_t seqnum,
-	struct db_symlink_arg *arg)
+gfarm_pgsql_symlink_add(struct db_symlink_arg *arg)
 {
-	return (pgsql_symlink_call(seqnum, arg,
+	return pgsql_symlink_call(arg,
 		"INSERT INTO Symlink (inumber, sourcePath) VALUES ($1, $2)",
-		gfarm_pgsql_insert,
-		"pgsql_symlink_add"));
+		gfarm_pgsql_insert_with_retry,
+		"pgsql_symlink_add");
 }
 
 static gfarm_error_t
-gfarm_pgsql_symlink_remove(gfarm_uint64_t seqnum,
-	struct db_inode_inum_arg *arg)
+gfarm_pgsql_symlink_remove(struct db_inode_inum_arg *arg)
 {
-	return (pgsql_inode_inum_call(seqnum, arg,
+	return pgsql_inode_inum_call(arg,
 		"DELETE FROM Symlink WHERE inumber = $1",
-		gfarm_pgsql_update_or_delete,
-		"pgsql_symlink_remove"));
+		gfarm_pgsql_update_or_delete_with_retry,
+		"pgsql_symlink_remove");
 }
 
 static void
@@ -2576,7 +2307,7 @@ gfarm_pgsql_symlink_load(
 /**********************************************************************/
 
 static gfarm_error_t
-gfarm_pgsql_xattr_add(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
+gfarm_pgsql_xattr_add(struct db_xattr_arg *arg)
 {
 	const char *paramValues[3];
 	int paramLengths[3];
@@ -2607,8 +2338,7 @@ gfarm_pgsql_xattr_add(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		diag = "pgsql_xattr_set";
 		paramFormats[2] = 1; // as binary
 	}
-	e = gfarm_pgsql_insert(
-		seqnum,
+	e = gfarm_pgsql_insert_and_log(
 		command,
 		3, /* number of params */
 		NULL, /* param types */
@@ -2618,12 +2348,12 @@ gfarm_pgsql_xattr_add(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_xattr_modify(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
+gfarm_pgsql_xattr_modify(struct db_xattr_arg *arg)
 {
 	const char *paramValues[3];
 	int paramLengths[3];
@@ -2654,8 +2384,7 @@ gfarm_pgsql_xattr_modify(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		diag = "pgsql_xattr_modify";
 		paramFormats[2] = 1; // as binary
 	}
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		command,
 		3, /* number of params */
 		NULL, /* param types */
@@ -2665,12 +2394,12 @@ gfarm_pgsql_xattr_modify(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_xattr_remove(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
+gfarm_pgsql_xattr_remove(struct db_xattr_arg *arg)
 {
 	gfarm_error_t e;
 	const char *paramValues[2];
@@ -2692,8 +2421,7 @@ gfarm_pgsql_xattr_remove(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 			"WHERE inumber = $1 AND attrname = $2";
 		diag = "pgsql_xattr_remove";
 	}
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		command,
 		paramNum,
 		NULL, /* param types */
@@ -2703,12 +2431,12 @@ gfarm_pgsql_xattr_remove(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
-gfarm_pgsql_xattr_removeall(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
+gfarm_pgsql_xattr_removeall(struct db_xattr_arg *arg)
 {
 	gfarm_error_t e;
 	const char *paramValues[1];
@@ -2727,8 +2455,7 @@ gfarm_pgsql_xattr_removeall(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 			"WHERE inumber = $1";
 		diag = "pgsql_xattr_removeall";
 	}
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		command,
 		1,
 		NULL, /* param types */
@@ -2738,8 +2465,8 @@ gfarm_pgsql_xattr_removeall(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(arg);
-	return (e);
+	free(arg);
+	return e;
 }
 
 static gfarm_error_t
@@ -2778,7 +2505,7 @@ pgsql_xattr_set_attrvalue_binary(PGresult *res, int row, void *vinfo)
 }
 
 static gfarm_error_t
-gfarm_pgsql_xattr_get(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
+gfarm_pgsql_xattr_get(struct db_xattr_arg *arg)
 {
 	gfarm_error_t e;
 	const char *paramValues[2];
@@ -2805,7 +2532,7 @@ gfarm_pgsql_xattr_get(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		set_fields = pgsql_xattr_set_attrvalue_binary;
 	}
 
-	e = gfarm_pgsql_generic_get_all_no_retry(
+	e = gfarm_pgsql_generic_get_all(
 		command,
 		2, paramValues,
 		&n, &vinfo,
@@ -2818,7 +2545,7 @@ gfarm_pgsql_xattr_get(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 	}
 
 	free(arg);
-	return (e);
+	return e;
 }
 
 static gfarm_error_t
@@ -2859,7 +2586,7 @@ gfarm_pgsql_xattr_load(void *closure,
 	}
 
 	/* XXX FIXME: should use gfarm_pgsql_generic_load() instead */
-	e = gfarm_pgsql_generic_get_all_no_retry(
+	e = gfarm_pgsql_generic_get_all(
 		command,
 		0, NULL,
 		&n, &vinfo,
@@ -2872,15 +2599,15 @@ gfarm_pgsql_xattr_load(void *closure,
 		return GFARM_ERR_NO_ERROR;
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002163,
-			"gfarm_pgsql_generic_get_all_no_retry() failed");
-		return (e);
+			"gfarm_pgsql_generic_get_all() failed");
+		return e;
 	}
 	for (i = 0; i < n; i++) {
 		(*callback)(&xmlMode, &vinfo[i]);
 	}
 	gfarm_base_generic_info_free_all(n, vinfo,
 			&gfarm_base_xattr_info_ops);
-	return (e);
+	return e;
 }
 
 static gfarm_error_t
@@ -2900,8 +2627,7 @@ pgsql_xattr_set_attrname(PGresult *res, int row, void *vinfo)
 }
 
 static gfarm_error_t
-gfarm_pgsql_xmlattr_find(gfarm_uint64_t seqnum,
-	struct db_xmlattr_find_arg *arg)
+gfarm_pgsql_xmlattr_find(struct db_xmlattr_find_arg *arg)
 {
 	gfarm_error_t e;
 	const char *paramValues[2];
@@ -2924,7 +2650,7 @@ gfarm_pgsql_xmlattr_find(gfarm_uint64_t seqnum,
 		"ORDER BY attrname";
 	diag = "pgsql_xmlattr_find";
 
-	e = gfarm_pgsql_generic_get_all_no_retry(
+	e = gfarm_pgsql_generic_get_all(
 		command,
 		2, paramValues,
 		&n, &vinfo,
@@ -2946,8 +2672,11 @@ gfarm_pgsql_xmlattr_find(gfarm_uint64_t seqnum,
 
 /* quota */
 static gfarm_error_t
-pgsql_quota_call(gfarm_uint64_t seqnum, struct db_quota_arg *info,
-	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+pgsql_quota_call(struct db_quota_arg *info, const char *sql,
+	gfarm_error_t (*op)(const char *, int, const Oid *,
+		const char *const *, const int *, const int *, int,
+		const char *),
+	const char *diag)
 {
 	gfarm_error_t e;
 	const char *paramValues[18];
@@ -3009,7 +2738,6 @@ pgsql_quota_call(gfarm_uint64_t seqnum, struct db_quota_arg *info,
 	paramValues[17] = phy_num_hard;
 
 	e = (*op)(
-		seqnum,
 		sql,
 		18, /* number of params */
 		NULL, /* param types */
@@ -3019,12 +2747,12 @@ pgsql_quota_call(gfarm_uint64_t seqnum, struct db_quota_arg *info,
 		0, /* ask for text results */
 		diag);
 
-	FREE_ARG(info);
+	free(info);
 	return (e);
 }
 
 static gfarm_error_t
-gfarm_pgsql_quota_add(gfarm_uint64_t seqnum, struct db_quota_arg *arg)
+gfarm_pgsql_quota_add(struct db_quota_arg *arg)
 {
 	static char *sql_user =
 		"INSERT INTO QuotaUser"
@@ -3046,13 +2774,13 @@ gfarm_pgsql_quota_add(gfarm_uint64_t seqnum, struct db_quota_arg *arg)
 		"$11, $12, $13, $14, $15, $16, $17, $18)";
 	char *sql = arg->is_group ? sql_group : sql_user;
 
-	return (pgsql_quota_call(seqnum, arg, sql,
-				 gfarm_pgsql_insert,
+	return (pgsql_quota_call(arg, sql,
+				 gfarm_pgsql_insert_with_retry,
 				 "pgsql_quota_add"));
 }
 
 static gfarm_error_t
-gfarm_pgsql_quota_modify(gfarm_uint64_t seqnum, struct db_quota_arg *arg)
+gfarm_pgsql_quota_modify(struct db_quota_arg *arg)
 {
 	static char *sql_user =
 		"UPDATE QuotaUser SET gracePeriod = $2, "
@@ -3076,14 +2804,13 @@ gfarm_pgsql_quota_modify(gfarm_uint64_t seqnum, struct db_quota_arg *arg)
 		"phyNumSoft = $17, phyNumHard = $18 WHERE groupname = $1";
 	char *sql = arg->is_group ? sql_group : sql_user;
 
-	return (pgsql_quota_call(seqnum, arg, sql,
-				 gfarm_pgsql_update_or_delete,
+	return (pgsql_quota_call(arg, sql,
+				 gfarm_pgsql_update_or_delete_with_retry,
 				 "pgsql_quota_modify"));
 }
 
 static gfarm_error_t
-gfarm_pgsql_quota_remove(gfarm_uint64_t seqnum,
-	struct db_quota_remove_arg *arg)
+gfarm_pgsql_quota_remove(struct db_quota_remove_arg *arg)
 {
 	gfarm_error_t e;
 	const char *paramValues[1];
@@ -3092,8 +2819,7 @@ gfarm_pgsql_quota_remove(gfarm_uint64_t seqnum,
 	char *sql = arg->is_group ? sql_group : sql_user;
 
 	paramValues[0] = arg->name;
-	e = gfarm_pgsql_update_or_delete(
-		seqnum,
+	e = gfarm_pgsql_update_or_delete_with_retry(
 		sql,
 		1, /* number of params */
 		NULL, /* param types */
@@ -3103,7 +2829,7 @@ gfarm_pgsql_quota_remove(gfarm_uint64_t seqnum,
 		0, /* ask for text results */
 		"pgsql_quota_remove");
 
-	FREE_ARG(arg);
+	free(arg);
 	return (e);
 }
 
@@ -3162,121 +2888,6 @@ gfarm_pgsql_quota_load(void *closure, int is_group,
 		quota_info_set_fields_from_copy_binary,
 		"pgsql_quota_load"));
 }
-
-/**********************************************************************/
-
-#ifdef ENABLE_METADATA_REPLICATION
-
-static gfarm_error_t
-pgsql_seqnum_call(struct db_seqnum_arg *arg,
-	const char *sql, gfarm_pgsql_dml_t op, const char *diag)
-{
-	gfarm_error_t e;
-	const char *paramValues[2];
-	char value[GFARM_INT32STRLEN + 1];
-
-	paramValues[0] = arg->name;
-	snprintf(value, sizeof(value), "%" GFARM_PRId64, arg->value);
-	paramValues[1] = value;
-	e = (*op)(
-		sql,
-		2, /* number of params */
-		NULL, /* param types */
-		paramValues,
-		NULL, /* param lengths */
-		NULL, /* param formats */
-		0, /* ask for text results */
-		diag);
-	FREE_ARG(info);
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_seqnum_add(struct db_seqnum_arg *arg)
-{
-	gfarm_error_t e;
-
-	e = pgsql_seqnum_call(arg,
-		"INSERT INTO SeqNum (name, value) "
-		     "VALUES ($1, $2)",
-		gfarm_pgsql_insert_and_log,
-		"pgsql_seqnum_add");
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_seqnum_modify(struct db_seqnum_arg *arg)
-{
-	gfarm_error_t e;
-
-	e = pgsql_seqnum_call(arg,
-		"UPDATE SeqNum "
-		     "SET value = $2 "
-		     "WHERE name = $1",
-		gfarm_pgsql_exec_params_and_log,
-		"pgsql_seqnum_modify");
-	return (e);
-}
-
-static gfarm_error_t
-gfarm_pgsql_seqnum_remove(char *name)
-{
-	gfarm_error_t e;
-	const char *paramValues[1];
-
-	paramValues[0] = name;
-	e = gfarm_pgsql_exec_params_and_log(
-		"DELETE FROM SeqNum WHERE name = $1",
-		1, /* number of params */
-		NULL, /* param types */
-		paramValues,
-		NULL, /* param lengths */
-		NULL, /* param formats */
-		0, /* ask for text results */
-		"pgsql_seqnum_remove");
-	FREE_ARG(name);
-	return (e);
-}
-
-static gfarm_error_t
-seqnum_info_set_field(PGresult *res, int row, void *varg)
-{
-	struct db_seqnum_arg *arg = varg;
-
-	arg->name = pgsql_get_string_ck(res, row, "name");
-	arg->value = pgsql_get_int64(res, row, "value");
-	return (GFARM_ERR_NO_ERROR);
-}
-
-static gfarm_error_t
-gfarm_pgsql_seqnum_load(void *closure,
-	void (*callback)(void *, struct db_seqnum_arg *))
-{
-	gfarm_error_t e;
-	int i, n;
-	struct db_seqnum_arg *args;
-
-	e = gfarm_pgsql_generic_get_all_no_retry(
-		"SELECT * FROM SeqNum",
-		0, NULL,
-		&n, &args,
-		&gfarm_base_user_info_ops, seqnum_info_set_field,
-		"pgsql_seqnum_load");
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfarm_pgsql_generic_get_all_no_retry()");
-		return (e);
-	}
-	for (i = 0; i < n; i++)
-		(*callback)(closure, &args[i]);
-
-	free(args);
-	return (GFARM_ERR_NO_ERROR);
-}
-
-#endif
-
-/**********************************************************************/
 
 /* DO NOT REMOVE: this interfaces is provided for a private extension */
 /* The official gfmd source code shouldn't use these interface */
@@ -3358,15 +2969,4 @@ const struct db_ops db_pgsql_ops = {
 	gfarm_pgsql_quota_modify,
 	gfarm_pgsql_quota_remove,
 	gfarm_pgsql_quota_load,
-#ifdef ENABLE_METADATA_REPLICATION
-	gfarm_pgsql_seqnum_add,
-	gfarm_pgsql_seqnum_modify,
-	gfarm_pgsql_seqnum_remove,
-	gfarm_pgsql_seqnum_load,
-#else
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-#endif
 };

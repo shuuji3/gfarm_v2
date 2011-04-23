@@ -11,7 +11,6 @@
 #include "gfj_client.h"
 
 #include "subr.h"
-#include "rpcsubr.h"
 #include "peer.h"
 #include "job.h"
 

@@ -17,7 +17,6 @@
 #include "timespec.h"
 
 #include "subr.h"
-#include "rpcsubr.h"
 #include "db_access.h"
 #include "peer.h"
 #include "inode.h"

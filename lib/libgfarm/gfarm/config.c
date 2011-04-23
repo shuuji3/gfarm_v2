@@ -39,8 +39,6 @@
 #include "gfs_profile.h"
 #include "gfm_client.h"
 #include "lookup.h"
-#include "metadb_server.h"
-#include "filesystem.h"
 
 #include "hash.h"
 #include "lru_cache.h"
@@ -726,10 +724,6 @@ char *gfarm_localfs_datadir = NULL;
 #define GFARM_GFMD_CONNECTION_CACHE_DEFAULT  8 /*  8 free connections */
 #define GFARM_RECORD_ATIME_DEFAULT 1 /* enable */
 #define GFARM_PROFILE_DEFAULT 0 /* disable */
-#define GFARM_JOURNAL_MAX_SIZE_DEFAULT		(32 * 1024 * 1024) /* 32MB */
-#define GFARM_JOURNAL_SYNC_FILE_DEFAULT		1
-#define GFARM_JOURNAL_SYNC_SLAVE_DEFAULT	1
-#define GFARM_JOURNAL_SYNC_SLAVE_TIMEOUT_DEFAULT 10 /* 10 second */
 #define MISC_DEFAULT -1
 int gfarm_log_level = MISC_DEFAULT;
 int gfarm_log_message_verbose = MISC_DEFAULT;
@@ -754,11 +748,6 @@ int gfarm_metadb_heartbeat_interval = MISC_DEFAULT;
 int gfarm_metadb_dbq_size = MISC_DEFAULT;
 int gfarm_record_atime = MISC_DEFAULT;
 int gfarm_profile = MISC_DEFAULT;
-static char *journal_dir = NULL;
-static int journal_max_size = MISC_DEFAULT;
-static int journal_sync_file = MISC_DEFAULT;
-static int journal_sync_slave = MISC_DEFAULT;
-static int journal_sync_slave_timeout = MISC_DEFAULT;
 
 void
 gfarm_config_clear(void)
@@ -787,7 +776,6 @@ gfarm_config_clear(void)
 		&gfarm_postgresql_conninfo,
 		&gfarm_localfs_datadir,
 		&schedule_write_target_domain,
-		&journal_dir,
 	};
 	int i;
 
@@ -864,36 +852,6 @@ void
 gfarm_set_record_atime(int boolean)
 {
 	gfarm_record_atime = boolean;
-}
-
-const char *
-gfarm_get_journal_dir(void)
-{
-	return (journal_dir);
-}
-
-int
-gfarm_get_journal_max_size(void)
-{
-	return (journal_max_size);
-}
-
-int
-gfarm_get_journal_sync_file(void)
-{
-	return (journal_sync_file);
-}
-
-int
-gfarm_get_journal_sync_slave(void)
-{
-	return (journal_sync_slave);
-}
-
-int
-gfarm_get_journal_sync_slave_timeout(void)
-{
-	return (journal_sync_slave_timeout);
 }
 
 /*
@@ -1852,90 +1810,6 @@ parse_profile(char *p, int *vp)
 }
 
 static gfarm_error_t
-parse_metadb_server_list_arguments(char *p, char **op)
-{
-#define METADB_SERVER_NUM_MAX 1024
-	gfarm_error_t e;
-	int i, port;
-	char *host_and_port, *host = NULL;
-	const char *listname = *op;
-	struct gfarm_metadb_server *m;
-	int n = 0;
-	struct gfarm_filesystem *fs;
-	struct gfarm_metadb_server *ms[METADB_SERVER_NUM_MAX];
-
-	if (gfarm_filesystem_is_initialized())
-		return (GFARM_ERR_NO_ERROR);
-	for (;;) {
-		if ((e = gfarm_strtoken(&p, &host_and_port))
-		    != GFARM_ERR_NO_ERROR) {
-			*op = "hostname:port argument";
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "parsing of %s (%s) failed: %s",
-			    listname, p, gfarm_error_string(e));
-			goto error;
-		}
-		if (host_and_port == NULL)
-			break;
-		if (n >= METADB_SERVER_NUM_MAX) {
-			e = GFARM_ERR_INVALID_ARGUMENT;
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "Too many arguments passed to %s", listname);
-			goto error;
-		}
-		port = -1;
-		if ((e = parse_hostname_and_port(host_and_port, listname,
-		    &host, &port)) != GFARM_ERR_NO_ERROR) {
-			*op = "hostname:port argument";
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "parsing of %s arguments (%s) failed: %s",
-			    listname, p, gfarm_error_string(e));
-			return (e);
-		}
-		host = strdup(host);
-		if (host == NULL) {
-			e = GFARM_ERR_NO_MEMORY;
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "%s", gfarm_error_string(e));
-			goto error;
-		}
-		if ((e = gfarm_metadb_server_new(&m)) != GFARM_ERR_NO_ERROR) {
-			free(host);
-			goto error;
-		}
-		gfarm_metadb_server_set_name(m, host);
-		if (port < 0)
-			port = GFMD_DEFAULT_PORT;
-		gfarm_metadb_server_set_port(m, port);
-		ms[n++] = m;
-	}
-	if (n == 0) {
-		*op = "1st (hostname:port) argument";
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "Too few arguments passed to %s", listname);
-		return (GFARM_ERR_INVALID_ARGUMENT);
-	}
-	gfarm_metadb_server_set_is_master(ms[0], 1);
-	if ((e = gfarm_filesystem_init()) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		goto error;
-	}
-	fs = gfarm_filesystem_get_default();
-	if ((e = gfarm_filesystem_set_metadb_server_list(fs, ms, n))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		goto error;
-	}
-	return (GFARM_ERR_NO_ERROR);
-error:
-	for (i = 0; i < n; ++i)
-		gfarm_metadb_server_free(ms[i]);
-	return (e);
-}
-
-static gfarm_error_t
 parse_one_line(char *s, char *p, char **op)
 {
 	gfarm_error_t e;
@@ -1959,8 +1833,6 @@ parse_one_line(char *s, char *p, char **op)
 		e = parse_set_var(p, &gfarm_metadb_server_name);
 	} else if (strcmp(s, o = "metadb_server_port") == 0) {
 		e = parse_set_var(p, &gfarm_metadb_server_portname);
-	} else if (strcmp(s, o = "metadb_server_list") == 0) {
-		e = parse_metadb_server_list_arguments(p, &o);
 	} else if (strcmp(s, o = "admin_user") == 0) {
 		e = parse_set_var(p, &gfarm_metadb_admin_user);
 	} else if (strcmp(s, o = "admin_user_gsi_dn") == 0) {
@@ -2115,16 +1987,6 @@ parse_one_line(char *s, char *p, char **op)
 	} else if (strcmp(s, o = "profile") == 0) {
 		e = parse_profile(p, &gfarm_profile);
 
-	} else if (strcmp(s, o = "metadb_journal_dir") == 0) {
-		e = parse_set_var(p, &journal_dir);
-	} else if (strcmp(s, o = "metadb_journal_max_size") == 0) {
-		e = parse_set_misc_int(p, &journal_max_size);
-	} else if (strcmp(s, o = "synchronous_journaling") == 0) {
-		e = parse_set_misc_enabled(p, &journal_sync_file);
-	} else if (strcmp(s, o = "synchronous_replication") == 0) {
-		e = parse_set_misc_enabled(p, &journal_sync_slave);
-	} else if (strcmp(s, o = "synchronous_replication_timeout") == 0) {
-		e = parse_set_misc_int(p, &journal_sync_slave_timeout);
 	} else {
 		o = s;
 		gflog_debug(GFARM_MSG_1000974,
@@ -2206,42 +2068,6 @@ gfarm_config_set_default_ports(void)
 	}
 }
 
-static void
-gfarm_config_set_default_metadb_server(void)
-{
-	gfarm_error_t e;
-	int n;
-	struct gfarm_filesystem *fs;
-	struct gfarm_metadb_server **msl, *m;
-	struct gfarm_metadb_server *ms[1];
-
-	/* gfarm_metadb_server_name is checked in
-	 * gfarm_config_set_default_ports */
-	assert(gfarm_metadb_server_name != NULL);
-
-	if ((e = gfarm_filesystem_init()) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		return;
-	}
-	fs = gfarm_filesystem_get_default();
-	if ((msl = gfarm_filesystem_get_metadb_server_list(fs, &n)) != NULL)
-		return;
-	if ((e = gfarm_metadb_server_new(&m)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		return;
-	}
-	ms[0] = m;
-	gfarm_metadb_server_set_name(m, gfarm_metadb_server_name);
-	gfarm_metadb_server_set_port(m, gfarm_metadb_server_port);
-	gfarm_metadb_server_set_is_master(m, 1);
-	if ((e = gfarm_filesystem_set_metadb_server_list(fs, ms, 1))
-	    != GFARM_ERR_NO_ERROR)
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-}
-
 void
 gfarm_config_set_default_misc(void)
 {
@@ -2304,17 +2130,6 @@ gfarm_config_set_default_misc(void)
 		gfarm_record_atime = GFARM_RECORD_ATIME_DEFAULT;
 	if (gfarm_profile == MISC_DEFAULT)
 		gfarm_profile = GFARM_PROFILE_DEFAULT;
-	if (journal_max_size == MISC_DEFAULT)
-		journal_max_size = GFARM_JOURNAL_MAX_SIZE_DEFAULT;
-	if (journal_sync_file == MISC_DEFAULT)
-		journal_sync_file = GFARM_JOURNAL_SYNC_FILE_DEFAULT;
-	if (journal_sync_slave == MISC_DEFAULT)
-		journal_sync_slave = GFARM_JOURNAL_SYNC_SLAVE_DEFAULT;
-	if (journal_sync_slave_timeout == MISC_DEFAULT)
-		journal_sync_slave_timeout =
-		    GFARM_JOURNAL_SYNC_SLAVE_TIMEOUT_DEFAULT;
-
-	gfarm_config_set_default_metadb_server();
 }
 
 void

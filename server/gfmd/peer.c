@@ -37,19 +37,13 @@
 #include "subr.h"
 #include "thrpool.h"
 #include "user.h"
-#include "abstract_host.h"
 #include "host.h"
-#include "mdhost.h"
 #include "peer.h"
 #include "inode.h"
 #include "process.h"
 #include "job.h"
 
 #include "protocol_state.h"
-
-#define BACK_CHANNEL_DIAG(peer) (peer_get_auth_id_type(peer) == \
-	GFARM_AUTH_ID_TYPE_SPOOL_HOST ? "back_channel" : "gfmd_channel")
-#define PROTOCOL_ERROR_MUTEX_DIAG "protocol_error_mutex"
 
 struct peer_closing_queue {
 	pthread_mutex_t mutex;
@@ -68,15 +62,15 @@ struct peer {
 	int refcount;
 
 	struct gfp_xdr *conn;
-	gfp_xdr_async_peer_t async; /* used by {back|gfmd}_channel */
+	gfp_xdr_async_peer_t async;	/* used by back_channel only */
+
 	enum gfarm_auth_id_type id_type;
 	char *username, *hostname;
 	struct user *user;
-	struct abstract_host *host;
+	struct host *host;
 
 	struct process *process;
 	int protocol_error;
-	pthread_mutex_t protocol_error_mutex;
 	void *(*protocol_handler)(void *);
 	struct thread_pool *handler_thread_pool;
 
@@ -386,6 +380,7 @@ peer_watcher(void *arg)
 			fd = &peer_poll_fds[i];
 			peer = &peer_table[fd->fd];
 #endif
+			giant_lock();
 			gfarm_mutex_lock(&peer_table_mutex,
 			    diag, peer_table_diag);
 			/*
@@ -439,6 +434,7 @@ peer_watcher(void *arg)
 			    "peer_watcher checking", "peer:control_mutex");
 			gfarm_mutex_unlock(&peer_table_mutex,
 			    diag, peer_table_diag);
+			giant_unlock();
 
 			if (!skip) {
 				/*
@@ -568,9 +564,8 @@ peer_free_request(struct peer *peer)
 	 */
 	rv = shutdown(fd, SHUT_RDWR);
 	if (rv == -1)
-		gflog_warning(GFARM_MSG_UNFIXED,
-		    "%s(%s) : shutdown(%d): %s", BACK_CHANNEL_DIAG(peer),
-		    peer_get_hostname(peer), fd, strerror(errno));
+		gflog_warning(GFARM_MSG_1002220,
+		    "back_channel: shutdown(%d): %s", fd, strerror(errno));
 
 	*peer_closing_queue.tail = peer;
 	peer->next_close = NULL;
@@ -606,8 +601,6 @@ peer_init(int max_peers,
 		peer->host = NULL;
 		peer->process = NULL;
 		peer->protocol_error = 0;
-		gfarm_mutex_init(&peer->protocol_error_mutex,
-		    "peer_init", "peer:protocol_error_mutex");
 
 		peer->control = 0;
 		gfarm_mutex_init(&peer->control_mutex,
@@ -660,8 +653,8 @@ peer_init(int max_peers,
 			    gfarm_error_string(e));
 }
 
-static gfarm_error_t
-peer_alloc0(int fd, struct peer **peerp, struct gfp_xdr *conn)
+gfarm_error_t
+peer_alloc(int fd, struct peer **peerp)
 {
 	gfarm_error_t e;
 	struct peer *peer;
@@ -683,7 +676,7 @@ peer_alloc0(int fd, struct peer **peerp, struct gfp_xdr *conn)
 	if (peer->conn != NULL) { /* must be an implementation error */
 		gfarm_mutex_unlock(&peer_table_mutex, diag, peer_table_diag);
 		gflog_debug(GFARM_MSG_1001582,
-			"bad file descriptor: conn is not NULL");
+			"bad file descriptor: conn is NULL");
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
 	}
 
@@ -691,18 +684,14 @@ peer_alloc0(int fd, struct peer **peerp, struct gfp_xdr *conn)
 	peer->refcount = 0;
 
 	/* XXX FIXME gfp_xdr requires too much memory */
-	if (conn == NULL) {
-		e = gfp_xdr_new_socket(fd, &peer->conn);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001583,
-			    "gfp_xdr_new_socket() failed: %s",
-			    gfarm_error_string(e));
-			gfarm_mutex_unlock(&peer_table_mutex, diag,
-			    peer_table_diag);
-			return (e);
-		}
-	} else
-		peer->conn = conn;
+	e = gfp_xdr_new_socket(fd, &peer->conn);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001583,
+			"gfp_xdr_new_socket() failed: %s",
+			gfarm_error_string(e));
+		gfarm_mutex_unlock(&peer_table_mutex, diag, peer_table_diag);
+		return (e);
+	}
 
 	peer->async = NULL; /* synchronous protocol by default */
 	peer->username = NULL;
@@ -731,98 +720,40 @@ peer_alloc0(int fd, struct peer **peerp, struct gfp_xdr *conn)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-gfarm_error_t
-peer_alloc(int fd, struct peer **peerp)
-{
-	return (peer_alloc0(fd, peerp, NULL));
-}
-
-gfarm_error_t
-peer_alloc_with_connection(struct peer **peerp, struct gfp_xdr *conn,
-	struct abstract_host *host, int id_type)
-{
-	gfarm_error_t e;
-
-	if ((e = peer_alloc0(gfp_xdr_fd(conn), peerp, conn))
-	    == GFARM_ERR_NO_ERROR) {
-		(*peerp)->host = host;
-		(*peerp)->id_type = GFARM_AUTH_ID_TYPE_METADATA_HOST;
-	}
-	return (e);
-}
-
-const char *
-peer_get_service_name(struct peer *peer)
-{
-	return (peer == NULL ? "" :
-	    ((peer)->id_type == GFARM_AUTH_ID_TYPE_SPOOL_HOST ?  "gfsd" :
-	    ((peer)->id_type == GFARM_AUTH_ID_TYPE_METADATA_HOST ?
-	    "gfmd" : "")));
-}
-
 /* caller should allocate the storage for username and hostname */
 void
 peer_authorized(struct peer *peer,
 	enum gfarm_auth_id_type id_type, char *username, char *hostname,
 	struct sockaddr *addr, enum gfarm_auth_method auth_method)
 {
-	struct host *h;
-	struct mdhost *m;
-
 	peer->id_type = id_type;
-	peer->user = NULL;
-	peer->username = username;
-
-	switch (id_type) {
-	case GFARM_AUTH_ID_TYPE_USER:
+	if (id_type == GFARM_AUTH_ID_TYPE_USER) {
 		peer->user = user_lookup(username);
 		if (user_is_active(peer->user)) {
 			free(username);
 			peer->username = NULL;
-		} else
+		} else {
 			peer->username = username;
-		/*FALLTHROUGH*/
-
-	case GFARM_AUTH_ID_TYPE_SPOOL_HOST:
-		h = host_addr_lookup(hostname, addr);
-		if (h == NULL) {
-			peer->host = NULL;
-		} else {
-			peer->host = host_to_abstract_host(h);
 		}
-		break;
-
-	case GFARM_AUTH_ID_TYPE_METADATA_HOST:
-		m = mdhost_lookup(hostname);
-		if (m == NULL) {
-			peer->host = NULL;
-		} else {
-			peer->host = mdhost_to_abstract_host(m);
-		}
-		break;
+	} else {
+		peer->user = NULL;
+		peer->username = username;
 	}
-
+	peer->host = host_addr_lookup(hostname, addr);
 	if (peer->host != NULL) {
 		free(hostname);
 		peer->hostname = NULL;
 	} else {
 		peer->hostname = hostname;
 	}
-
-	switch (id_type) {
-	case GFARM_AUTH_ID_TYPE_SPOOL_HOST:
-	case GFARM_AUTH_ID_TYPE_METADATA_HOST:
+	if (id_type == GFARM_AUTH_ID_TYPE_SPOOL_HOST) {
 		if (peer->host == NULL)
 			gflog_warning(GFARM_MSG_1000284,
 			    "unknown host: %s", hostname);
 		else
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "%s connected from %s",
-			    peer_get_service_name(peer),
-			    abstract_host_get_name(peer->host));
-		break;
-	default:
-		break;
+			gflog_debug(GFARM_MSG_1000285,
+			    "gfsd connected from %s",
+				    host_name(peer->host));
 	}
 	/* We don't record auth_method for now */
 
@@ -843,8 +774,7 @@ peer_authorized(struct peer *peer,
 void
 peer_free(struct peer *peer)
 {
-	char *username;
-	const char *hostname;
+	char *username, *hostname;
 	static const char diag[] = "peer_free";
 
 	gfarm_mutex_lock(&peer_table_mutex, diag, peer_table_diag);
@@ -889,10 +819,7 @@ peer_free(struct peer *peer)
 	}
 	peer->findxmlattrctx = NULL;
 
-	if (peer->conn) {
-		gfp_xdr_free(peer->conn);
-		peer->conn = NULL;
-	}
+	gfp_xdr_free(peer->conn); peer->conn = NULL;
 	peer->next_close = NULL;
 	peer->refcount = 0;
 
@@ -1015,50 +942,30 @@ peer_get_async(struct peer *peer)
 gfarm_error_t
 peer_set_host(struct peer *peer, char *hostname)
 {
-	struct host *h;
-	struct mdhost *m;
-
-	switch (peer->id_type) {
-	case GFARM_AUTH_ID_TYPE_SPOOL_HOST:
-		if (peer->host != NULL) { /* already set */
-			gflog_debug(GFARM_MSG_1001585,
-				"peer host is already set");
-			return (GFARM_ERR_NO_ERROR);
-		}
-		if ((h = host_lookup(hostname)) == NULL) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-				"host %s does not exist", hostname);
-			return (GFARM_ERR_UNKNOWN_HOST);
-		}
-		peer->host = host_to_abstract_host(h);
-		break;
-	case GFARM_AUTH_ID_TYPE_METADATA_HOST:
-		if (peer->host != NULL) { /* already set */
-			gflog_debug(GFARM_MSG_UNFIXED,
-				"peer metadata-host is already set");
-			return (GFARM_ERR_NO_ERROR);
-		}
-		if ((m = mdhost_lookup(hostname)) == NULL) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-				"metadata-host %s does not exist", hostname);
-			return (GFARM_ERR_UNKNOWN_HOST);
-		}
-		peer->host = mdhost_to_abstract_host(m);
-		break;
-	default:
+	if (peer->id_type != GFARM_AUTH_ID_TYPE_SPOOL_HOST) {
 		gflog_debug(GFARM_MSG_1001584,
 			"operation is not permitted");
 		return (GFARM_ERR_OPERATION_NOT_PERMITTED);
+	}
+	if (peer->host != NULL) { /* already set */
+		gflog_debug(GFARM_MSG_1001585,
+			"peer host is already set");
+		return (GFARM_ERR_NO_ERROR);
+	}
+
+	peer->host = host_lookup(hostname);
+	if (peer->host == NULL) {
+		gflog_debug(GFARM_MSG_1001586,
+			"host does not exist");
+		return (GFARM_ERR_UNKNOWN_HOST);
 	}
 
 	if (peer->hostname != NULL) {
 		free(peer->hostname);
 		peer->hostname = NULL;
 	}
-
-	gflog_debug(GFARM_MSG_UNFIXED,
-	    "%s connected from %s",
-	    peer_get_service_name(peer), abstract_host_get_name(peer->host));
+	gflog_debug(GFARM_MSG_1000289,
+	    "gfsd connected from %s", host_name(peer->host));
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -1074,11 +981,10 @@ peer_get_username(struct peer *peer)
 	return (peer->user != NULL ? user_name(peer->user) : peer->username);
 }
 
-const char *
+char *
 peer_get_hostname(struct peer *peer)
 {
-	return (peer->host != NULL ?
-	    abstract_host_get_name(peer->host) : NULL);
+	return (peer->host != NULL ? host_name(peer->host) : peer->hostname);
 }
 
 struct user *
@@ -1096,24 +1002,10 @@ peer_set_user(struct peer *peer, struct user *user)
 	peer->user = user;
 }
 
-struct abstract_host *
-peer_get_abstract_host(struct peer *peer)
-{
-	return (peer->host);
-}
-
 struct host *
 peer_get_host(struct peer *peer)
 {
-	return (peer->host == NULL ? NULL :
-	    abstract_host_to_host(peer->host));
-}
-
-struct mdhost *
-peer_get_mdhost(struct peer *peer)
-{
-	return (peer->host == NULL ? NULL :
-	    abstract_host_to_mdhost(peer->host));
+	return (peer->host);
 }
 
 /* NOTE: caller of this function should acquire giant_lock as well */
@@ -1175,27 +1067,13 @@ peer_unset_process(struct peer *peer)
 void
 peer_record_protocol_error(struct peer *peer)
 {
-	static const char *diag = "peer_record_protocol_error";
-
-	gfarm_mutex_lock(&peer->protocol_error_mutex, diag,
-	    PROTOCOL_ERROR_MUTEX_DIAG);
 	peer->protocol_error = 1;
-	gfarm_mutex_unlock(&peer->protocol_error_mutex, diag,
-	    PROTOCOL_ERROR_MUTEX_DIAG);
 }
 
 int
 peer_had_protocol_error(struct peer *peer)
 {
-	int e;
-	static const char *diag = "peer_had_protocol_error";
-
-	gfarm_mutex_lock(&peer->protocol_error_mutex, diag,
-	    PROTOCOL_ERROR_MUTEX_DIAG);
-	e = peer->protocol_error;
-	gfarm_mutex_unlock(&peer->protocol_error_mutex, diag,
-	    PROTOCOL_ERROR_MUTEX_DIAG);
-	return (e);
+	return (peer->protocol_error);
 }
 
 void
