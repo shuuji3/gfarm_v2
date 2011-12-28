@@ -18,7 +18,6 @@
 
 #include <pthread.h>	/* db_access.h currently needs this */
 #include <assert.h>
-#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -30,14 +29,13 @@
 
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 #include "metadb_common.h"
 #include "xattr_info.h"
 #include "quota_info.h"
 #include "metadb_server.h"
-
 #include "quota.h"
+
 #include "db_common.h"
 #include "db_access.h"
 #include "db_ops.h"
@@ -423,17 +421,13 @@ gfarm_pgsql_check_insert(PGresult *res,
 		e = GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED;
 	} else {
 		char *err = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-
-		if (err == NULL)
-			e = GFARM_ERR_UNKNOWN;
-		else if (strcmp(err, GFARM_PGSQL_ERRCODE_UNIQUE_VIOLATION) == 0)
+		if (strcmp(err, GFARM_PGSQL_ERRCODE_UNIQUE_VIOLATION) == 0) {
 			e = GFARM_ERR_ALREADY_EXISTS;
-		else if (strcmp(err, GFARM_PGSQL_ERRCODE_INVALID_XML_CONTENT)
-		    == 0)
+		} else if (strcmp(err, GFARM_PGSQL_ERRCODE_INVALID_XML_CONTENT) == 0) {
 			e = GFARM_ERR_INVALID_ARGUMENT;
-		else
+		} else {
 			e = GFARM_ERR_UNKNOWN;
-
+		}
 		gflog_error(GFARM_MSG_1000425, "%s: %s: %s", diag, command,
 		    PQresultErrorMessage(res));
 	}

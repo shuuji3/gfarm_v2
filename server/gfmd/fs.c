@@ -40,8 +40,8 @@ static char dot[] = ".";
 static char dotdot[] = "..";
 
 gfarm_error_t
-gfm_server_compound_begin(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int level)
+gfm_server_compound_begin(struct peer *peer, int from_client, int skip,
+	int level)
 {
 	gfarm_error_t e = GFARM_ERR_NO_ERROR;
 	static const char diag[] = "GFM_PROTO_COMPOUND_BEGIN";
@@ -50,12 +50,12 @@ gfm_server_compound_begin(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		return (GFARM_ERR_NO_ERROR);
 	if (level > 0) /* We don't allow nesting */
 		e = GFARM_ERR_INVALID_ARGUMENT;
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_compound_end(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int level)
+gfm_server_compound_end(struct peer *peer, int from_client, int skip,
+	int level)
 {
 	gfarm_error_t e = GFARM_ERR_NO_ERROR;
 	static const char diag[] = "GFM_PROTO_COMPOUND_END";
@@ -64,18 +64,17 @@ gfm_server_compound_end(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		return (GFARM_ERR_NO_ERROR);
 	if (level < 1) /* nesting doesn't match */
 		e = GFARM_ERR_INVALID_ARGUMENT;
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_compound_on_error(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int level, gfarm_error_t *on_errorp)
+gfm_server_compound_on_error(struct peer *peer, int from_client, int skip,
+	int level, gfarm_error_t *on_errorp)
 {
 	gfarm_error_t e = GFARM_ERR_NO_ERROR, on_error;
 	static const char diag[] = "GFM_PROTO_COMPOUND_ON_ERROR";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &on_error);
+	e = gfm_server_get_request(peer, diag, "i", &on_error);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001784,
 			"compound_on_error request failed: %s",
@@ -90,15 +89,14 @@ gfm_server_compound_on_error(
 }
 
 gfarm_error_t
-gfm_server_get_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_get_fd(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
 	struct process *process;
 	static const char diag[] = "GFM_PROTO_GET_FD";
 
-	e = gfm_server_get_request(peer, sizep, diag, "");
+	e = gfm_server_get_request(peer, diag, "");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001785,
 			"get_fd request failed: %s",
@@ -118,19 +116,18 @@ gfm_server_get_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		e = peer_fdpair_externalize_current(peer);
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, "i", fd));
+	return (gfm_server_put_reply(peer, diag, e, "i", fd));
 }
 
 gfarm_error_t
-gfm_server_put_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_put_fd(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
 	struct process *process;
 	static const char diag[] = "GFM_PROTO_PUT_FD";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &fd);
+	e = gfm_server_get_request(peer, diag, "i", &fd);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001786,
 			"put_fd request failed: %s",
@@ -151,18 +148,17 @@ gfm_server_put_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_save_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_save_fd(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	struct process *process;
 	static const char diag[] = "GFM_PROTO_SAVE_FD";
 
-	e = gfm_server_get_request(peer, sizep, diag, "");
+	e = gfm_server_get_request(peer, diag, "");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001787,
 			"save_fd request failed: %s",
@@ -179,18 +175,17 @@ gfm_server_save_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		e = peer_fdpair_save(peer);
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_restore_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_restore_fd(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	struct process *process;
 	static const char diag[] = "GFM_PROTO_RESTORE_FD";
 
-	e = gfm_server_get_request(peer, sizep, diag, "");
+	e = gfm_server_get_request(peer, diag, "");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001788, "restore_fd request failed: %s",
 			gfarm_error_string(e));
@@ -206,7 +201,7 @@ gfm_server_restore_fd(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		e = peer_fdpair_restore(peer);
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 char *
@@ -466,8 +461,7 @@ gfm_server_open_common(const char *diag, struct peer *peer, int from_client,
 }
 
 gfarm_error_t
-gfm_server_create(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_create(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e2;
 	char *name;
@@ -478,8 +472,7 @@ gfm_server_create(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	char *create_log = NULL, *remove_log = NULL;
 	static const char diag[] = "GFM_PROTO_CREATE";
 
-	e = gfm_server_get_request(peer, sizep, diag,
-	    "sii", &name, &flag, &perm);
+	e = gfm_server_get_request(peer, diag, "sii", &name, &flag, &perm);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001799, "create request failed: %s",
 			gfarm_error_string(e));
@@ -512,7 +505,7 @@ gfm_server_create(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	free(name);
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "lli",
+	e2 = gfm_server_put_reply(peer, diag, e, "lli",
 	    inum, gen, mode);
 
 	if (gfarm_file_trace && create_log != NULL) {
@@ -528,8 +521,7 @@ gfm_server_create(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_open(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_open(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *name;
@@ -539,7 +531,7 @@ gfm_server_open(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	gfarm_int32_t mode = 0;
 	static const char diag[] = "GFM_PROTO_OPEN";
 
-	e = gfm_server_get_request(peer, sizep, "open", "si", &name, &flag);
+	e = gfm_server_get_request(peer, "open", "si", &name, &flag);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001800, "open request failed: %s",
 			gfarm_error_string(e));
@@ -570,13 +562,11 @@ gfm_server_open(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	free(name);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, "lli",
-	    inum, gen, mode));
+	return (gfm_server_put_reply(peer, diag, e, "lli", inum, gen, mode));
 }
 
 gfarm_error_t
-gfm_server_open_root(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_open_root(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	struct host *spool_host = NULL;
@@ -587,7 +577,7 @@ gfm_server_open_root(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	gfarm_int32_t fd = -1;
 	static const char diag[] = "GFM_PROTO_OPEN_ROOT";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &flag);
+	e = gfm_server_get_request(peer, diag, "i", &flag);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001801, "open_root request failed: %s",
 			gfarm_error_string(e));
@@ -627,12 +617,11 @@ gfm_server_open_root(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		peer_fdpair_set_current(peer, fd);
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_open_parent(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_open_parent(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	struct host *spool_host = NULL;
@@ -643,7 +632,7 @@ gfm_server_open_parent(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *base, *inode;
 	static const char diag[] = "GFM_PROTO_OPEN_PARENT";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &flag);
+	e = gfm_server_get_request(peer, diag, "i", &flag);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001803,
 			"open_parent request failed: %s",
@@ -689,12 +678,11 @@ gfm_server_open_parent(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		peer_fdpair_set_current(peer, fd);
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_close(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_close(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e2;
 	struct host *spool_host = NULL;
@@ -737,16 +725,14 @@ gfm_server_close(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "");
+	e2 = gfm_server_put_reply(peer, diag, e, "");
 	if (gfarm_file_trace && trace_log != NULL)
 		gflog_trace(GFARM_MSG_1003295, "%s", trace_log);
 	return (e2);
 }
 
 static gfarm_error_t
-gfm_server_verify_type_common(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip,
+gfm_server_verify_type_common(struct peer *peer, int from_client, int skip,
 	int tf, const char *diag)
 {
 	gfarm_error_t e;
@@ -756,7 +742,7 @@ gfm_server_verify_type_common(
 	struct inode *inode;
 	gfarm_mode_t mode = 0;
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &type);
+	e = gfm_server_get_request(peer, diag, "i", &type);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001815,
 			"verify_type request failed: %s",
@@ -814,31 +800,27 @@ gfm_server_verify_type_common(
 		break;
 	}
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_verify_type(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_verify_type(struct peer *peer, int from_client, int skip)
 {
 	static const char diag[] = "GFM_PROTO_VERIFY_TYPE";
 	return (gfm_server_verify_type_common(
-	    peer, xid, sizep, from_client, skip, 1, diag));
+		peer, from_client, skip, 1, diag));
 }
 
 gfarm_error_t
-gfm_server_verify_type_not(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_verify_type_not(struct peer *peer, int from_client, int skip)
 {
 	static const char diag[] = "GFM_PROTO_VERIFY_TYPE_NOT";
 	return (gfm_server_verify_type_common(
-	    peer, xid, sizep, from_client, skip, 0, diag));
+		peer, from_client, skip, 0, diag));
 }
 
 gfarm_error_t
-gfm_server_revoke_gfsd_access(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_revoke_gfsd_access(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
@@ -846,7 +828,7 @@ gfm_server_revoke_gfsd_access(
 	struct process *process;
 	static const char diag[] = "GFM_PROTO_REVOKE_GFSD_ACCESS";
 
-	if ((e = gfm_server_get_request(peer, sizep, diag, "i", &fd))
+	if ((e = gfm_server_get_request(peer, diag, "i", &fd))
 	    != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002847,
 		    "revoke_fd_host failed : %s", gfarm_error_string(e));
@@ -876,7 +858,7 @@ gfm_server_revoke_gfsd_access(
 		fo->u.f.spool_host = NULL;
 	}
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 static gfarm_error_t
@@ -911,8 +893,7 @@ inode_get_stat(struct inode *inode, struct gfs_stat *st)
 }
 
 gfarm_error_t
-gfm_server_fstat(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_fstat(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e2;
 	gfarm_int32_t fd;
@@ -948,7 +929,7 @@ gfm_server_fstat(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		e = inode_get_stat(inode, &st);
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "llilsslllilili",
+	e2 = gfm_server_put_reply(peer, diag, e, "llilsslllilili",
 	    st.st_ino, st.st_gen, st.st_mode, st.st_nlink,
 	    st.st_user, st.st_group, st.st_size,
 	    st.st_ncopy,
@@ -963,7 +944,7 @@ gfm_server_fstat(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_recv_attrpatterns(struct peer *peer, size_t *sizep, int skip,
+gfm_server_recv_attrpatterns(struct peer *peer, int skip,
 	gfarm_int32_t nattrpatterns, char ***attrpatternsp, const char *diag)
 {
 	gfarm_error_t e;
@@ -974,11 +955,7 @@ gfm_server_recv_attrpatterns(struct peer *peer, size_t *sizep, int skip,
 	if (!skip)
 		GFARM_MALLOC_ARRAY(attrpatterns, nattrpatterns);
 	for (i = 0; i < nattrpatterns; i++) {
-		if (sizep == NULL)
-			e = gfp_xdr_recv(client, 0, &eof, "s", &attrpattern);
-		else
-			e = gfp_xdr_recv_sized(client, 0, sizep, &eof, "s",
-			    &attrpattern);
+		e = gfp_xdr_recv(client, 0, &eof, "s", &attrpattern);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			gflog_debug(GFARM_MSG_1002496,
 			    "%s: gfp_xdr_recv(xattrpattern) failed: %s",
@@ -1006,8 +983,7 @@ gfm_server_recv_attrpatterns(struct peer *peer, size_t *sizep, int skip,
 }
 
 gfarm_error_t
-gfm_server_fgetattrplus(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_fgetattrplus(struct peer *peer, int from_client, int skip)
 {
 	struct gfp_xdr *client = peer_get_conn(peer);
 	gfarm_error_t e, e2;
@@ -1027,12 +1003,11 @@ gfm_server_fgetattrplus(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	memset(&st, 0, sizeof(st));
 #endif
 
-	e = gfm_server_get_request(peer, sizep, diag, "ii",
-	    &flags, &nattrpatterns);
+	e = gfm_server_get_request(peer, diag, "ii", &flags, &nattrpatterns);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 
-	e = gfm_server_recv_attrpatterns(peer, sizep, skip, nattrpatterns,
+	e = gfm_server_recv_attrpatterns(peer, skip, nattrpatterns,
 	    &attrpatterns, diag);
 	if (skip)
 		return (e); /* don't have to free attrpatterns in this case */
@@ -1101,8 +1076,7 @@ acl_convert:
 	}
 
 	giant_unlock();
-	/* XXXRELAY FIXME, reply size is not correct */
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "llilsslllililii",
+	e2 = gfm_server_put_reply(peer, diag, e, "llilsslllililii",
 	    st.st_ino, st.st_gen, st.st_mode, st.st_nlink,
 	    st.st_user, st.st_group, st.st_size,
 	    st.st_ncopy,
@@ -1118,7 +1092,6 @@ acl_convert:
 		    diag, gfarm_error_string(e2));
 	}
 	if (e == GFARM_ERR_NO_ERROR && e2 == GFARM_ERR_NO_ERROR) {
-		/* XXXRELAY FIXME */
 		for (j = 0; j < nxattrs; j++) {
 			px = &xattrs[j];
 			e2 = gfp_xdr_send(client, "sb",
@@ -1147,8 +1120,7 @@ acl_convert:
 }
 
 gfarm_error_t
-gfm_server_futimes(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_futimes(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
@@ -1159,7 +1131,7 @@ gfm_server_futimes(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *inode;
 	static const char diag[] = "GFM_PROTO_FUTIMES";
 
-	e = gfm_server_get_request(peer, sizep, diag, "lili",
+	e = gfm_server_get_request(peer, diag, "lili",
 	    &atime.tv_sec, &atime.tv_nsec, &mtime.tv_sec, &mtime.tv_nsec);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001820, "futimes request failed: %s",
@@ -1206,12 +1178,11 @@ gfm_server_futimes(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_fchmod(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_fchmod(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
@@ -1222,7 +1193,7 @@ gfm_server_fchmod(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *inode;
 	static const char diag[] = "GFM_PROTO_FCHMOD";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &mode);
+	e = gfm_server_get_request(peer, diag, "i", &mode);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001828, "fchmod request failed: %s",
 			gfarm_error_string(e));
@@ -1265,12 +1236,11 @@ gfm_server_fchmod(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		e = inode_set_mode(inode, mode);
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_fchown(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_fchown(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *username, *groupname;
@@ -1282,7 +1252,7 @@ gfm_server_fchown(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *inode;
 	static const char diag[] = "GFM_PROTO_FCHOWN";
 
-	e = gfm_server_get_request(peer, sizep, diag, "ss",
+	e = gfm_server_get_request(peer, diag, "ss",
 	    &username, &groupname);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001835, "fchown request failed: %s",
@@ -1349,12 +1319,11 @@ gfm_server_fchown(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	free(username);
 	free(groupname);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_cksum_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_cksum_get(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e2;
 	gfarm_int32_t fd;
@@ -1410,7 +1379,7 @@ gfm_server_cksum_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "sbi",
+	e2 = gfm_server_put_reply(peer, diag, e, "sbi",
 	    cksum_type, cksum_len, cksumbuf,  flags);
 	if (alloced) {
 		free(cksum_type);
@@ -1420,8 +1389,7 @@ gfm_server_cksum_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_cksum_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_cksum_set(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
@@ -1433,7 +1401,7 @@ gfm_server_cksum_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct gfarm_timespec mtime;
 	static const char diag[] = "GFM_PROTO_CKSUM_SET";
 
-	e = gfm_server_get_request(peer, sizep, diag, "sbili",
+	e = gfm_server_get_request(peer, diag, "sbili",
 	    &cksum_type, sizeof(cksum), &cksum_len, cksum, &flags,
 	    &mtime.tv_sec, &mtime.tv_nsec);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -1476,12 +1444,11 @@ gfm_server_cksum_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	free(cksum_type);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_schedule_file(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_schedule_file(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e_save;
 	char *domain;
@@ -1490,7 +1457,7 @@ gfm_server_schedule_file(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct process *process;
 	static const char diag[] = "GFM_PROTO_SCHEDULE_FILE";
 
-	e = gfm_server_get_request(peer, sizep, diag, "s", &domain);
+	e = gfm_server_get_request(peer, diag, "s", &domain);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001856,
 			"schedule_file request failed: %s",
@@ -1528,12 +1495,10 @@ gfm_server_schedule_file(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	giant_unlock();
 
 	if (e != GFARM_ERR_NO_ERROR)
-		return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	
-	/* XXXRELAY FIXME, reply size is not correct */
-	e_save = gfm_server_put_reply(peer, xid, sizep, diag, e, "i", nhosts);
+	e_save = gfm_server_put_reply(peer, diag, e, "i", nhosts);
 	for (i = 0; i < nhosts; i++) {
-		/* XXXRELAY FIXME */
 		e = host_schedule_reply(hosts[i], peer, diag);
 		if (e_save == GFARM_ERR_NO_ERROR)
 			e_save = e;
@@ -1543,9 +1508,8 @@ gfm_server_schedule_file(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_schedule_file_with_program(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_schedule_file_with_program(struct peer *peer, int from_client,
+	int skip)
 {
 	gfarm_error_t e;
 	char *domain;
@@ -1556,7 +1520,7 @@ gfm_server_schedule_file_with_program(
 	    "schedule_file_with_program: not implemented");
 
 	e = gfm_server_get_request(
-		peer, sizep, diag, "s", &domain);
+		peer, diag, "s", &domain);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001863,
 			"schedule_file_with_program request failed: %s",
@@ -1569,15 +1533,14 @@ gfm_server_schedule_file_with_program(
 	}
 
 	free(domain);
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_remove(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_remove(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *name;
@@ -1596,7 +1559,7 @@ gfm_server_remove(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	static const char diag[] = "GFM_PROTO_REMOVE";
 
-	e = gfm_server_get_request(peer, sizep, diag, "s", &name);
+	e = gfm_server_get_request(peer, diag, "s", &name);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001864,
 			"remove request failed: %s", gfarm_error_string(e));
@@ -1639,7 +1602,7 @@ gfm_server_remove(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "");
+	e2 = gfm_server_put_reply(peer, diag, e, "");
 
 	if (gfarm_file_trace && !GFARM_S_ISDIR(inodet.imode)) {
 		if ((e = process_get_path_for_trace_log(process, cfd,
@@ -1671,8 +1634,7 @@ gfm_server_remove(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_rename(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_rename(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *sname, *dname;
@@ -1692,7 +1654,7 @@ gfm_server_rename(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	static const char diag[] = "GFM_PROTO_RENAME";
 
-	e = gfm_server_get_request(peer, sizep, diag, "ss", &sname, &dname);
+	e = gfm_server_get_request(peer, diag, "ss", &sname, &dname);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001870, "rename request failed: %s",
 			gfarm_error_string(e));
@@ -1748,7 +1710,7 @@ gfm_server_rename(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "");
+	e2 = gfm_server_put_reply(peer, diag, e, "");
 
 	if (gfarm_file_trace && e == GFARM_ERR_NO_ERROR &&
 	    !GFARM_S_ISDIR(srct.imode)) {
@@ -1803,8 +1765,7 @@ gfm_server_rename(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_flink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_flink(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *name;
@@ -1822,7 +1783,7 @@ gfm_server_flink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	static const char diag[] = "GFM_PROTO_FLINK";
 
-	e = gfm_server_get_request(peer, sizep, diag, "s", &name);
+	e = gfm_server_get_request(peer, diag, "s", &name);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001878, "flink request failed: %s",
 			gfarm_error_string(e));
@@ -1880,7 +1841,7 @@ gfm_server_flink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "");
+	e2 = gfm_server_put_reply(peer, diag, e, "");
 
 	if (gfarm_file_trace && e == GFARM_ERR_NO_ERROR) {
 		if ((e = process_get_path_for_trace_log(process, sfd,
@@ -1918,8 +1879,7 @@ gfm_server_flink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_mkdir(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_mkdir(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *name;
@@ -1929,7 +1889,7 @@ gfm_server_mkdir(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *base;
 	static const char diag[] = "GFM_PROTO_MKDIR";
 
-	e = gfm_server_get_request(peer, sizep, diag, "si", &name, &mode);
+	e = gfm_server_get_request(peer, diag, "si", &name, &mode);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001888, "mkdir request failed :%s",
 			gfarm_error_string(e));
@@ -1968,12 +1928,11 @@ gfm_server_mkdir(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	free(name);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_symlink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_symlink(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *source_path, *name;
@@ -1992,8 +1951,7 @@ gfm_server_symlink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	static const char diag[] = "GFM_PROTO_SYMLINK";
 
-	e = gfm_server_get_request(peer, sizep, diag, "ss",
-	    &source_path, &name);
+	e = gfm_server_get_request(peer, diag, "ss", &source_path, &name);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001895, "symlink request failed: %s",
 			gfarm_error_string(e));
@@ -2037,7 +1995,7 @@ gfm_server_symlink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "");
+	e2 = gfm_server_put_reply(peer, diag, e, "");
 
 	if (gfarm_file_trace && e == GFARM_ERR_NO_ERROR) {
 		gettimeofday(&tv, NULL);
@@ -2070,8 +2028,7 @@ gfm_server_symlink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_readlink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_readlink(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e2;
 	gfarm_int32_t fd;
@@ -2107,15 +2064,14 @@ gfm_server_readlink(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "s", source_path);
+	e2 = gfm_server_put_reply(peer, diag, e, "s", source_path);
 	if (e == GFARM_ERR_NO_ERROR)
 		free(source_path);
 	return (e2);
 }
 
 gfarm_error_t
-gfm_server_getdirpath(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_getdirpath(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e_rpc;
 
@@ -2145,7 +2101,7 @@ gfm_server_getdirpath(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	e_rpc = gfm_server_put_reply(peer, xid, sizep, diag, e, "s", s);
+	e_rpc = gfm_server_put_reply(peer, diag, e, "s", s);
 	if (e == GFARM_ERR_NO_ERROR)
 		free(s);
 	return (e_rpc);
@@ -2247,8 +2203,7 @@ fs_dir_remember_cursor(struct peer *peer, struct process *process,
 }
 
 gfarm_error_t
-gfm_server_getdirents(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_getdirents(struct peer *peer, int from_client, int skip)
 {
 	struct gfp_xdr *client = peer_get_conn(peer);
 	gfarm_error_t e, e2;
@@ -2264,7 +2219,7 @@ gfm_server_getdirents(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	} *p = NULL;
 	static const char diag[] = "GFM_PROTO_GETDIRENTS";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &n);
+	e = gfm_server_get_request(peer, diag, "i", &n);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001919, "getdirents request failed: %s",
 			gfarm_error_string(e));
@@ -2305,11 +2260,9 @@ gfm_server_getdirents(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	/* XXXRELAY FIXME, reply size is not correct */
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "i", n);
+	e2 = gfm_server_put_reply(peer, diag, e, "i", n);
 	if (e2 == GFARM_ERR_NO_ERROR && e == GFARM_ERR_NO_ERROR) {
 		for (i = 0; i < n; i++) {
-			/* XXXRELAY FIXME */
 			e2 = gfp_xdr_send(client, "sil",
 			    p[i].name, p[i].type, p[i].inum);
 			if (e2 != GFARM_ERR_NO_ERROR) {
@@ -2331,8 +2284,7 @@ gfm_server_getdirents(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 }
 
 gfarm_error_t
-gfm_server_getdirentsplus(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_getdirentsplus(struct peer *peer, int from_client, int skip)
 {
 	struct gfp_xdr *client = peer_get_conn(peer);
 	gfarm_error_t e, e2;
@@ -2347,7 +2299,7 @@ gfm_server_getdirentsplus(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	} *p = NULL;
 	static const char diag[] = "GFM_PROTO_GETDIRENTSPLUS";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &n);
+	e = gfm_server_get_request(peer, diag, "i", &n);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001922,
 			"getdirentsplus request failed: %s",
@@ -2399,13 +2351,11 @@ gfm_server_getdirentsplus(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	/* XXXRELAY FIXME, reply size is not correct */
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "i", n);
+	e2 = gfm_server_put_reply(peer, diag, e, "i", n);
 	if (e2 == GFARM_ERR_NO_ERROR && e == GFARM_ERR_NO_ERROR) {
 		for (i = 0; i < n; i++) {
 			struct gfs_stat *st = &p[i].st;
 
-			/* XXXRELAY FIXME */
 			e2 = gfp_xdr_send(client, "sllilsslllilili",
 			    p[i].name,
 			    st->st_ino, st->st_gen, st->st_mode, st->st_nlink,
@@ -2436,8 +2386,7 @@ gfm_server_getdirentsplus(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 
 gfarm_error_t
-gfm_server_getdirentsplusxattr(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_getdirentsplusxattr(struct peer *peer, int from_client, int skip)
 {
 	struct gfp_xdr *client = peer_get_conn(peer);
 	gfarm_error_t e, e2;
@@ -2457,15 +2406,14 @@ gfm_server_getdirentsplusxattr(struct peer *peer, gfp_xdr_xid_t xid, size_t *siz
 	struct db_waitctx waitctx;
 	static const char diag[] = "GFM_PROTO_GETDIRENTSPLUSXATTR";
 
-	e = gfm_server_get_request(peer, sizep, diag, "ii",
-	    &n, &nattrpatterns);
+	e = gfm_server_get_request(peer, diag, "ii", &n, &nattrpatterns);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002502,
 			"getdirentsplusxattr request failed: %s",
 			gfarm_error_string(e));
 		return (e);
 	}
-	e = gfm_server_recv_attrpatterns(peer, sizep, skip, nattrpatterns,
+	e = gfm_server_recv_attrpatterns(peer, skip, nattrpatterns,
 	    &attrpatterns, diag);
 	if (skip)
 		return (e); /* don't have to free attrpatterns in this case */
@@ -2566,13 +2514,11 @@ acl_convert:
 		giant_unlock();
 	}
 
-	/* XXXRELAY FIXME, reply size is not correct */
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "i", n);
+	e2 = gfm_server_put_reply(peer, diag, e, "i", n);
 	if (e2 == GFARM_ERR_NO_ERROR && e == GFARM_ERR_NO_ERROR) {
 		for (i = 0; i < n; i++) {
 			struct gfs_stat *st = &p[i].st;
 
-			/* XXXRELAY FIXME */
 			e2 = gfp_xdr_send(client, "sllilsslllililii",
 			    p[i].name,
 			    st->st_ino, st->st_gen, st->st_mode, st->st_nlink,
@@ -2625,8 +2571,7 @@ acl_convert:
 
 
 gfarm_error_t
-gfm_server_seek(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_seek(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd, whence;
@@ -2637,7 +2582,7 @@ gfm_server_seek(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	Dir dir;
 	static const char diag[] = "GFM_PROTO_SEEK";
 
-	e = gfm_server_get_request(peer, sizep, diag, "li", &offset, &whence);
+	e = gfm_server_get_request(peer, diag, "li", &offset, &whence);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001927, "seek request failed: %s",
 			gfarm_error_string(e));
@@ -2695,11 +2640,10 @@ gfm_server_seek(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, "l", offset));
+	return (gfm_server_put_reply(peer, diag, e, "l", offset));
 }
 
 struct reopen_resume_arg {
-	gfp_xdr_xid_t xid;
 	int fd;
 };
 
@@ -2713,8 +2657,6 @@ reopen_resume(struct peer *peer, void *closure, int *suspendedp)
 	gfarm_ino_t inum;
 	gfarm_uint64_t gen;
 	gfarm_int32_t mode, flags, to_create;
-	gfp_xdr_xid_t xid;
-	size_t junk = 0;
 
 	/* for gfarm_file_trace */
 	gfarm_error_t e2;
@@ -2748,10 +2690,9 @@ reopen_resume(struct peer *peer, void *closure, int *suspendedp)
 		gettimeofday(&tv, NULL);
 	}
 
-	xid = arg->xid;
 	free(arg);
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, &junk, diag, e, "lliii",
+	e2 = gfm_server_put_reply(peer, diag, e, "lliii",
 	    inum, gen, mode, flags, to_create);
 
 	if (gfarm_file_trace && e == GFARM_ERR_NO_ERROR) {
@@ -2769,9 +2710,8 @@ reopen_resume(struct peer *peer, void *closure, int *suspendedp)
 }
 
 gfarm_error_t
-gfm_server_reopen(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int *suspendedp)
+gfm_server_reopen(struct peer *peer, int from_client, int skip,
+	int *suspendedp)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
@@ -2814,7 +2754,6 @@ gfm_server_reopen(
 		if (arg == NULL) {
 			e = GFARM_ERR_NO_MEMORY;
 		} else {
-			arg->xid = xid;
 			arg->fd = fd;
 			if ((e = process_new_generation_wait(peer, fd,
 			    reopen_resume, arg)) == GFARM_ERR_NO_ERROR) {
@@ -2831,7 +2770,7 @@ gfm_server_reopen(
 	}
 
 	giant_unlock();
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "lliii",
+	e2 = gfm_server_put_reply(peer, diag, e, "lliii",
 	    inum, gen, mode, flags, to_create);
 
 	if (gfarm_file_trace && to_create && e == GFARM_ERR_NO_ERROR) {
@@ -2850,8 +2789,7 @@ gfm_server_reopen(
 }
 
 gfarm_error_t
-gfm_server_close_read(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_close_read(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd;
@@ -2861,7 +2799,7 @@ gfm_server_close_read(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	int transaction = 0;
 	static const char diag[] = "GFM_PROTO_CLOSE_READ";
 
-	e = gfm_server_get_request(peer, sizep, diag, "li",
+	e = gfm_server_get_request(peer, diag, "li",
 	    &atime.tv_sec, &atime.tv_nsec);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001939, "close_read request failed: %s",
@@ -2901,11 +2839,10 @@ gfm_server_close_read(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 struct close_v2_4_resume_arg {
-	gfp_xdr_xid_t xid;
 	int fd;
 	gfarm_off_t size;
 	struct gfarm_timespec atime, mtime;
@@ -2921,8 +2858,6 @@ close_write_v2_4_resume(struct peer *peer, void *closure, int *suspendedp)
 	int transaction = 0;
 	gfarm_int32_t flags;
 	gfarm_int64_t old_gen = 0, new_gen = 0;
-	gfp_xdr_xid_t xid;
-	size_t junk = 0;
 	static const char diag[] = "close_v2_4_resume";
 
 	giant_lock();
@@ -2959,17 +2894,16 @@ close_write_v2_4_resume(struct peer *peer, void *closure, int *suspendedp)
 			}
 		}
 	}
-	xid = arg->xid;
 	free(arg);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, &junk, diag, e, "ill",
+	return (gfm_server_put_reply(peer, diag, e, "ill",
 	    flags, old_gen, new_gen));
 }
 
 /* trace_log is malloc(3)ed string, thus caller should free(3) the memory. */
 gfarm_error_t
 gfm_server_close_write_common(const char *diag,
-	struct peer *peer, gfp_xdr_xid_t xid, int from_client,
+	struct peer *peer, int from_client,
 	gfarm_off_t size,
 	struct gfarm_timespec *atime, struct gfarm_timespec *mtime,
 	gfarm_int32_t *flagsp,
@@ -3035,7 +2969,6 @@ gfm_server_close_write_common(const char *diag,
 			if (arg == NULL) {
 				e = GFARM_ERR_NO_MEMORY;
 			} else {
-				arg->xid = xid;
 				arg->fd = fd;
 				arg->size = size;
 				arg->atime = *atime;
@@ -3052,15 +2985,14 @@ gfm_server_close_write_common(const char *diag,
 }
 
 gfarm_error_t
-gfm_server_close_write(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_close_write(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_off_t size;
 	struct gfarm_timespec atime, mtime;
 	static const char diag[] = "GFM_PROTO_CLOSE_WRITE";
 
-	e = gfm_server_get_request(peer, sizep, diag, "llili",
+	e = gfm_server_get_request(peer, diag, "llili",
 	    &size,
 	    &atime.tv_sec, &atime.tv_nsec, &mtime.tv_sec, &mtime.tv_nsec);
 	if (e != GFARM_ERR_NO_ERROR)
@@ -3069,17 +3001,16 @@ gfm_server_close_write(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		return (GFARM_ERR_NO_ERROR);
 	giant_lock();
 
-	e = gfm_server_close_write_common(diag, peer, xid, from_client, size,
+	e = gfm_server_close_write_common(diag, peer, from_client, size,
 	    &atime, &mtime, NULL, NULL, NULL, NULL);
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_close_write_v2_4(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int *suspendedp)
+gfm_server_close_write_v2_4(struct peer *peer, int from_client, int skip,
+	int *suspendedp)
 {
 	gfarm_error_t e, e2;
 	gfarm_off_t size;
@@ -3089,7 +3020,7 @@ gfm_server_close_write_v2_4(
 	char *trace_log;
 	static const char diag[] = "GFM_PROTO_CLOSE_WRITE_V2_4";
 
-	e = gfm_server_get_request(peer, sizep, diag, "llili",
+	e = gfm_server_get_request(peer, diag, "llili",
 	    &size,
 	    &atime.tv_sec, &atime.tv_nsec, &mtime.tv_sec, &mtime.tv_nsec);
 	if (e != GFARM_ERR_NO_ERROR)
@@ -3098,7 +3029,7 @@ gfm_server_close_write_v2_4(
 		return (GFARM_ERR_NO_ERROR);
 	giant_lock();
 
-	e = gfm_server_close_write_common(diag, peer, xid, from_client, size,
+	e = gfm_server_close_write_common(diag, peer, from_client, size,
 	    &atime, &mtime, &flags, &old_gen, &new_gen, &trace_log);
 
 	giant_unlock();
@@ -3108,7 +3039,7 @@ gfm_server_close_write_v2_4(
 		return (GFARM_ERR_NO_ERROR);
 	}
 
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "ill",
+	e2 = gfm_server_put_reply(peer, diag, e, "ill",
 	    flags, old_gen, new_gen);
 
 	if (gfarm_file_trace && trace_log != NULL) {
@@ -3120,8 +3051,7 @@ gfm_server_close_write_v2_4(
 }
 
 gfarm_error_t
-gfm_server_fhclose_read(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_fhclose_read(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_ino_t inum;
@@ -3132,7 +3062,7 @@ gfm_server_fhclose_read(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *inode;
 	static const char diag[] = "GFM_PROTO_FHCLOSE_READ";
 
-	e = gfm_server_get_request(peer, sizep, diag, "llli",
+	e = gfm_server_get_request(peer, diag, "llli",
 	    &inum, &gen, &atime.tv_sec, &atime.tv_nsec);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1003310,
@@ -3167,12 +3097,11 @@ gfm_server_fhclose_read(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_fhclose_write(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_fhclose_write(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_ino_t inum;
@@ -3186,7 +3115,7 @@ gfm_server_fhclose_write(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *inode;
 	static const char diag[] = "GFM_PROTO_FHCLOSE_WRITE";
 
-	e = gfm_server_get_request(peer, sizep, diag, "llllili",
+	e = gfm_server_get_request(peer, diag, "llllili",
 	    &inum, &old_gen, &size,
 	    &atime.tv_sec, &atime.tv_nsec, &mtime.tv_sec, &mtime.tv_nsec);
 	if (e != GFARM_ERR_NO_ERROR)
@@ -3225,14 +3154,12 @@ gfm_server_fhclose_write(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, "illl",
+	return (gfm_server_put_reply(peer, diag, e, "illl",
 	    flags, old_gen, new_gen, cookie));
 }
 
 gfarm_error_t
-gfm_server_generation_updated(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_generation_updated(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t fd, result;
@@ -3240,7 +3167,7 @@ gfm_server_generation_updated(
 	struct process *process;
 	static const char diag[] = "GFM_PROTO_GENERATION_UPDATED";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &result);
+	e = gfm_server_get_request(peer, diag, "i", &result);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002265, "%s request failed: %s",
 		    diag, gfarm_error_string(e));
@@ -3279,13 +3206,12 @@ gfm_server_generation_updated(
 	}
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_generation_updated_by_cookie(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_generation_updated_by_cookie(struct peer *peer, int from_client,
+    int skip)
 {
 	gfarm_error_t e;
 	gfarm_uint64_t cookie;
@@ -3293,7 +3219,7 @@ gfm_server_generation_updated_by_cookie(
 	struct host *spool_host;
 	static const char diag[] = "GFM_PROTO_GENERATION_UPDATED_BY_COOKIE";
 
-	e = gfm_server_get_request(peer, sizep, diag, "li", &cookie, &result);
+	e = gfm_server_get_request(peer, diag, "li", &cookie, &result);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002265, "%s request failed: %s",
 		    diag, gfarm_error_string(e));
@@ -3317,12 +3243,11 @@ gfm_server_generation_updated_by_cookie(
 	}
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_lock(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_lock(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_off_t start, len;
@@ -3332,22 +3257,21 @@ gfm_server_lock(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000388, "%s: not implemented", diag);
 
-	e = gfm_server_get_request(peer, sizep, diag, "llii",
+	e = gfm_server_get_request(peer, diag, "llii",
 	    &start, &len, &type, &whence);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_trylock(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_trylock(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_off_t start, len;
@@ -3357,22 +3281,21 @@ gfm_server_trylock(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000389, "%s: not implemented", diag);
 
-	e = gfm_server_get_request(peer, sizep, diag, "llii",
+	e = gfm_server_get_request(peer, diag, "llii",
 	    &start, &len, &type, &whence);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_unlock(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_unlock(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_off_t start, len;
@@ -3382,22 +3305,21 @@ gfm_server_unlock(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000390, "%s: not implemented", diag);
 
-	e = gfm_server_get_request(peer, sizep, diag, "llii",
+	e = gfm_server_get_request(peer, diag, "llii",
 	    &start, &len, &type, &whence);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_lock_info(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_lock_info(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_off_t start, len;
@@ -3407,22 +3329,21 @@ gfm_server_lock_info(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000391, "%s: not implemented", diag);
 
-	e = gfm_server_get_request(peer, sizep, diag, "llii",
+	e = gfm_server_get_request(peer, diag, "llii",
 	    &start, &len, &type, &whence);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_glob(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_glob(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_GLOB";
@@ -3430,15 +3351,14 @@ gfm_server_glob(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000392, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_schedule(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_schedule(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_SCHEDULE";
@@ -3446,15 +3366,14 @@ gfm_server_schedule(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000393, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_pio_open(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_pio_open(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_PIO_OPEN";
@@ -3462,15 +3381,14 @@ gfm_server_pio_open(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000394, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_pio_set_paths(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_pio_set_paths(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_PIO_SET_PATHS";
@@ -3478,15 +3396,14 @@ gfm_server_pio_set_paths(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000395, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_pio_close(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_pio_close(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_PIO_CLOSE";
@@ -3494,15 +3411,14 @@ gfm_server_pio_close(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000396, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_pio_visit(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_pio_visit(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_PIO_VISIT";
@@ -3510,16 +3426,14 @@ gfm_server_pio_visit(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000397, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_replica_list_by_name(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_list_by_name(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e2;
 	struct host *spool_host;
@@ -3554,11 +3468,9 @@ gfm_server_replica_list_by_name(
 		e = inode_replica_list_by_name(inode, &n, &hosts);
 
 	giant_unlock();
-	/* XXXRELAY FIXME, reply size is not correct */
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "i", n);
+	e2 = gfm_server_put_reply(peer, diag, e, "i", n);
 	if (e == GFARM_ERR_NO_ERROR) {
 		for (i = 0; i < n; ++i) {
-			/* XXXRELAY FIXME */
 			e2 = gfp_xdr_send(peer_get_conn(peer), "s", hosts[i]);
 			if (e2 != GFARM_ERR_NO_ERROR)
 				break;
@@ -3571,9 +3483,7 @@ gfm_server_replica_list_by_name(
 }
 
 gfarm_error_t
-gfm_server_replica_list_by_host(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_list_by_host(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *host;
@@ -3583,7 +3493,7 @@ gfm_server_replica_list_by_host(
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000398, "%s: not implemented", diag);
 
-	e = gfm_server_get_request(peer, sizep, diag, "si",
+	e = gfm_server_get_request(peer, diag, "si",
 	    &host, &port);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -3593,16 +3503,14 @@ gfm_server_replica_list_by_host(
 	}
 
 	free(host);
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_replica_remove_by_host(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_remove_by_host(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *host;
@@ -3612,7 +3520,7 @@ gfm_server_replica_remove_by_host(
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000399, "%s: not implemented", diag);
 
-	e = gfm_server_get_request(peer, sizep, diag, "si",
+	e = gfm_server_get_request(peer, diag, "si",
 	    &host, &port);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -3622,16 +3530,14 @@ gfm_server_replica_remove_by_host(
 	}
 
 	free(host);
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_replica_remove_by_file(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_remove_by_file(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *hostname;
@@ -3641,7 +3547,7 @@ gfm_server_replica_remove_by_file(
 	struct host *host, *spool_host;
 	static const char diag[] = "GFM_PROTO_REPLICA_REMOVE_BY_FILE";
 
-	e = gfm_server_get_request(peer, sizep, diag, "s", &hostname);
+	e = gfm_server_get_request(peer, diag, "s", &hostname);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001952,
 			"replica_remove_by_file request failed: %s",
@@ -3684,13 +3590,11 @@ gfm_server_replica_remove_by_file(
 
 	free(hostname);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_replica_info_get(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_info_get(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e, e2;
 	struct host *spool_host;
@@ -3703,7 +3607,7 @@ gfm_server_replica_info_get(
 	gfarm_int32_t *oflags;
 	static const char diag[] = "GFM_PROTO_REPLICA_INFO_GET";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &iflags);
+	e = gfm_server_get_request(peer, diag, "i", &iflags);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	if (skip)
@@ -3725,11 +3629,9 @@ gfm_server_replica_info_get(
 		    &n, &hosts, &gens, &oflags);
 
 	giant_unlock();
-	/* XXXRELAY FIXME, reply size is not correct */
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "i", n);
+	e2 = gfm_server_put_reply(peer, diag, e, "i", n);
 	if (e == GFARM_ERR_NO_ERROR) {
 		for (i = 0; i < n; ++i) {
-			/* XXXRELAY FIXME */
 			e = gfp_xdr_send(peer_get_conn(peer), "sli",
 			    hosts[i], gens[i], oflags[i]);
 			if (e != GFARM_ERR_NO_ERROR)
@@ -3745,9 +3647,7 @@ gfm_server_replica_info_get(
 }
 
 gfarm_error_t
-gfm_server_replicate_file_from_to(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replicate_file_from_to(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *srchost;
@@ -3772,7 +3672,7 @@ gfm_server_replicate_file_from_to(
 	gen = 0;
 #endif
 
-	e = gfm_server_get_request(peer, sizep, diag, "ssi",
+	e = gfm_server_get_request(peer, diag, "ssi",
 	    &srchost, &dsthost, &flags);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -3819,11 +3719,10 @@ gfm_server_replicate_file_from_to(
 	free(srchost);
 	free(dsthost);
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 struct replica_adding_resume_arg {
-	gfp_xdr_xid_t xid;
 	int fd;
 	char *src_host;
 };
@@ -3842,8 +3741,6 @@ replica_adding_resume(struct peer *peer, void *closure, int *suspendedp)
 	struct gfarm_timespec *mtime;
 	gfarm_int64_t mtime_sec = 0;
 	gfarm_int32_t mtime_nsec = 0;
-	gfp_xdr_xid_t xid;
-	size_t junk = 0;
 	static const char diag[] = "replica_adding_resume";
 
 	giant_lock();
@@ -3880,17 +3777,16 @@ replica_adding_resume(struct peer *peer, void *closure, int *suspendedp)
 
 	/* we don't maintain file_replicating in this case */
 
-	xid = arg->xid;
 	free(arg->src_host);
 	free(arg);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, &junk, diag, e, "llli",
+	return (gfm_server_put_reply(peer, diag, e, "llli",
 	    inum, gen, mtime_sec, mtime_nsec));
 }
 
 gfarm_error_t
-gfm_server_replica_adding(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int *suspendedp)
+gfm_server_replica_adding(struct peer *peer, int from_client, int skip,
+	int *suspendedp)
 {
 	gfarm_error_t e;
 	gfarm_ino_t inum = 0;
@@ -3905,7 +3801,7 @@ gfm_server_replica_adding(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct replica_adding_resume_arg *arg;
 	static const char diag[] = "GFM_PROTO_REPLICA_ADDING";
 
-	e = gfm_server_get_request(peer, sizep, diag, "s", &src_host);
+	e = gfm_server_get_request(peer, diag, "s", &src_host);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001959,
 			"%s request: %s", diag, gfarm_error_string(e));
@@ -3965,7 +3861,7 @@ gfm_server_replica_adding(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 
 	free(src_host);
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, "llli",
+	return (gfm_server_put_reply(peer, diag, e, "llli",
 	    inum, gen, mtime_sec, mtime_nsec));
 }
 
@@ -4019,15 +3915,14 @@ gfm_server_replica_added_common(const char *diag,
 
 /* obsolete protocol */
 gfarm_error_t
-gfm_server_replica_added(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_added(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t flags, mtime_nsec;
 	gfarm_int64_t mtime_sec;
 	static const char diag[] = "GFM_PROTO_REPLICA_ADDED";
 
-	e = gfm_server_get_request(peer, sizep, diag, "ili",
+	e = gfm_server_get_request(peer, diag, "ili",
 	    &flags, &mtime_sec, &mtime_nsec);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001967, "%s request failed: %s",
@@ -4042,12 +3937,11 @@ gfm_server_replica_added(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		flags, mtime_sec, mtime_nsec, -1);
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_replica_added2(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_added2(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_int32_t flags, mtime_nsec;
@@ -4055,7 +3949,7 @@ gfm_server_replica_added2(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	gfarm_off_t size;
 	static const char diag[] = "GFM_PROTO_REPLICA_ADDED2";
 
-	e = gfm_server_get_request(peer, sizep, diag, "ilil",
+	e = gfm_server_get_request(peer, diag, "ilil",
 	    &flags, &mtime_sec, &mtime_nsec, &size);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001968, "%s request failed: %s",
@@ -4070,12 +3964,11 @@ gfm_server_replica_added2(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		flags, mtime_sec, mtime_nsec, size);
 
 	giant_unlock();
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_replica_lost(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_lost(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_ino_t inum;
@@ -4084,7 +3977,7 @@ gfm_server_replica_lost(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *inode;
 	static const char diag[] = "GFM_PROTO_REPLICA_LOST";
 
-	e = gfm_server_get_request(peer, sizep, diag, "ll", &inum, &gen);
+	e = gfm_server_get_request(peer, diag, "ll", &inum, &gen);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001969,
 			"replica_remove request failed: %s",
@@ -4116,12 +4009,11 @@ gfm_server_replica_lost(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_replica_add(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_replica_add(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	gfarm_ino_t inum;
@@ -4131,7 +4023,7 @@ gfm_server_replica_add(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct inode *inode;
 	static const char diag[] = "GFM_PROTO_REPLICA_ADD";
 
-	e = gfm_server_get_request(peer, sizep, diag, "lll",
+	e = gfm_server_get_request(peer, diag, "lll",
 		&inum, &gen, &size);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001974,
@@ -4165,5 +4057,5 @@ gfm_server_replica_add(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	}
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }

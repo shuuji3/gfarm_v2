@@ -169,29 +169,12 @@ struct peer {
 	struct file_replicating replicating_inodes; /* dummy header */
 
 	GFARM_HCIRCLEQ_HEAD(cookie) cookies;
-
-	/*
-	 * to support remote peer
-	 */
-
-	/* both local and remote peer */
-	gfarm_int64_t peer_id;
-
-	/* local peer */
-	struct peer *child_peers;
-	pthread_mutex_t child_peers_mutex;
-
-	/* remote peer */
-	struct peer *parent_peer, *next_sibling;
 };
 
 static struct peer *peer_table;
 static int peer_table_size;
-static gfarm_int64_t local_peer_id = 1;
 static pthread_mutex_t peer_table_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 static const char peer_table_diag[] = "peer_table";
-
 static gfarm_uint64_t cookie_seqno = 1;
 
 static void (*peer_async_free)(struct peer *, gfp_xdr_async_peer_t) = NULL;
@@ -469,7 +452,6 @@ peer_init(int max_peers)
 	int i;
 	struct peer *peer;
 	gfarm_error_t e;
-	static const char diag[] = "peer_init";
 
 	GFARM_MALLOC_ARRAY(peer_table, max_peers);
 	if (peer_table == NULL)
@@ -490,7 +472,7 @@ peer_init(int max_peers)
 		peer->process = NULL;
 		peer->protocol_error = 0;
 		gfarm_mutex_init(&peer->protocol_error_mutex,
-		    diag, "peer:protocol_error_mutex");
+		    "peer_init", "peer:protocol_error_mutex");
 
 		peer->readable_event = NULL;
 
@@ -502,22 +484,13 @@ peer_init(int max_peers)
 		peer->u.client.jobs = NULL;
 
 		gfarm_mutex_init(&peer->replication_mutex,
-		    diag, "replication");
+		    "peer_init", "replication");
 		peer->simultaneous_replication_receivers = 0;
 		/* make circular list `replicating_inodes' empty */
 		peer->replicating_inodes.prev_inode =
 		peer->replicating_inodes.next_inode =
 		    &peer->replicating_inodes;
 		GFARM_HCIRCLEQ_INIT(peer->cookies, hcircleq);
-
-		/*
-		 * to support remote peer
-		 */
-		peer->child_peers = NULL;
-		gfarm_mutex_init(&peer->child_peers_mutex,
-		    diag, "peer:child_peers_mutex");
-		peer->peer_id = 0;
-		peer->parent_peer = peer->next_sibling = NULL;
 	}
 
 	e = create_detached_thread(peer_closer, NULL);
@@ -527,42 +500,13 @@ peer_init(int max_peers)
 			    gfarm_error_string(e));
 }
 
-static void
-peer_init_common(struct peer *peer)
-{
-	peer->next_close = NULL;
-	peer->refcount = 0;
-
-	peer->username = NULL;
-	peer->hostname = NULL;
-	peer->user = NULL;
-	peer->host = NULL;
-	peer->process = NULL;
-	peer->protocol_error = 0;
-
-	peer->watcher = NULL;
-	
-	peer->fd_current = -1;
-	peer->fd_saved = -1;
-	peer->flags = 0;
-	peer->findxmlattrctx = NULL;
-	peer->u.client.jobs = NULL;
-	GFARM_HCIRCLEQ_INIT(peer->cookies, hcircleq);
-
-	/*
-	 * to support remote peer
-	 */
-	peer->child_peers = NULL;
-	peer->parent_peer = peer->next_sibling = NULL;
-}
-
 static gfarm_error_t
-local_peer_alloc(int fd, struct peer **peerp, struct gfp_xdr *conn)
+peer_alloc0(int fd, struct peer **peerp, struct gfp_xdr *conn)
 {
 	gfarm_error_t e;
 	struct peer *peer;
 	int sockopt;
-	static const char diag[] = "local_peer_alloc";
+	static const char diag[] = "peer_alloc";
 
 	if (fd < 0) {
 		gflog_debug(GFARM_MSG_1001580,
@@ -575,12 +519,6 @@ local_peer_alloc(int fd, struct peer **peerp, struct gfp_xdr *conn)
 		return (GFARM_ERR_TOO_MANY_OPEN_FILES);
 	}
 
-	/* always deal with reboots or network problems */
-	sockopt = 1;
-	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &sockopt, sizeof(sockopt))
-	    == -1)
-		gflog_warning_errno(GFARM_MSG_1000283, "SO_KEEPALIVE");
-
 	gfarm_mutex_lock(&peer_table_mutex, diag, peer_table_diag);
 	peer = &peer_table[fd];
 	if (peer->conn != NULL) { /* must be an implementation error */
@@ -589,6 +527,9 @@ local_peer_alloc(int fd, struct peer **peerp, struct gfp_xdr *conn)
 			"bad file descriptor: conn is not NULL");
 		return (GFARM_ERR_BAD_FILE_DESCRIPTOR);
 	}
+
+	peer->next_close = NULL;
+	peer->refcount = 0;
 
 	/* XXX FIXME gfp_xdr requires too much memory */
 	if (conn == NULL) {
@@ -605,7 +546,14 @@ local_peer_alloc(int fd, struct peer **peerp, struct gfp_xdr *conn)
 	peer->conn = conn;
 
 	peer->async = NULL; /* synchronous protocol by default */
+	peer->username = NULL;
+	peer->hostname = NULL;
+	peer->user = NULL;
+	peer->host = NULL;
+	peer->process = NULL;
+	peer->protocol_error = 0;
 
+	peer->watcher = NULL;
 	if (peer->readable_event == NULL) {
 		e = watcher_fd_readable_event_alloc(fd,
 		    &peer->readable_event);
@@ -619,13 +567,19 @@ local_peer_alloc(int fd, struct peer **peerp, struct gfp_xdr *conn)
 			return (e);
 		}
 	}
+	
+	peer->fd_current = -1;
+	peer->fd_saved = -1;
+	peer->flags = 0;
+	peer->findxmlattrctx = NULL;
+	peer->u.client.jobs = NULL;
+	GFARM_HCIRCLEQ_INIT(peer->cookies, hcircleq);
 
-	peer_init_common(peer);
-
-	/*
-	 * to support remote peer
-	 */
-	peer->peer_id = local_peer_id++;
+	/* deal with reboots or network problems */
+	sockopt = 1;
+	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &sockopt, sizeof(sockopt))
+	    == -1)
+		gflog_warning_errno(GFARM_MSG_1000283, "SO_KEEPALIVE");
 
 	*peerp = peer;
 	gfarm_mutex_unlock(&peer_table_mutex, diag, peer_table_diag);
@@ -635,7 +589,7 @@ local_peer_alloc(int fd, struct peer **peerp, struct gfp_xdr *conn)
 gfarm_error_t
 peer_alloc(int fd, struct peer **peerp)
 {
-	return (local_peer_alloc(fd, peerp, NULL));
+	return (peer_alloc0(fd, peerp, NULL));
 }
 
 gfarm_error_t
@@ -644,7 +598,7 @@ peer_alloc_with_connection(struct peer **peerp, struct gfp_xdr *conn,
 {
 	gfarm_error_t e;
 
-	if ((e = local_peer_alloc(gfp_xdr_fd(conn), peerp, conn))
+	if ((e = peer_alloc0(gfp_xdr_fd(conn), peerp, conn))
 	    == GFARM_ERR_NO_ERROR) {
 		(*peerp)->host = host;
 		(*peerp)->id_type = GFARM_AUTH_ID_TYPE_METADATA_HOST;
@@ -655,10 +609,10 @@ peer_alloc_with_connection(struct peer **peerp, struct gfp_xdr *conn,
 const char *
 peer_get_service_name(struct peer *peer)
 {
-	return (peer == NULL ? "<null>" :
+	return (peer == NULL ? "" :
 	    ((peer)->id_type == GFARM_AUTH_ID_TYPE_SPOOL_HOST ?  "gfsd" :
 	    ((peer)->id_type == GFARM_AUTH_ID_TYPE_METADATA_HOST ?
-	    "gfmd" : "client")));
+	    "gfmd" : "")));
 }
 
 /* caller should allocate the storage for username and hostname */
@@ -753,14 +707,16 @@ peer_get_numeric_name(struct peer *peer, char *hostbuf, size_t hostlen)
 
 /* NOTE: caller of this function should acquire giant_lock as well */
 void
-peer_free_common(struct peer *peer)
+peer_free(struct peer *peer)
 {
 	int err;
 	char *username;
 	const char *hostname;
+	static const char diag[] = "peer_free";
 	struct cookie *cookie;
 	char hostbuf[NI_MAXHOST];
 
+	gfarm_mutex_lock(&peer_table_mutex, diag, peer_table_diag);
 
 	if (peer->async != NULL && peer_async_free != NULL) {
 		(*peer_async_free)(peer, peer->async);
@@ -788,8 +744,7 @@ peer_free_common(struct peer *peer)
 
 	/*
 	 * both username and hostname may be null,
-	 * if peer_authorized() hasn't been called in a local peer case.
-	 *	(== authentication failed)
+	 * if peer_authorized() hasn't been called. (== authentication failed)
 	 */
 	if (hostname != NULL) {
 		err = 0;
@@ -805,11 +760,8 @@ peer_free_common(struct peer *peer)
 			    strerror(err));
 	}
 	if (err == 0)
-		gflog_notice(GFARM_MSG_UNFIXED,
-		    "(%s@%s%s%s) disconnected",
-		    peer->parent_peer != NULL ? "@" : "",
-		    peer->parent_peer != NULL ?
-		    peer_get_hostname(peer->parent_peer) : "",
+		gflog_notice(GFARM_MSG_1000286,
+		    "(%s@%s) disconnected",
 		    username != NULL ? username : "<unauthorized>",
 		    hostname != NULL ? hostname : hostbuf);
 
@@ -841,55 +793,7 @@ peer_free_common(struct peer *peer)
 	peer->next_close = NULL;
 	peer->refcount = 0;
 
-	/*
-	 * to support remote peer
-	 */
-	peer->peer_id = 0;
-	peer->child_peers = NULL;
-	peer->parent_peer = peer->next_sibling = NULL;
-}
-
-/* NOTE: caller of this function should acquire giant_lock as well */
-void
-peer_free(struct peer *peer)
-{
-	struct peer *p, *q, **pp;
-	static const char diag[] = "peer_free";
-
-	if (peer->parent_peer != NULL) { /* remote peer */
-		gfarm_mutex_lock(&peer->parent_peer->child_peers_mutex,
-		    diag, "child_peers_mutex");
-		/* XXXRELAY slow */
-		for (pp = &peer->parent_peer->child_peers;
-		    ; pp = &p->next_sibling) {
-			p = *pp;
-			assert(p != NULL);
-			if (p == peer) {
-				*pp = p->next_sibling;
-				break;
-			}
-		}
-		gfarm_mutex_unlock(&peer->parent_peer->child_peers_mutex,
-		    diag, "child_peers_mutex");
-
-		peer_free_common(peer);
-		free(peer); /* XXXRELAY is this safe? */
-	} else { /* local peer */
-		gfarm_mutex_lock(&peer->child_peers_mutex,
-		    diag, "child_peers_mutex");
-		for (p = peer->child_peers; p != NULL; p = q) {
-			q = p->next_sibling;
-			peer_free_common(p);
-			free(p); /* XXXRELAY is this safe? */
-		}
-		gfarm_mutex_unlock(&peer->child_peers_mutex,
-		    diag, "child_peers_mutex");
-
-		gfarm_mutex_lock(&peer_table_mutex, diag, peer_table_diag);
-		peer_free_common(peer);
-		gfarm_mutex_unlock(&peer_table_mutex,
-		    diag, peer_table_diag);
-	}
+	gfarm_mutex_unlock(&peer_table_mutex, diag, peer_table_diag);
 }
 
 /* NOTE: caller of this function should acquire giant_lock as well */
@@ -973,12 +877,8 @@ peer_get_conn(struct peer *peer)
 int
 peer_get_fd(struct peer *peer)
 {
-	int fd;
+	int fd = peer - peer_table;
 
-	if (peer->parent_peer != NULL)
-		return (peer_get_fd(peer->parent_peer));
-
-	fd = peer - peer_table;
 	if (fd < 0 || fd >= peer_table_size)
 		gflog_fatal(GFARM_MSG_1000288,
 		    "peer_get_fd: invalid peer pointer");
@@ -1425,90 +1325,7 @@ peer_get_port(struct peer *peer, int *portp)
 		*portp = 0;
 		return (GFARM_ERR_ADDRESS_FAMILY_NOT_SUPPORTED_BY_PROTOCOL_FAMILY);
 	} else {
-		/* XXXRELAY should fix GFM_PROTO_REMOTE_PEER_ALLOC protocol */
-		/* to record remote peer port and protocol family */
 		*portp = (int)ntohs(sin.sin_port);
 		return (GFARM_ERR_NO_ERROR);
 	}
 }
-
-struct peer *
-remote_peer_lookup(struct peer *parent_peer, gfarm_int64_t remote_peer_id)
-{
-	struct peer *peer;
-	static const char diag[] = "remote_peer_lookup";
-
-	gfarm_mutex_lock(&parent_peer->child_peers_mutex,
-	    diag, "child_peers_mutex");
-
-	/* check if duplicated peer_id */
-	for (peer = parent_peer->child_peers; peer != NULL;
-	    peer = peer->next_sibling) {
-		if (peer->peer_id == remote_peer_id)
-			break;
-	}
-
-	gfarm_mutex_unlock(&parent_peer->child_peers_mutex,
-	    diag, "child_peers_mutex");
-
-	return (peer);
-}
-
-
-gfarm_error_t
-remote_peer_alloc(struct peer *parent_peer, gfarm_int64_t remote_peer_id,
-	gfarm_int32_t auth_id_type, char *username, char *hostname)
-{
-	struct peer *peer;
-	static const char diag[] = "remote_peer_alloc";
-
-	if (remote_peer_lookup(parent_peer, remote_peer_id) != NULL)
-		return (GFARM_ERR_INVALID_REMOTE_PEER);
-
-	GFARM_MALLOC(peer);
-	if (peer == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	peer->readable_event = NULL;
-	gfarm_mutex_init(&peer->protocol_error_mutex,
-	    diag, "peer:protocol_error_mutex");
-	gfarm_mutex_init(&peer->replication_mutex,
-	    diag, "replication");
-	gfarm_mutex_init(&peer->child_peers_mutex,
-	    diag, "peer:child_peers_mutex");
-
-	peer_init_common(peer);
-	peer->parent_peer = parent_peer;
-	peer->peer_id = remote_peer_id;
-
-	gfarm_mutex_lock(&parent_peer->child_peers_mutex,
-	    diag, "child_peers_mutex");
-
-	peer->next_sibling = parent_peer->child_peers;
-	parent_peer->child_peers = peer;
-
-	peer->conn = peer_get_conn(parent_peer);
-	peer->async = peer_get_async(parent_peer);
-
-	gfarm_mutex_unlock(&parent_peer->child_peers_mutex,
-	    diag, "child_peers_mutex");
-
-	return (GFARM_ERR_NO_ERROR);
-}
-
-gfarm_error_t
-remote_peer_free(struct peer *parent_peer, gfarm_int64_t remote_peer_id)
-{
-	struct peer *peer = remote_peer_lookup(parent_peer, remote_peer_id);
-
-	if (peer != NULL)
-		return (GFARM_ERR_INVALID_REMOTE_PEER);
-
-	assert(peer->parent_peer != NULL);
-	giant_lock();
-	peer_free(peer);
-	giant_unlock();
-
-	return (GFARM_ERR_NO_ERROR);
-}
-

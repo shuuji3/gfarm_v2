@@ -1,5 +1,4 @@
 #include <pthread.h>
-#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -10,7 +9,6 @@
 
 #include "config.h"
 #include "gfm_proto.h"
-#include "gfp_xdr.h" /* gfmd.h needs this */
 
 #include "subr.h"
 #include "callout.h"
