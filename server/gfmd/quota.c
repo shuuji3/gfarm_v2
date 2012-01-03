@@ -3,17 +3,13 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/time.h>
 
 #include <gfarm/gfarm.h>
-
-#include "gfp_xdr.h"
 #include "auth.h"
-
 #include "peer.h"
 #include "subr.h"
 #include "rpcsubr.h"
@@ -647,8 +643,7 @@ quota_group_remove(struct group *g)
 
 /* server operations */
 static gfarm_error_t
-quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int is_group)
+quota_get_common(struct peer *peer, int from_client, int skip, int is_group)
 {
 	const char *diag = is_group ?
 	    "GFM_PROTO_QUOTA_GROUP_GET" : "GFM_PROTO_QUOTA_USER_GET";
@@ -659,7 +654,7 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct quota *q;
 	struct gfarm_quota_get_info qi;
 
-	e = gfm_server_get_request(peer, sizep, diag, "s", &name);
+	e = gfm_server_get_request(peer, diag, "s", &name);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002053,
 			"%s request failed: %s", diag, gfarm_error_string(e));
@@ -674,15 +669,14 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		gflog_debug(GFARM_MSG_1002054,
 			    "%s: !from_client or invalid peer_user ", diag);
 		free(name);
-		return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
 
 	if (db_state != GFARM_ERR_NO_ERROR) {
 		free(name);
 		gflog_debug(GFARM_MSG_1002055, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
-		return (gfm_server_put_reply(peer, xid, sizep, diag,
-		    db_state, ""));
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
 	giant_lock();
@@ -718,7 +712,7 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 			    "%s: name=%s: %s", diag, name,
 			    gfarm_error_string(e));
 		free(name);
-		return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
 	if (is_group)
 		q = group_quota(group);
@@ -730,13 +724,13 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 			    "%s: %s's quota is not enabled", diag, name);
 		free(name);
 		e = GFARM_ERR_NO_SUCH_OBJECT;
-		return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
 	quota_convert_1(q, name, &qi);
 	giant_unlock();
 
 	e = gfm_server_put_reply(
-			peer, xid, sizep, diag, e, "slllllllllllllllll",
+			peer, diag, e, "slllllllllllllllll",
 			qi.name,
 			qi.grace_period,
 			qi.space,
@@ -800,8 +794,7 @@ quota_lookup(const char *name, int is_group, struct quota **qp,
 }
 
 static gfarm_error_t
-quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int is_group)
+quota_set_common(struct peer *peer, int from_client, int skip, int is_group)
 {
 	const char *diag = is_group ?
 	    "GFM_PROTO_QUOTA_GROUP_SET" : "GFM_PROTO_QUOTA_USER_SET";
@@ -810,7 +803,7 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct quota *q;
 	struct user *peer_user = peer_get_user(peer);
 
-	e = gfm_server_get_request(peer, sizep, diag, "slllllllll",
+	e = gfm_server_get_request(peer, diag, "slllllllll",
 				   &qi.name,
 				   &qi.grace_period,
 				   &qi.space_soft,
@@ -835,8 +828,7 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		gflog_debug(GFARM_MSG_1002059, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
 		free(qi.name);
-		return (gfm_server_put_reply(peer, xid, sizep, diag, db_state,
-		    ""));
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
 	giant_lock();
@@ -874,46 +866,41 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 end:
 	giant_unlock();
 	free(qi.name);
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_quota_user_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_user_get(struct peer *peer, int from_client, int skip)
 {
-	return (quota_get_common(peer, xid, sizep, from_client, skip, 0));
+	return (quota_get_common(peer, from_client, skip, 0));
 }
 
 gfarm_error_t
-gfm_server_quota_user_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_user_set(struct peer *peer, int from_client, int skip)
 {
-	return (quota_set_common(peer, xid, sizep, from_client, skip, 0));
+	return (quota_set_common(peer, from_client, skip, 0));
 }
 
 gfarm_error_t
-gfm_server_quota_group_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_group_get(struct peer *peer, int from_client, int skip)
 {
-	return (quota_get_common(peer, xid, sizep, from_client, skip, 1));
+	return (quota_get_common(peer, from_client, skip, 1));
 }
 
 gfarm_error_t
-gfm_server_quota_group_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_group_set(struct peer *peer, int from_client, int skip)
 {
-	return (quota_set_common(peer, xid, sizep, from_client, skip, 1));
+	return (quota_set_common(peer, from_client, skip, 1));
 }
 
 gfarm_error_t
-gfm_server_quota_check(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_check(struct peer *peer, int from_client, int skip)
 {
 	static const char diag[] = "GFM_PROTO_QUOTA_CHECK";
 	gfarm_error_t e;
 	struct user *peer_user = peer_get_user(peer);
 
-	e = gfm_server_get_request(peer, sizep, diag, "");
+	e = gfm_server_get_request(peer, diag, "");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002063,
 			"%s request failed: %s", diag, gfarm_error_string(e));
@@ -925,8 +912,7 @@ gfm_server_quota_check(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	if (db_state != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002064, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
-		return (gfm_server_put_reply(peer, xid, sizep, diag, db_state,
-		    ""));
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
 	giant_lock();
@@ -936,7 +922,7 @@ gfm_server_quota_check(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		gflog_debug(GFARM_MSG_1002065,
 			    "%s: !from_client or invalid peer_user"
 			    " or !user_is_admin", diag);
-		return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
 	/* zero clear and set true in is_checked */
 	quota_clear_value_all_user_and_group();
@@ -946,5 +932,5 @@ gfm_server_quota_check(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	quota_set_value_all_user_and_group();
 	giant_unlock();
 
-	return (gfm_server_put_reply(peer, xid, sizep, diag, e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }

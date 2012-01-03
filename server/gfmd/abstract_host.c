@@ -743,7 +743,7 @@ gfm_server_channel_disconnect_request(struct abstract_host *host,
  * synchronous mode of back_channel is only used before gfarm-2.4.0
  */
 gfarm_error_t
-gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
+gfm_client_channel_vsend_request(struct abstract_host *host,
 	struct peer *peer0, const char *diag,
 	gfarm_int32_t (*result_callback)(void *, void *, size_t),
 	void (*disconnect_callback)(void *, void *), void *closure,
@@ -752,8 +752,7 @@ gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
 	    gfarm_int32_t (*)(void *, void *, size_t),
 	    void (*)(void *, void *), void *),
 #endif
-	const char *wrapping_format, va_list *wrapping_app,
-	gfarm_int32_t command, const char *format, va_list *app)
+	gfarm_int32_t command, const char *format, va_list * app)
 {
 	gfarm_error_t e;
 	struct peer *peer;
@@ -794,12 +793,11 @@ gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
 	server = peer_get_conn(peer);
 
 	if (async != NULL) { /* is asynchronous mode? */
-		e = gfp_xdr_vsend_async_wrapped_request(server,
+		e = gfp_xdr_vsend_async_request(server,
 		    async, result_callback, disconnect_callback, closure,
-		    wrapping_format, wrapping_app, command, format, app);
+		    command, format, app);
 #ifdef COMPAT_GFARM_2_3
 	} else { /*  synchronous mode */
-		assert(wrapping_format == NULL);
 		host_set_callback(host, peer,
 		    result_callback, disconnect_callback, closure);
 		e = gfp_xdr_vrpc_request(server,
@@ -825,29 +823,6 @@ gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
 	if (async != NULL) /* is asynchronous mode? */
 		abstract_host_sender_unlock(host, peer, diag);
 	return (GFARM_ERR_NO_ERROR);
-}
-
-/*
- * synchronous mode of back_channel is only used before gfarm-2.4.0
- */
-gfarm_error_t
-gfm_client_channel_vsend_request(struct abstract_host *host,
-	struct peer *peer0, const char *diag,
-	gfarm_int32_t (*result_callback)(void *, void *, size_t),
-	void (*disconnect_callback)(void *, void *), void *closure,
-#ifdef COMPAT_GFARM_2_3
-	void (*host_set_callback)(struct abstract_host *, struct peer *,
-	    gfarm_int32_t (*)(void *, void *, size_t),
-	    void (*)(void *, void *), void *),
-#endif
-	gfarm_int32_t command, const char *format, va_list *app)
-{
-	return (gfm_client_channel_vsend_wrapped_request(host, peer0, diag,
-	    result_callback, disconnect_callback, closure, 
-#ifdef COMPAT_GFARM_2_3
-	    host_set_callback,
-#endif
-	    NULL, NULL, command, format, app));
 }
 
 /* abstract_host_receiver_lock() must be already called here by
@@ -877,8 +852,7 @@ gfm_server_channel_vget_request(struct peer *peer, size_t size,
 gfarm_error_t
 gfm_server_channel_vput_reply(struct abstract_host *host,
 	struct peer *peer0, gfp_xdr_xid_t xid,
-	const char *diag,
-	gfarm_error_t errcode, const char *format, va_list *app)
+	const char *diag, gfarm_error_t errcode, char *format, va_list *app)
 {
 	gfarm_error_t e;
 	struct peer *peer;

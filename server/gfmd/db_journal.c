@@ -28,6 +28,7 @@
 #include "metadb_common.h"
 #include "xattr_info.h"
 #include "quota_info.h"
+#include "quota.h"
 #include "metadb_server.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
@@ -37,7 +38,6 @@
 #include "config.h"
 
 #include "subr.h"
-#include "quota.h"
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_access.h"
@@ -3396,7 +3396,7 @@ retry:
 		    == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED) {
 			if (!db_journal_is_rec_stored(ai))
 				goto retry;
-			gflog_info(GFARM_MSG_UNFIXED,
+			gflog_info(GFARM_MSG_1003398,
 			    "db seems to have been committed the "
 			    "last operation, no retry is needed");
 			e = GFARM_ERR_NO_ERROR;
