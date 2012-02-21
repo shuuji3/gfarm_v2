@@ -31,22 +31,6 @@ struct gfp_cached_connection {
 	void (*dispose_connection_data)(void *);
 };
 
-void
-gfp_conn_cache_init(struct gfp_conn_cache *c,
-	gfarm_error_t (*dispose)(void *), const char *type_name,
-	int table_size, int *num_cachep)
-{
-	assert(c != NULL);
-
-	gfarm_lru_cache_init(&c->lru_list);
-	c->hashtab = NULL;
-	c->dispose_connection = dispose;
-	c->type_name = type_name;
-	c->table_size = table_size;
-	c->num_cachep = num_cachep;
-	gfarm_mutex_init(&c->mutex, "gfp_conn_cache_init", "conn_cache");
-}
-
 /*
  * return TRUE,  if created by gfs_client_connection_acquire() && still cached.
  * return FALSE, if created by gfs_client_connect() || purged from cache.
@@ -204,9 +188,10 @@ gfp_uncached_connection_enter_cache(struct gfp_conn_cache *cache,
 	static const char diag[] = "gfp_uncached_connection_enter_cache";
 
 	if (GFP_IS_CACHED_CONNECTION(connection)) {
-		gflog_fatal(GFARM_MSG_1000057,
+		gflog_error(GFARM_MSG_1000057,
 		    "gfp_uncached_connection_enter_cache(%s): "
 		    "programming error", cache->type_name);
+		abort();
 	}
 
 	gfarm_mutex_lock(&cache->mutex, diag, diag_what);
@@ -382,7 +367,7 @@ gfp_cached_or_uncached_connection_free(struct gfp_conn_cache *cache,
 	removable = gfarm_lru_cache_delref_entry(&cache->lru_list,
 	    &connection->lru_entry);
 	gfarm_mutex_unlock(&cache->mutex, diag, diag_what);
-
+	
 	if (!removable)
 		return; /* shouln't be disposed */
 
@@ -428,7 +413,7 @@ gfp_cached_connection_terminate(struct gfp_conn_cache *cache)
 
 	/* clear all in-use connections too.  XXX really necessary?  */
 	for (gfarm_hash_iterator_begin(cache->hashtab, &it);
-	     !gfarm_hash_iterator_is_end(&it);) {
+	     !gfarm_hash_iterator_is_end(&it); ) {
 		entry = gfarm_hash_iterator_access(&it);
 		connection = *(struct gfp_cached_connection **)
 		    gfarm_hash_entry_data(entry);

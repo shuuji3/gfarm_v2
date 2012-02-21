@@ -75,8 +75,7 @@ gfp_conn_hash_table_init(
 }
 
 gfarm_error_t
-gfp_conn_hash_id_enter_noalloc(struct gfarm_hash_table **hashtabp,
-	int hashtabsize,
+gfp_conn_hash_id_enter_noalloc(struct gfarm_hash_table **hashtabp, int hashtabsize,
 	size_t entrysize, struct gfp_conn_hash_id *idp,
 	struct gfarm_hash_entry **entry_ret, int *created_ret)
 {
@@ -88,8 +87,9 @@ gfp_conn_hash_id_enter_noalloc(struct gfarm_hash_table **hashtabp,
 	    (e = gfp_conn_hash_table_init(hashtabp, hashtabsize))
 	    != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001082,
-		    "initialization of connection hashtable (%d) failed: %s",
-		    hashtabsize, gfarm_error_string(e));
+			"initialization of connection hashtable (%d) failed: %s",
+			hashtabsize,
+			gfarm_error_string(e));
 		return (e);
 	}
 
@@ -188,8 +188,9 @@ gfp_conn_hash_lookup(struct gfarm_hash_table **hashtabp, int hashtabsize,
 	    (e = gfp_conn_hash_table_init(hashtabp, hashtabsize)) !=
 	    GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001085,
-		    "initialization of connection hashtable (%d) failed: %s",
-		    hashtabsize, gfarm_error_string(e));
+			"initialization of connection hashtable (%d) failed: %s",
+			hashtabsize,
+			gfarm_error_string(e));
 		return (e);
 	}
 

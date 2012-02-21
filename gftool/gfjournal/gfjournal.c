@@ -3,7 +3,6 @@
  */
 
 #include <libgen.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,14 +19,13 @@
 
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 #include "metadb_common.h"
 #include "metadb_server.h"
 #include "xattr_info.h"
 #include "quota_info.h"
-
 #include "quota.h"
+
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_ops.h"

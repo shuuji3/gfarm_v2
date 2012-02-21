@@ -27,10 +27,7 @@
 #include "gfm_client.h"
 #include "config.h"
 
-#include "peer_watcher.h"
 #include "peer.h"
-#include "local_peer.h"
-#include "remote_peer.h"
 #include "subr.h"
 #include "rpcsubr.h"
 #include "thrpool.h"
@@ -42,7 +39,7 @@
 #include "journal_file.h"
 #include "db_journal.h"
 #include "gfmd_channel.h"
-#include "gfmd.h" /* protocol_service(), gfmd_terminate() */
+#include "gfmd.h"
 
 
 struct gfmdc_journal_send_closure {
@@ -108,8 +105,8 @@ gfmdc_server_put_reply(struct mdhost *mh,
 
 	va_start(ap, format);
 	e = gfm_server_channel_vput_reply(
-	    mdhost_to_abstract_host(mh), peer, xid, gfp_xdr_vsend,
-	    diag, errcode, format, &ap);
+	    mdhost_to_abstract_host(mh), peer, xid, diag,
+	    errcode, format, &ap);
 	va_end(ap);
 
 	return (e);
@@ -521,85 +518,6 @@ end:
 }
 
 static gfarm_error_t
-gfmdc_server_remote_peer_alloc(struct mdhost *mh, struct peer *peer,
-	gfp_xdr_xid_t xid, size_t size)
-{
-	gfarm_error_t e;
-	gfarm_int64_t remote_peer_id;
-	gfarm_int32_t auth_id_type, proto_family, proto_transport, port;
-	char *user, *host;
-	static const char diag[] = "GFM_PROTO_REMOTE_PEER_ALLOC";
-
-	if ((e = gfmdc_server_get_request(peer, size, diag, "lissiii",
-	    &remote_peer_id, &auth_id_type, &user, &host,
-	    &proto_family, &proto_transport, &port)) ==
-	    GFARM_ERR_NO_ERROR) {
-		e = remote_peer_alloc(peer, remote_peer_id,
-		    auth_id_type, user, host,
-		    proto_family, proto_transport, port);
-	}
-	e = gfmdc_server_put_reply(mh, peer, xid, diag, e, "");
-	return (e);
-}
-
-static gfarm_error_t
-gfmdc_server_remote_peer_free(struct mdhost *mh, struct peer *peer,
-	gfp_xdr_xid_t xid, size_t size)
-{
-	gfarm_error_t e;
-	gfarm_int64_t remote_peer_id;
-	static const char diag[] = "GFM_PROTO_REMOTE_PEER_FREE";
-
-	if ((e = gfmdc_server_get_request(peer, size, diag, "l",
-	    &remote_peer_id)) == GFARM_ERR_NO_ERROR) {
-		/* XXXRELAY this takes giant lock */
-		e = remote_peer_free_by_id(peer, remote_peer_id);
-	}
-	e = gfmdc_server_put_reply(mh, peer, xid, diag, e, "");
-	return (e);
-}
-
-static gfarm_error_t
-gfmdc_server_remote_rpc(struct mdhost *mh, struct peer *peer,
-	gfp_xdr_xid_t xid, size_t size)
-{
-	gfarm_error_t e;
-	gfarm_int64_t remote_peer_id;
-	struct remote_peer *remote_peer;
-	struct peer *rpeer;
-	int eof;
-	static const char diag[] = "GFM_PROTO_REMOTE_RPC";
-
-	if (debug_mode) {
-		gflog_info(GFARM_MSG_UNFIXED,
-		    "%s: <%s> start remote rpc receiving from %s",
-		    peer_get_hostname(peer), diag,
-		    peer_get_service_name(peer));
-	}
-
-	if ((e = gfp_xdr_recv_sized(peer_get_conn(peer), 0, &size, &eof, "l",
-	    &remote_peer_id)) != GFARM_ERR_NO_ERROR) {
-		/* XXXRELAY fix rpc residual */
-		e = gfmdc_server_put_reply(mh, peer, xid, diag, e, "");
-	} else if (eof) {
-		e = gfmdc_server_put_reply(mh, peer, xid, diag,
-		    GFARM_ERR_UNEXPECTED_EOF, "");
-	} else if ((remote_peer = local_peer_lookup_remote(
-	    peer_to_local_peer(peer), remote_peer_id)) == NULL) {
-		/* XXXRELAY fix rpc residual */
-		e = gfmdc_server_put_reply(mh, peer, xid, diag,
-		    GFARM_ERR_INVALID_REMOTE_PEER, "");
-	} else {
-		rpeer = remote_peer_to_peer(remote_peer);
-		peer_add_ref(rpeer);
-		/* XXXRELAY split this to another thread */
-		e = protocol_service(rpeer, xid, &size);
-		peer_del_ref(rpeer);
-	}
-	return (e);
-}
-
-static gfarm_error_t
 gfmdc_protocol_switch(struct abstract_host *h,
 	struct peer *peer, int request, gfp_xdr_xid_t xid, size_t size,
 	int *unknown_request)
@@ -615,15 +533,6 @@ gfmdc_protocol_switch(struct abstract_host *h,
 	case GFM_PROTO_JOURNAL_SEND:
 		/* in slave */
 		e = gfmdc_server_journal_send(mh, peer, xid, size);
-		break;
-	case GFM_PROTO_REMOTE_PEER_ALLOC:
-		e = gfmdc_server_remote_peer_alloc(mh, peer, xid, size);
-		break;
-	case GFM_PROTO_REMOTE_PEER_FREE:
-		e = gfmdc_server_remote_peer_free(mh, peer, xid, size);
-		break;
-	case GFM_PROTO_REMOTE_RPC:
-		e = gfmdc_server_remote_rpc(mh, peer, xid, size);
 		break;
 	default:
 		*unknown_request = 1;
@@ -643,9 +552,7 @@ gfmdc_channel_free(struct abstract_host *h)
 static void *
 gfmdc_main(void *arg)
 {
-	struct local_peer *local_peer = arg;
-
-	return (gfm_server_channel_main(local_peer,
+	return (gfm_server_channel_main(arg,
 		gfmdc_protocol_switch
 #ifdef COMPAT_GFARM_2_3
 		,gfmdc_channel_free,
@@ -676,10 +583,8 @@ switch_gfmd_channel(struct peer *peer, int from_client,
 	}
 	giant_unlock();
 	if (e == GFARM_ERR_NO_ERROR) {
-		struct local_peer *local_peer = peer_to_local_peer(peer);
-
-		local_peer_set_async(local_peer, async);
-		local_peer_set_readable_watcher(local_peer, gfmdc_recv_watcher);
+		peer_set_async(peer, async);
+		peer_set_watcher(peer, gfmdc_recv_watcher);
 
 		if (mdhost_is_up(mh)) /* throw away old connetion */ {
 			gflog_warning(GFARM_MSG_1002986,
@@ -688,22 +593,21 @@ switch_gfmd_channel(struct peer *peer, int from_client,
 			mdhost_disconnect(mh, NULL);
 		}
 		mdhost_set_peer(mh, peer, version);
-		local_peer_watch_readable(local_peer);
+		peer_watch_access(peer);
 	}
 	return (e);
 }
 
 gfarm_error_t
-gfm_server_switch_gfmd_channel(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_switch_gfmd_channel(struct peer *peer, int from_client,
+	int skip)
 {
 	gfarm_error_t e, er;
 	gfarm_int32_t version;
 	gfarm_int64_t cookie;
 	static const char diag[] = "GFM_PROTO_SWITCH_GFMD_CHANNEL";
 
-	e = gfm_server_get_request(peer, sizep, diag, "il", &version, &cookie);
+	e = gfm_server_get_request(peer, diag, "il", &version, &cookie);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	if (skip)
@@ -715,8 +619,8 @@ gfm_server_switch_gfmd_channel(
 		er = GFARM_ERR_OPERATION_NOT_PERMITTED;
 	} else
 		er = GFARM_ERR_NO_ERROR;
-	if ((e = gfm_server_put_reply(peer, xid, sizep, diag, er, "i",
-	    0 /*XXX FIXME*/)) != GFARM_ERR_NO_ERROR) {
+	if ((e = gfm_server_put_reply(peer, diag, er, "i", 0 /*XXX FIXME*/))
+	    != GFARM_ERR_NO_ERROR) {
 		gflog_error(GFARM_MSG_1002988,
 		    "%s: %s", diag, gfarm_error_string(e));
 		return (e);
@@ -801,8 +705,9 @@ gfmdc_connect(void)
 		mdhost_set_is_master(master, 0);
 		mdhost_set_is_master(rhost, 1);
 	}
-	hostname = mdhost_get_name(rhost);
+
 	mdhost_set_connection(rhost, conn);
+	hostname = mdhost_get_name(rhost);
 
 	/* self_host name is equal to metadb_server_host in gfmd.conf */
 	self_host = mdhost_lookup_self();
@@ -830,9 +735,9 @@ gfmdc_connect(void)
 		}
 		return (e);
 	}
-	if ((e = local_peer_alloc_with_connection(
+	if ((e = peer_alloc_with_connection(&peer,
 	    gfm_client_connection_conn(conn), mdhost_to_abstract_host(rhost),
-	    GFARM_AUTH_ID_TYPE_METADATA_HOST, &peer)) != GFARM_ERR_NO_ERROR) {
+	    GFARM_AUTH_ID_TYPE_METADATA_HOST)) != GFARM_ERR_NO_ERROR) {
 		gflog_error(GFARM_MSG_1002996,
 		    "gfmd_channel(%s) : %s",
 		    hostname, gfarm_error_string(e));

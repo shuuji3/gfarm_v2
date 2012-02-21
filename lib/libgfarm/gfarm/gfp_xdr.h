@@ -63,8 +63,8 @@ gfarm_error_t gfp_xdr_flush(struct gfp_xdr *);
 gfarm_error_t gfp_xdr_purge(struct gfp_xdr *, int, int);
 void gfp_xdr_purge_all(struct gfp_xdr *);
 gfarm_error_t gfp_xdr_vsend_size_add(size_t *, const char **, va_list *);
-gfarm_error_t gfp_xdr_vsend(struct gfp_xdr *, const char **, va_list *);
-gfarm_error_t gfp_xdr_vsend_ref(struct gfp_xdr *, const char **, va_list *);
+gfarm_error_t gfp_xdr_vsend(struct gfp_xdr *,
+	const char **, va_list *);
 gfarm_error_t gfp_xdr_vrecv_sized_x(struct gfp_xdr *, int, int, size_t *,
 	int *, const char **, va_list *);
 gfarm_error_t gfp_xdr_vrecv_sized(struct gfp_xdr *, int, size_t *,
@@ -118,13 +118,6 @@ gfarm_error_t gfp_xdr_vsend_async_request(struct gfp_xdr *,
 	void (*)(void *, void *),
 	void *,
 	gfarm_int32_t, const char *, va_list *);
-gfarm_error_t gfp_xdr_vsend_async_wrapped_request(struct gfp_xdr *,
-	gfp_xdr_async_peer_t,
-	gfarm_int32_t (*)(void *, void *, size_t),
-	void (*)(void *, void *),
-	void *,
-	const char *, va_list *,
-	gfarm_int32_t, const char *, va_list *);
 gfarm_error_t gfp_xdr_recv_async_header(struct gfp_xdr *, int,
 	enum gfp_xdr_msg_type *, gfp_xdr_xid_t *, size_t *);
 
@@ -133,10 +126,8 @@ gfarm_error_t gfp_xdr_recv_request_command(struct gfp_xdr *, int, size_t *,
 gfarm_error_t gfp_xdr_vrecv_request_parameters(struct gfp_xdr *, int, size_t *,
 	const char *, va_list *);
 gfarm_error_t gfp_xdr_vsend_result(struct gfp_xdr *,
-	gfarm_error_t (*xdr_vsend)(struct gfp_xdr *, const char **, va_list *),
 	gfarm_int32_t, const char *, va_list *);
 gfarm_error_t gfp_xdr_vsend_async_result(struct gfp_xdr *, gfp_xdr_xid_t,
-	gfarm_error_t (*xdr_vsend)(struct gfp_xdr *, const char **, va_list *),
 	gfarm_int32_t, const char *, va_list *);
 
 

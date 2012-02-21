@@ -38,12 +38,12 @@ int gfm_client_is_connection_valid(struct gfm_connection *);
 const char *gfm_client_hostname(struct gfm_connection *);
 const char *gfm_client_username(struct gfm_connection *);
 int gfm_client_port(struct gfm_connection *);
-gfarm_error_t gfm_client_source_port(struct gfm_connection *gfm_server, int *);
+gfarm_error_t gfm_client_source_port(struct gfm_connection *gfm_server,
+	int*portp);
 gfarm_error_t gfm_client_set_username_for_gsi(struct gfm_connection *,
 	const char *);
 struct gfarm_metadb_server *gfm_client_connection_get_real_server(
 	struct gfm_connection *);
-int gfm_client_connection_failover_count(struct gfm_connection *);
 
 gfarm_error_t gfm_client_process_get(struct gfm_connection *,
 	gfarm_int32_t *, const char **, size_t *, gfarm_pid_t *);
@@ -60,6 +60,14 @@ gfarm_error_t gfm_client_connect(const char *, int, const char *,
 struct passwd;
 gfarm_error_t gfm_client_connect_with_seteuid(const char *, int, const char *,
 	struct gfm_connection **, const char *, struct passwd *, int);
+struct gfs_file_list;
+struct gfs_file_list *gfm_client_connection_file_list(struct gfm_connection *);
+struct gfs_file_list *gfm_client_connection_detach_file_list(
+	struct gfm_connection *);
+void gfm_client_connection_set_file_list(struct gfm_connection *,
+	struct gfs_file_list *);
+int gfm_client_connection_failover_count(struct gfm_connection *);
+void gfm_client_connection_set_failover_count(struct gfm_connection *, int);
 void gfm_client_connection_free(struct gfm_connection *);
 void gfm_client_terminate(void);
 
@@ -170,7 +178,7 @@ gfarm_error_t gfm_client_fhclose_read_request(struct gfm_connection *,
 	gfarm_ino_t, gfarm_uint64_t, gfarm_int64_t, gfarm_int32_t);
 gfarm_error_t gfm_client_fhclose_read_result(struct gfm_connection *);
 gfarm_error_t gfm_client_fhclose_write_request(struct gfm_connection *,
-	gfarm_ino_t, gfarm_uint64_t, gfarm_off_t,
+	gfarm_ino_t, gfarm_uint64_t, gfarm_off_t, 
 	gfarm_int64_t, gfarm_int32_t, gfarm_int64_t, gfarm_int32_t);
 gfarm_error_t gfm_client_fhclose_write_result(struct gfm_connection *,
 	gfarm_int32_t *, gfarm_int64_t *, gfarm_int64_t *, gfarm_uint64_t *);

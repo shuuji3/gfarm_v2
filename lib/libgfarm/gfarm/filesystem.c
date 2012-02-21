@@ -6,11 +6,9 @@
 
 #include "hash.h"
 
-#include "context.h"
 #include "filesystem.h"
 #include "metadb_server.h"
 #include "gfm_client.h"
-#include "gfs_file_list.h"
 
 struct gfarm_metadb_server;
 
@@ -18,25 +16,6 @@ struct gfarm_filesystem {
 	struct gfarm_filesystem *next;
 	struct gfarm_metadb_server **servers;
 	int nservers, flags;
-
-	/*
-	 * opened file list
-	 *
-	 * all gfm_connection related to GFS_File in file_list MUST be
-	 * the same instance to execute failover process against all opened
-	 * files at the same time in gfs_pio_failover().
-	 */
-	struct gfs_file_list *file_list;
-
-	/*
-	 * detected failover but not yet recovered.
-	 *
-	 * gfm_connection MUST NOT be acquired without calling
-	 * gfs_pio_failover() when failover_detected is true.
-	 */
-	int failover_detected;
-
-	int failover_count;
 };
 
 struct gfarm_filesystem_hash_id {
@@ -44,29 +23,8 @@ struct gfarm_filesystem_hash_id {
 	int port;
 };
 
-#define staticp	(gfarm_ctxp->filesystem_static)
-
-struct gfarm_filesystem_static {
-	struct gfarm_filesystem filesystems;
-	struct gfarm_hash_table *ms2fs_hashtab;
-};
-
-gfarm_error_t
-gfarm_filesystem_static_init(struct gfarm_context *ctxp)
-{
-	struct gfarm_filesystem_static *s;
-
-	GFARM_MALLOC(s);
-	if (s == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	memset(&s->filesystems, 0, sizeof(s->filesystems));
-	s->filesystems.next = &s->filesystems;
-	s->ms2fs_hashtab = NULL;
-
-	ctxp->filesystem_static = s;
-	return (GFARM_ERR_NO_ERROR);
-}
+static struct gfarm_filesystem filesystems = { &filesystems };
+static struct gfarm_hash_table *ms2fs_hashtab;
 
 #define GFARM_FILESYSTEM_FLAG_IS_DEFAULT	0x00000001
 
@@ -91,11 +49,10 @@ gfarm_filesystem_hash_equal(const void *key1, int key1len,
 }
 
 static gfarm_error_t
-gfarm_filesystem_new(struct gfarm_filesystem **fsp)
+gfarm_filesystem_add(struct gfarm_filesystem **fsp)
 {
 	gfarm_error_t e;
 	struct gfarm_filesystem *fs;
-	struct gfs_file_list *gfl;
 
 	GFARM_MALLOC(fs);
 	if (fs == NULL) {
@@ -104,58 +61,30 @@ gfarm_filesystem_new(struct gfarm_filesystem **fsp)
 		    "%s", gfarm_error_string(e));
 		return (e);
 	}
-	gfl = gfs_pio_file_list_alloc();
-	if (gfl == NULL) {
-		free(fs);
-		e = GFARM_ERR_NO_MEMORY;
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "alloc gfs_file_list: %s",
-		    gfarm_error_string(e));
-		return (e);
-	}
-
-	fs->next = staticp->filesystems.next;
+	fs->next = filesystems.next;
 	fs->servers = NULL;
 	fs->nservers = 0;
 	fs->flags = 0;
-	fs->file_list = gfl;
-	fs->failover_detected = 0;
-	fs->failover_count = 0;
-	staticp->filesystems.next = fs;
+	filesystems.next = fs;
 	*fsp = fs;
 	return (GFARM_ERR_NO_ERROR);
-}
-
-static void
-gfarm_filesystem_free(struct gfarm_filesystem *fs)
-{
-	int i;
-	struct gfarm_metadb_server *ms;
-
-	for (i = 0; i < fs->nservers; ++i) {
-		ms = fs->servers[i];
-		gfarm_metadb_server_free(ms);
-		free(ms);
-	}
-	free(fs->servers);
-	staticp->filesystems.next = fs->next;
 }
 
 int
 gfarm_filesystem_is_initialized(void)
 {
-	return (staticp->filesystems.next != &staticp->filesystems);
+	return (filesystems.next != &filesystems);
 }
 
 static gfarm_error_t
 gfarm_filesystem_ms2fs_hash_alloc(void)
 {
 #define MS2FS_HASHTAB_SIZE 17
-	if (staticp->ms2fs_hashtab)
-		gfarm_hash_table_free(staticp->ms2fs_hashtab);
-	staticp->ms2fs_hashtab = gfarm_hash_table_alloc(MS2FS_HASHTAB_SIZE,
+	if (ms2fs_hashtab)
+		gfarm_hash_table_free(ms2fs_hashtab);
+	ms2fs_hashtab = gfarm_hash_table_alloc(MS2FS_HASHTAB_SIZE,
 	    gfarm_filesystem_hash_index, gfarm_filesystem_hash_equal);
-	if (staticp->ms2fs_hashtab == NULL) {
+	if (ms2fs_hashtab == NULL) {
 		gflog_debug(GFARM_MSG_1002568,
 		    "%s", gfarm_error_string(GFARM_ERR_NO_MEMORY));
 		return (GFARM_ERR_NO_MEMORY);
@@ -171,7 +100,7 @@ gfarm_filesystem_init(void)
 
 	if (gfarm_filesystem_is_initialized())
 		return (GFARM_ERR_NO_ERROR);
-	if ((e = gfarm_filesystem_new(&fs)) != GFARM_ERR_NO_ERROR)
+	if ((e = gfarm_filesystem_add(&fs)) != GFARM_ERR_NO_ERROR)
 		return (e);
 	fs->flags |= GFARM_FILESYSTEM_FLAG_IS_DEFAULT;
 	return (GFARM_ERR_NO_ERROR);
@@ -188,8 +117,8 @@ gfarm_filesystem_hash_enter(struct gfarm_filesystem *fs,
 
 	id.hostname = gfarm_metadb_server_get_name(ms);
 	id.port = gfarm_metadb_server_get_port(ms);
-	entry = gfarm_hash_enter(staticp->ms2fs_hashtab, &id, sizeof(id),
-	    sizeof(fs), &created);
+	entry = gfarm_hash_enter(ms2fs_hashtab, &id, sizeof(id), sizeof(fs),
+	    &created);
 	if (entry == NULL) {
 		gflog_debug(GFARM_MSG_1002569,
 		    "%s", gfarm_error_string(GFARM_ERR_NO_MEMORY));
@@ -202,7 +131,7 @@ gfarm_filesystem_hash_enter(struct gfarm_filesystem *fs,
 	return (GFARM_ERR_NO_ERROR);
 }
 
-int
+static int
 gfarm_filesystem_is_default(struct gfarm_filesystem *fs)
 {
 	return ((fs->flags & GFARM_FILESYSTEM_FLAG_IS_DEFAULT) != 0);
@@ -211,7 +140,7 @@ gfarm_filesystem_is_default(struct gfarm_filesystem *fs)
 struct gfarm_filesystem*
 gfarm_filesystem_get_default(void)
 {
-	struct gfarm_filesystem *fs = staticp->filesystems.next;
+	struct gfarm_filesystem *fs = filesystems.next;
 
 	assert(gfarm_filesystem_is_default(fs));
 	return (fs);
@@ -223,11 +152,11 @@ gfarm_filesystem_get(const char *hostname, int port)
 	struct gfarm_filesystem_hash_id id;
 	struct gfarm_hash_entry *entry;
 
-	if (staticp->ms2fs_hashtab == NULL)
+	if (ms2fs_hashtab == NULL)
 		return (NULL);
 	id.hostname = (char *)hostname; /* UNCONST */
 	id.port = port;
-	entry = gfarm_hash_lookup(staticp->ms2fs_hashtab, &id, sizeof(id));
+	entry = gfarm_hash_lookup(ms2fs_hashtab, &id, sizeof(id));
 	return (entry ?
 	    *(struct gfarm_filesystem **)gfarm_hash_entry_data(entry) : NULL);
 }
@@ -235,8 +164,8 @@ gfarm_filesystem_get(const char *hostname, int port)
 struct gfarm_filesystem*
 gfarm_filesystem_get_by_connection(struct gfm_connection *gfm_server)
 {
-	return (gfarm_filesystem_get(gfm_client_hostname(
-		    gfm_server), gfm_client_port(gfm_server)));
+	return (gfarm_filesystem_get(gfm_client_hostname(gfm_server),
+		gfm_client_port(gfm_server)));
 }
 
 gfarm_error_t
@@ -274,60 +203,6 @@ gfarm_filesystem_set_metadb_server_list(struct gfarm_filesystem *fs,
 	return (GFARM_ERR_NO_ERROR);
 }
 
-gfarm_error_t
-gfarm_filesystem_add(const char *hostname, int port,
-	struct gfarm_filesystem **fsp)
-{
-	gfarm_error_t e;
-	char *host = NULL;
-	struct gfarm_metadb_server *ms = NULL, *mss[1];
-	struct gfarm_filesystem *fs = gfarm_filesystem_get(hostname, port);
-
-	if (fs != NULL)
-		return (GFARM_ERR_NO_ERROR);
-
-	host = strdup(hostname);
-	if (host == NULL) {
-		e = GFARM_ERR_NO_MEMORY;
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		return (e);
-	}
-	if ((e = gfarm_metadb_server_new(&ms, host, port))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		goto error;
-	}
-	if ((e = gfarm_filesystem_new(&fs)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		goto error;
-	}
-
-	mss[0] = ms;
-	if ((e = gfarm_filesystem_set_metadb_server_list(fs, mss, 1))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		goto error;
-	}
-
-	*fsp = fs;
-	return (GFARM_ERR_NO_ERROR);
-
-error:
-	if (fs != NULL) {
-		gfarm_filesystem_free(fs);
-		free(fs);
-	} else if (ms != NULL) {
-		gfarm_metadb_server_free(ms);
-		free(ms);
-	} else if (host != NULL)
-		free(host);
-	return (e);
-}
-
 struct gfarm_metadb_server**
 gfarm_filesystem_get_metadb_server_list(struct gfarm_filesystem *fs, int *np)
 {
@@ -335,46 +210,8 @@ gfarm_filesystem_get_metadb_server_list(struct gfarm_filesystem *fs, int *np)
 	return (fs->servers);
 }
 
-struct gfarm_metadb_server*
-gfarm_filesystem_get_metadb_server_first(struct gfarm_filesystem *fs)
-{
-	assert(fs->nservers > 0);
-	return (fs->servers[0]);
-}
-
 int
 gfarm_filesystem_has_multiple_servers(struct gfarm_filesystem *fs)
 {
-	return (fs != NULL ? fs->nservers > 1 : 0);
-}
-
-struct gfs_file_list *
-gfarm_filesystem_opened_file_list(struct gfarm_filesystem *fs)
-{
-	return (fs->file_list);
-}
-
-int
-gfarm_filesystem_failover_detected(struct gfarm_filesystem *fs)
-{
-	return (fs != NULL ? fs->failover_detected : 0);
-}
-
-void
-gfarm_filesystem_set_failover_detected(struct gfarm_filesystem *fs,
-	int detected)
-{
-	fs->failover_detected = detected;
-}
-
-int
-gfarm_filesystem_failover_count(struct gfarm_filesystem *fs)
-{
-	return (fs != NULL ? fs->failover_count : 0);
-}
-
-void
-gfarm_filesystem_set_failover_count(struct gfarm_filesystem *fs, int count)
-{
-	fs->failover_count = count;
+	return (fs->nservers > 1);
 }
