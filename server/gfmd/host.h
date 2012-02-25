@@ -31,7 +31,6 @@ int host_port(struct host *);
 char *host_architecture(struct host *);
 int host_ncpu(struct host *);
 int host_flags(struct host *);
-char *host_fsngroup(struct host *);
 int host_supports_async_protocols(struct host *);
 int host_is_disk_available(struct host *, gfarm_off_t);
 
@@ -75,34 +74,23 @@ void host_status_update(struct host *, struct host_status *);
 struct gfarm_host_info;
 gfarm_error_t host_enter(struct gfarm_host_info *, struct host **);
 void host_modify(struct host *, struct gfarm_host_info *);
-void host_fsngroup_modify(struct host *, const char *);
 gfarm_error_t host_remove_in_cache(const char *);
 
-gfarm_error_t gfm_server_host_info_get_all(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_host_info_get_by_architecture(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_host_info_get_by_names(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_host_info_get_by_namealiases(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_host_info_set(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_host_info_modify(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_host_info_remove(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
+gfarm_error_t gfm_server_host_info_get_all(struct peer *, int, int);
+gfarm_error_t gfm_server_host_info_get_by_architecture(struct peer *, int,int);
+gfarm_error_t gfm_server_host_info_get_by_names(struct peer *, int, int);
+gfarm_error_t gfm_server_host_info_get_by_namealiases(struct peer *, int, int);
+gfarm_error_t gfm_server_host_info_set(struct peer *, int, int);
+gfarm_error_t gfm_server_host_info_modify(struct peer *, int, int);
+gfarm_error_t gfm_server_host_info_remove(struct peer *, int, int);
 
 gfarm_error_t host_schedule_reply(struct host *, struct peer *, const char *);
-gfarm_error_t host_schedule_reply_all(struct peer *, gfp_xdr_xid_t, size_t *,
+gfarm_error_t host_schedule_reply_all(struct peer *,
 	int (*)(struct host *, void *), void *, const char *);
 
-gfarm_error_t gfm_server_hostname_set(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_schedule_host_domain(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_statfs(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
+gfarm_error_t gfm_server_hostname_set(struct peer *, int, int);
+gfarm_error_t gfm_server_schedule_host_domain(struct peer *, int, int);
+gfarm_error_t gfm_server_statfs(struct peer *, int, int);
 
 
 /* exported for a use from a private extension */

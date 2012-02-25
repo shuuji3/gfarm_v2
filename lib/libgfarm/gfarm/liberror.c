@@ -140,7 +140,6 @@ static const char *errcode_string[GFARM_ERR_NUMBER] = {
 	"gfmd was failed over",
 	"bad inode number",
 	"bad cookie",
-	"invalid remote peer",
 };
 
 static const char *errmsg_string[GFARM_ERRMSG_END - GFARM_ERRMSG_BEGIN] = {
@@ -401,9 +400,9 @@ static struct gfarm_errno_error_map {
 	/*		GFARM_ERR_NO_SUCH_OBJECT */
 	/*		GFARM_ERR_CANT_OPEN */
 #ifdef EPROTO
-	{ EPROTO,	GFARM_ERR_UNEXPECTED_EOF },
+        { EPROTO,	GFARM_ERR_UNEXPECTED_EOF },
 #else
-	{ ECONNABORTED,	GFARM_ERR_UNEXPECTED_EOF },
+        { ECONNABORTED,	GFARM_ERR_UNEXPECTED_EOF },
 #endif
 	/*		GFARM_ERR_GFARM_URL_PREFIX_IS_MISSING */
 	{ EAGAIN,	GFARM_ERR_TOO_MANY_JOBS },

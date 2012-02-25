@@ -21,7 +21,6 @@
 
 #include "gfutil.h" /* gfarm_send_no_sigpipe() */
 
-#include "context.h"
 #include "iobuffer.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
@@ -72,7 +71,7 @@ gfarm_iobuffer_nonblocking_write_socket_op(struct gfarm_iobuffer *b,
 void
 gfarm_iobuffer_set_nonblocking_read_fd(struct gfarm_iobuffer *b, int fd)
 {
-	gfarm_iobuffer_set_read_timeout(b,
+	gfarm_iobuffer_set_read_timeout(b, 
 	    gfarm_iobuffer_nonblocking_read_fd_op, NULL, fd);
 }
 
@@ -91,7 +90,7 @@ gfarm_iobuffer_blocking_read_timeout_fd_op(struct gfarm_iobuffer *b,
 	void *cookie, int fd, void *data, int length)
 {
 	ssize_t rv;
-	int avail, timeout = gfarm_ctxp->network_receive_timeout;
+	int avail;
 
 	for (;;) {
 #ifdef HAVE_POLL
@@ -99,14 +98,14 @@ gfarm_iobuffer_blocking_read_timeout_fd_op(struct gfarm_iobuffer *b,
 
 		fds[0].fd = fd;
 		fds[0].events = POLLIN;
-		avail = poll(fds, 1, timeout * 1000);
+		avail = poll(fds, 1, gfarm_network_receive_timeout * 1000);
 #else
 		fd_set readable;
 		struct timeval tv;
 
 		FD_ZERO(&readable);
 		FD_SET(fd, &readable);
-		tv.tv_sec = timeout;
+		tv.tv_sec = gfarm_network_receive_timeout;
 		tv.tv_usec = 0;
 		avail = select(fd + 1, &readable, NULL, NULL, &tv);
 #endif
@@ -117,7 +116,7 @@ gfarm_iobuffer_blocking_read_timeout_fd_op(struct gfarm_iobuffer *b,
 		} else if (avail == -1) {
 			if (errno == EINTR)
 				continue;
-			gfarm_iobuffer_set_error(b,
+			gfarm_iobuffer_set_error(b, 
 			    gfarm_errno_to_error(errno));
 			return (-1);
 		}

@@ -4,7 +4,6 @@
 
 #include <pthread.h>
 #include <assert.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -13,12 +12,9 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 #include "thrsubr.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 
 #include "subr.h"
@@ -574,8 +570,7 @@ db_host_remove(const char *hostname)
 }
 
 gfarm_error_t
-db_host_load(void *closure,
-	void (*callback)(void *, struct gfarm_internal_host_info *))
+db_host_load(void *closure, void (*callback)(void *, struct gfarm_host_info *))
 {
 	gfarm_error_t e;
 	const char *diag = "db_host_load";

@@ -1,4 +1,5 @@
-#define gfs_profile(x) if (gfarm_ctxp->profile) { x; }
+extern int gf_profile;
+#define gfs_profile(x) if (gf_profile) { x; }
 
 void gfs_profile_set(void);
 void gfs_profile_unset(void);

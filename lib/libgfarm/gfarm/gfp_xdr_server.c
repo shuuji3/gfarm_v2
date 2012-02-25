@@ -77,7 +77,7 @@ void
 gfp_xdr_async_peer_free(gfp_xdr_async_peer_t async_server, void *peer)
 {
 	static const char diag[] = "gfp_xdr_async_peer_free";
-
+	
 	gfarm_id_table_free(async_server->idtab, gfp_xdr_async_xid_free, peer);
 	gfarm_mutex_destroy(&async_server->mutex, diag, async_peer_diag);
 	free(async_server);
@@ -159,24 +159,13 @@ gfp_xdr_vsend_async_request_internal(struct gfp_xdr *server,
 	void (*disconnect_callback)(void *, void *),
 	void *closure,
 	int nonblock,
-	const char *wrapping_format, va_list *wrapping_app,
 	gfarm_int32_t command, const char *format, va_list *app)
 {
 	gfarm_error_t e;
 	size_t size = 0;
-	va_list ap, wrapping_ap;
-	const char *fmt, *wrapping_fmt;
+	va_list ap;
+	const char *fmt;
 	gfarm_int32_t xid;
-
-	if (wrapping_format != NULL) {
-		va_copy(wrapping_ap, *wrapping_app);
-		wrapping_fmt = wrapping_format;
-		e = gfp_xdr_vsend_size_add(&size,
-		    &wrapping_fmt, &wrapping_ap);
-		va_end(wrapping_ap);
-		if (e != GFARM_ERR_NO_ERROR)
-			return (e);
-	}
 
 	e = gfp_xdr_send_size_add(&size, "i", command);
 	if (e != GFARM_ERR_NO_ERROR)
@@ -197,16 +186,6 @@ gfp_xdr_vsend_async_request_internal(struct gfp_xdr *server,
 	    result_callback, disconnect_callback, closure, &xid);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-
-	if (wrapping_format != NULL) {
-		e = gfp_xdr_vsend(server, &wrapping_format, wrapping_app);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gfp_xdr_send_async_request_error(async_server, xid,
-			    "gfp_xdr_vsend");
-			return (e);
-		}
-	}
-
 	e = gfp_xdr_vrpc_request(server, command, &format, app);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfp_xdr_send_async_request_error(async_server, xid,
@@ -237,7 +216,7 @@ gfp_xdr_vsend_async_nonblocking_request(struct gfp_xdr *server,
 {
 	return (gfp_xdr_vsend_async_request_internal(server,
 	    async_server, result_callback, disconnect_callback, closure, 1,
-	    NULL, NULL, command, format, app));
+	    command, format, app));
 }
 
 gfarm_error_t
@@ -250,21 +229,7 @@ gfp_xdr_vsend_async_request(struct gfp_xdr *server,
 {
 	return (gfp_xdr_vsend_async_request_internal(server,
 	    async_server, result_callback, disconnect_callback, closure, 0,
-	    NULL, NULL, command, format, app));
-}
-
-gfarm_error_t
-gfp_xdr_vsend_async_wrapped_request(struct gfp_xdr *server,
-	gfp_xdr_async_peer_t async_server,
-	gfarm_int32_t (*result_callback)(void *, void *, size_t),
-	void (*disconnect_callback)(void *, void *),
-	void *closure,
-	const char *wrapping_format, va_list *wrapping_app,
-	gfarm_int32_t command, const char *format, va_list *app)
-{
-	return (gfp_xdr_vsend_async_request_internal(server,
-	    async_server, result_callback, disconnect_callback, closure, 0,
-	    wrapping_format, wrapping_app, command, format, app));
+	    command, format, app));
 }
 
 /*
@@ -358,7 +323,6 @@ gfp_xdr_vrecv_request_parameters(struct gfp_xdr *client, int just,
 /* the caller should call gfp_xdr_flush() after this function */
 gfarm_error_t
 gfp_xdr_vsend_result(struct gfp_xdr *client,
-	gfarm_error_t (*xdr_vsend)(struct gfp_xdr *, const char **, va_list *),
 	gfarm_int32_t ecode, const char *format, va_list *app)
 {
 	gfarm_error_t e;
@@ -367,7 +331,7 @@ gfp_xdr_vsend_result(struct gfp_xdr *client,
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	if (ecode == GFARM_ERR_NO_ERROR) {
-		e = (*xdr_vsend)(client, &format, app);
+		e = gfp_xdr_vsend(client, &format, app);
 		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
 		if (*format != '\0') {
@@ -383,7 +347,6 @@ gfp_xdr_vsend_result(struct gfp_xdr *client,
 /* used by asynchronous protocol */
 gfarm_error_t
 gfp_xdr_vsend_async_result(struct gfp_xdr *client, gfp_xdr_xid_t xid,
-	gfarm_error_t (*xdr_vsend)(struct gfp_xdr *, const char **, va_list *),
 	gfarm_int32_t ecode, const char *format, va_list *app)
 {
 	gfarm_error_t e;
@@ -406,5 +369,5 @@ gfp_xdr_vsend_async_result(struct gfp_xdr *client, gfp_xdr_xid_t xid,
 	e = gfp_xdr_send_async_result_header(client, xid, size);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
-	return (gfp_xdr_vsend_result(client, xdr_vsend, ecode, format, app));
+	return (gfp_xdr_vsend_result(client, ecode, format, app));
 }

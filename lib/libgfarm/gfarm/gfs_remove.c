@@ -6,8 +6,8 @@
 
 #include "gfutil.h"
 
-#include "context.h"
 #include "gfm_client.h"
+#include "config.h"
 #include "lookup.h"
 
 struct gfm_remove_closure {
@@ -41,7 +41,7 @@ gfm_remove_result(struct gfm_connection *gfm_server, void *closure)
 		    "remove result: %s", gfarm_error_string(e));
 #endif
 	} else {
-		if (gfarm_ctxp->file_trace) {
+		if (gfarm_file_trace) {
 			int src_port;
 
 			gfm_client_source_port(gfm_server, &src_port);
@@ -58,24 +58,15 @@ gfm_remove_result(struct gfm_connection *gfm_server, void *closure)
 	return (e);
 }
 
-static int
-gfm_remove_must_be_warned(gfarm_error_t e, void *closure)
-{
-	/* error returned inode_lookup_basename */
-	return (0);
-}
-
 gfarm_error_t
 gfs_remove(const char *path)
 {
 	struct gfm_remove_closure closure;
 
 	closure.path = path;
-	return (gfm_name_op_modifiable(path,
-	    GFARM_ERR_IS_A_DIRECTORY /*XXX posix ok?*/,
+	return (gfm_name_op(path, GFARM_ERR_IS_A_DIRECTORY /*XXX posix ok?*/,
 	    gfm_remove_request,
 	    gfm_remove_result,
 	    gfm_name_success_op_connection_free,
-	    gfm_remove_must_be_warned,
 	    &closure));
 }

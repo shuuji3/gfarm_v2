@@ -18,8 +18,6 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "queue.h"
 #include "gfutil.h"
 #include "thrsubr.h"
@@ -30,6 +28,7 @@
 #include "metadb_common.h"
 #include "xattr_info.h"
 #include "quota_info.h"
+#include "quota.h"
 #include "metadb_server.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
@@ -39,7 +38,6 @@
 #include "config.h"
 
 #include "subr.h"
-#include "quota.h"
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_access.h"
@@ -3911,7 +3909,7 @@ db_journal_recvq_thread(void *arg)
 
 static gfarm_error_t
 db_journal_host_load(void *closure,
-	void (*callback)(void *, struct gfarm_internal_host_info *))
+	void (*callback)(void *, struct gfarm_host_info *))
 {
 	return (store_ops->host_load(closure, callback));
 }

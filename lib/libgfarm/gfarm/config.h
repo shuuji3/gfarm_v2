@@ -1,4 +1,4 @@
-#define GFARM_CONFIG_MISC_DEFAULT	-1
+extern char *gfarm_config_file;
 
 /* gfsd dependent */
 /* GFS dependent */
@@ -15,6 +15,14 @@ enum gfarm_backend_db_type {
 extern enum gfarm_backend_db_type gfarm_backend_db_type;
 
 /* GFM dependent */
+extern int gfarm_gfmd_connection_cache;
+/* XXX FIXME these should disappear to support multiple metadata server */
+extern char *gfarm_metadb_server_name;
+extern int gfarm_metadb_server_port;
+
+extern char *gfarm_metadb_admin_user;
+extern char *gfarm_metadb_admin_user_gsi_dn;
+
 extern int gfarm_metadb_stack_size;
 extern int gfarm_metadb_thread_pool_size;
 extern int gfarm_metadb_job_queue_length;
@@ -54,7 +62,21 @@ extern char *gfarm_postgresql_conninfo;
 extern char *gfarm_localfs_datadir;
 
 /* miscellaneous configurations */
+extern int gfarm_log_level; /* syslog priority level to log */
+extern int gfarm_no_file_system_node_timeout;
+extern int gfarm_gfmd_reconnection_timeout;
+extern int gfarm_attr_cache_limit;
+extern int gfarm_attr_cache_timeout;
+extern int gfarm_schedule_cache_timeout;
+extern float gfarm_schedule_idle_load;
+extern float gfarm_schedule_busy_load;
+extern float gfarm_schedule_virtual_load;
 extern int gfarm_simultaneous_replication_receivers;
+extern int gfarm_gfsd_connection_cache;
+extern int gfarm_record_atime;
+extern int gfarm_client_file_bufsize;
+
+extern int gf_on_demand_replication;
 
 int gfarm_schedule_write_local_priority(void);
 char *gfarm_schedule_write_target_domain(void);
@@ -79,9 +101,6 @@ void gfarm_set_metadb_server_force_slave(int);
 extern int gfarm_network_receive_timeout;
 extern int gfarm_file_trace;
 
-void gfarm_config_set_filename(char *);
-char *gfarm_config_get_filename(void);
-
 void gfarm_config_clear(void);
 #ifdef GFARM_USE_STDIO
 gfarm_error_t gfarm_config_read_file(FILE *, int *);
@@ -104,8 +123,3 @@ gfarm_error_t gfarm_client_process_set(struct gfs_connection *,
 	struct gfm_connection *);
 gfarm_error_t gfarm_client_process_reset(struct gfs_connection *,
 	struct gfm_connection *);
-
-/* for server */
-gfarm_error_t gfarm_server_initialize(char *, int *, char ***);
-gfarm_error_t gfarm_server_terminate(void);
-gfarm_error_t gfarm_server_config_read(void);

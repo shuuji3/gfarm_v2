@@ -28,11 +28,8 @@
 
 /* XXX FIXME - dummy definitions to link successfully without gfmd.o */
 struct thread_pool *sync_protocol_get_thrpool(void) { return NULL; }
-int protocol_service(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep)
-{ return 0; }
 void resuming_enqueue(void *entry) {}
 void gfmd_terminate(void) {}
-int gfmd_port;
 
 static char *program_name = "db_journal_test";
 static const char *filepath;
@@ -3270,6 +3267,7 @@ t_apply(void)
 	db_journal_apply_init();
 	db_journal_init_status();
 	db_journal_set_sync_op(t_no_sync);
+	gfarm_server_config_read();
 	gfarm_set_metadb_replication_enabled(0);
 	db_use(&empty_ops);
 	gfarm_set_metadb_replication_enabled(1);
@@ -3309,7 +3307,6 @@ main(int argc, char **argv)
 	int c, op = 0;
 
 	debug_mode = 1;
-	gfarm_server_initialize(NULL, &argc, &argv);
 	gflog_set_priority_level(LOG_DEBUG);
 	gflog_set_message_verbose(99);
 

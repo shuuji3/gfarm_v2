@@ -25,9 +25,7 @@
 #include "rpcsubr.h"
 #include "user.h"
 #include "peer.h"
-#include "local_peer.h"
 #include "abstract_host.h"
-#include "abstract_host_impl.h"
 
 static const char *
 back_channel_type_name(struct peer *peer)
@@ -40,10 +38,11 @@ back_channel_type_name(struct peer *peer)
 	case GFARM_AUTH_ID_TYPE_METADATA_HOST:
 		return ("gfmd_channel");
 	default:
-		gflog_fatal(GFARM_MSG_1003282,
+		gflog_error(GFARM_MSG_1003282,
 		    "(%s@%s) unexpected auth_id_type: %d",
 		    peer_get_username(peer), peer_get_hostname(peer),
 		    peer_get_auth_id_type(peer));
+		abort();
 		return ("unexpected_channel");
 	}
 }
@@ -277,7 +276,6 @@ abstract_host_sender_lock(struct abstract_host *host, struct peer **peerp,
 		peer0 = host->peer;
 		gfarm_cond_wait(&host->ready_to_send, &host->mutex,
 		    diag, "ready_to_send");
-		/* peer comparison works only if at least one is a local peer */
 		if (host->peer != peer0) {
 			e = GFARM_ERR_CONNECTION_ABORTED;
 			break;
@@ -334,7 +332,6 @@ abstract_host_receiver_lock(struct abstract_host *host, struct peer **peerp,
 		    peer_get_service_name(peer0));
 		gfarm_cond_wait(&host->ready_to_receive,
 		    &host->mutex, diag, "ready_to_receive");
-		/* peer comparison works only if at least one is a local peer */
 		if (host->peer != peer0) {
 			e = GFARM_ERR_CONNECTION_ABORTED;
 			break;
@@ -614,7 +611,7 @@ async_channel_service(struct abstract_host *host,
 }
 
 void *
-gfm_server_channel_main(struct local_peer *local_peer0,
+gfm_server_channel_main(void *arg,
 	channel_protocol_switch_t channel_protocol_switch
 #ifdef COMPAT_GFARM_2_3
 	    ,void (*channel_free)(struct abstract_host *),
@@ -623,7 +620,7 @@ gfm_server_channel_main(struct local_peer *local_peer0,
 #endif
 	)
 {
-	struct peer *peer, *peer0 = local_peer_to_peer(local_peer0);
+	struct peer *peer0 = arg, *peer;
 	struct abstract_host *host = peer_get_abstract_host(peer0);
 	gfp_xdr_async_peer_t async;
 	gfarm_error_t e;
@@ -637,14 +634,12 @@ gfm_server_channel_main(struct local_peer *local_peer0,
 #ifdef COMPAT_GFARM_2_3
 		channel_free(host);
 #endif
-		local_peer_readable_invoked(local_peer0);
+		peer_invoked(peer0);
 		return (NULL);
 	}
 	/*
 	 * the following ensures that the bach_channel connection is
 	 * not switched to another one.
-	 *
-	 * peer comparison works only if at least one is a local peer.
 	 */
 	if (peer != peer0) {
 		gflog_error(GFARM_MSG_1002782,
@@ -654,12 +649,12 @@ gfm_server_channel_main(struct local_peer *local_peer0,
 		channel_free(host);
 #endif
 		abstract_host_receiver_unlock(host, peer);
-		local_peer_readable_invoked(local_peer0);
+		peer_invoked(peer0);
 		return (NULL);
 	}
 
 	/* now, host_receiver_lock() is protecting this peer */
-	local_peer_readable_invoked(local_peer0);
+	peer_invoked(peer);
 
 	async = peer_get_async(peer);
 
@@ -715,7 +710,7 @@ gfm_server_channel_main(struct local_peer *local_peer0,
 	 * See the comment in protocol_main() for detail.
 	 */
 
-	local_peer_watch_readable(local_peer0);
+	peer_watch_access(peer);
 
 	abstract_host_receiver_unlock(host, peer);
 
@@ -748,7 +743,7 @@ gfm_server_channel_disconnect_request(struct abstract_host *host,
  * synchronous mode of back_channel is only used before gfarm-2.4.0
  */
 gfarm_error_t
-gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
+gfm_client_channel_vsend_request(struct abstract_host *host,
 	struct peer *peer0, const char *diag,
 	gfarm_int32_t (*result_callback)(void *, void *, size_t),
 	void (*disconnect_callback)(void *, void *), void *closure,
@@ -757,8 +752,7 @@ gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
 	    gfarm_int32_t (*)(void *, void *, size_t),
 	    void (*)(void *, void *), void *),
 #endif
-	const char *wrapping_format, va_list *wrapping_app,
-	gfarm_int32_t command, const char *format, va_list *app)
+	gfarm_int32_t command, const char *format, va_list * app)
 {
 	gfarm_error_t e;
 	struct peer *peer;
@@ -783,7 +777,6 @@ gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
 			    diag, "request", "sending busy");
 		return (e);
 	}
-	/* peer comparison works only if at least one is a local peer */
 	/* if (peer0 == NULL), the caller doesn't care the connection */
 	if (peer0 != NULL && peer != peer0) {
 		abstract_host_sender_unlock(host, peer,
@@ -800,12 +793,11 @@ gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
 	server = peer_get_conn(peer);
 
 	if (async != NULL) { /* is asynchronous mode? */
-		e = gfp_xdr_vsend_async_wrapped_request(server,
+		e = gfp_xdr_vsend_async_request(server,
 		    async, result_callback, disconnect_callback, closure,
-		    wrapping_format, wrapping_app, command, format, app);
+		    command, format, app);
 #ifdef COMPAT_GFARM_2_3
 	} else { /*  synchronous mode */
-		assert(wrapping_format == NULL);
 		host_set_callback(host, peer,
 		    result_callback, disconnect_callback, closure);
 		e = gfp_xdr_vrpc_request(server,
@@ -831,29 +823,6 @@ gfm_client_channel_vsend_wrapped_request(struct abstract_host *host,
 	if (async != NULL) /* is asynchronous mode? */
 		abstract_host_sender_unlock(host, peer, diag);
 	return (GFARM_ERR_NO_ERROR);
-}
-
-/*
- * synchronous mode of back_channel is only used before gfarm-2.4.0
- */
-gfarm_error_t
-gfm_client_channel_vsend_request(struct abstract_host *host,
-	struct peer *peer0, const char *diag,
-	gfarm_int32_t (*result_callback)(void *, void *, size_t),
-	void (*disconnect_callback)(void *, void *), void *closure,
-#ifdef COMPAT_GFARM_2_3
-	void (*host_set_callback)(struct abstract_host *, struct peer *,
-	    gfarm_int32_t (*)(void *, void *, size_t),
-	    void (*)(void *, void *), void *),
-#endif
-	gfarm_int32_t command, const char *format, va_list *app)
-{
-	return (gfm_client_channel_vsend_wrapped_request(host, peer0, diag,
-	    result_callback, disconnect_callback, closure, 
-#ifdef COMPAT_GFARM_2_3
-	    host_set_callback,
-#endif
-	    NULL, NULL, command, format, app));
 }
 
 /* abstract_host_receiver_lock() must be already called here by
@@ -883,9 +852,7 @@ gfm_server_channel_vget_request(struct peer *peer, size_t size,
 gfarm_error_t
 gfm_server_channel_vput_reply(struct abstract_host *host,
 	struct peer *peer0, gfp_xdr_xid_t xid,
-	gfarm_error_t (*xdr_vsend)(struct gfp_xdr *, const char **, va_list *),
-	const char *diag,
-	gfarm_error_t errcode, const char *format, va_list *app)
+	const char *diag, gfarm_error_t errcode, char *format, va_list *app)
 {
 	gfarm_error_t e;
 	struct peer *peer;
@@ -903,12 +870,10 @@ gfm_server_channel_vput_reply(struct abstract_host *host,
 	if ((e = abstract_host_sender_lock(host, &peer, diag))
 	    != GFARM_ERR_NO_ERROR)
 		return (e);
-	/* peer comparison works only if at least one is a local peer */
 	if (peer != peer0)
 		return (GFARM_ERR_CONNECTION_ABORTED);
 	client = peer_get_conn(peer);
-	e = gfp_xdr_vsend_async_result(client, xid, xdr_vsend,
-	    errcode, format, app);
+	e = gfp_xdr_vsend_async_result(client, xid, errcode, format, app);
 	if (e == GFARM_ERR_NO_ERROR)
 		e = gfp_xdr_flush(client);
 
