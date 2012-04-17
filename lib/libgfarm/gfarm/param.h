@@ -12,10 +12,6 @@ struct gfarm_param_type {
 	void *extension;
 };
 
-void gfarm_param_config_init(struct gfarm_param_config **,
-	struct gfarm_param_config ***);
-void gfarm_param_config_free(struct gfarm_param_config **config_listp,
-	struct gfarm_param_config ***config_lastp);
 gfarm_error_t gfarm_param_config_parse_long(int, struct gfarm_param_type *,
 	char *, int *, long *);
 gfarm_error_t gfarm_param_config_add_long(struct gfarm_param_config ***,
@@ -29,7 +25,6 @@ gfarm_error_t gfarm_param_get_long_by_name_addr(struct gfarm_param_config *,
 	int, char *, struct sockaddr *, long *);
 gfarm_error_t gfarm_param_get_long(struct gfarm_param_config *, int, long *);
 
-#if 0 /* not yet in gfarm v2 */
 /*
  * netparam
  */
@@ -48,4 +43,3 @@ extern struct gfarm_netparam_info gfarm_netparam_file_sync_rate;
 extern struct gfarm_netparam_info gfarm_netparam_file_sync_stripe;
 extern struct gfarm_netparam_info gfarm_netparam_send_stripe_sync;
 extern struct gfarm_netparam_info gfarm_netparam_recv_stripe_sync;
-#endif

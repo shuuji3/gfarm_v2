@@ -4,8 +4,8 @@
 #define GFARM_INTERNAL_USE
 #include <gfarm/gfarm.h>
 
-#include "context.h"
 #include "gfm_client.h"
+#include "config.h"
 #include "lookup.h"
 
 struct gfm_link_closure {
@@ -38,7 +38,7 @@ gfm_link_result(struct gfm_connection *gfm_server, void *closure)
 		    "link result: %s",
 		    gfarm_error_string(e));
 	} else {
-		if (gfarm_ctxp->file_trace) {
+		if (gfarm_file_trace) {
 			gfm_client_source_port(gfm_server, &src_port);
 			gflog_trace(GFARM_MSG_1003269,
 			    "%s/%s/%s/%d/LINK/%s/%d/////\"%s\"///\"%s\"",
@@ -53,13 +53,6 @@ gfm_link_result(struct gfm_connection *gfm_server, void *closure)
 	return (e);
 }
 
-static int
-gfm_link_must_be_warned(gfarm_error_t e, void *closure)
-{
-	/* error returned inode_lookup_basename() */
-	return (e == GFARM_ERR_ALREADY_EXISTS);
-}
-
 gfarm_error_t
 gfs_link(const char *src, const char *dst)
 {
@@ -69,11 +62,10 @@ gfs_link(const char *src, const char *dst)
 	closure.src = src;
 	closure.dst = dst;
 
-	e = gfm_name2_op_modifiable(src, dst,
+	e = gfm_name2_op(src, dst,
 	    GFARM_FILE_SYMLINK_NO_FOLLOW | GFARM_FILE_OPEN_LAST_COMPONENT,
 	    gfm_link_request, NULL, gfm_link_result,
-	    gfm_name2_success_op_connection_free, NULL,
-	    gfm_link_must_be_warned, &closure);
+	    gfm_name2_success_op_connection_free, NULL, &closure);
 	if (e != GFARM_ERR_NO_ERROR) {
 		if (e == GFARM_ERR_PATH_IS_ROOT)
 			e = GFARM_ERR_OPERATION_NOT_PERMITTED;

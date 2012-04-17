@@ -18,12 +18,11 @@
 #include <gfarm/error.h>
 #include <gfarm/gfarm_misc.h>
 
-#include "gfutil.h"
-
 #include "gfarm_secure_session.h"
 #include "gfarm_auth.h"
 
 #include "liberror.h"
+#include "gfutil.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
 #include "io_gfsl.h"
@@ -125,7 +124,7 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 	session = gfarmSecSessionAccept(fd, cred, NULL, &e_major, &e_minor);
 	if (cred != GSS_C_NO_CREDENTIAL) {
 		OM_uint32 e_major2, e_minor2;
-
+		
 		if (gfarmGssDeleteCredential(&cred, &e_major2, &e_minor2) < 0
 		    && gflog_auth_get_verbose()) {
 			gflog_warning(GFARM_MSG_1000717,
@@ -263,8 +262,13 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 		    userinfo->authData.userAuth.localName);
 		gfarm_set_local_homedir(
 		    userinfo->authData.userAuth.homeDir);
-
-		/* set the delegated credential. */
+		/*
+		 * set the delegated credential
+		 * 
+		 * XXX - thread unsafe function.  this causes data race
+		 * in gfmd, but it is not harmful since gfmd currently
+		 * does not support to use delegated credential.
+		 */
 		gfarm_gsi_set_delegated_cred(
 		    gfarmSecSessionGetDelegatedCredential(session));
 	}
@@ -272,9 +276,9 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 	/* determine *peer_typep == GFARM_AUTH_ID_TYPE_SPOOL_HOST */
 	if (peer_typep != NULL) {
 		if (gfarmAuthGetAuthEntryType(userinfo) == GFARM_AUTH_HOST)
-			*peer_typep = GFARM_AUTH_ID_TYPE_SPOOL_HOST;
+		     *peer_typep = GFARM_AUTH_ID_TYPE_SPOOL_HOST;
 		else
-			*peer_typep = GFARM_AUTH_ID_TYPE_USER;
+		     *peer_typep = GFARM_AUTH_ID_TYPE_USER;
 	}
 	if (global_usernamep != NULL)
 		*global_usernamep = global_username;

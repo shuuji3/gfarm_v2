@@ -9,24 +9,6 @@
 #include "lru_cache.h"
 #include "thrsubr.h"
 
-void
-gfarm_lru_entry_init(struct gfarm_lru_entry *entry)
-{
-	assert(entry != NULL);
-
-	entry->next = entry->prev = entry;
-	entry->acquired = 0;
-}
-
-void
-gfarm_lru_cache_init(struct gfarm_lru_cache *cache)
-{
-	assert(cache != NULL);
-
-	gfarm_lru_entry_init(&cache->list_head);
-	cache->free_cached_entries = 0;
-}
-
 /* link the entry to the head of the LRU cache list */
 void
 gfarm_lru_cache_link_entry(struct gfarm_lru_cache *cache,
@@ -103,9 +85,10 @@ gfarm_lru_cache_delref_entry(struct gfarm_lru_cache *cache,
 {
 	if (--entry->acquired <= 0) {
 		if (entry->acquired < 0) {
-			gflog_fatal(GFARM_MSG_1000003,
+			gflog_error(GFARM_MSG_1000003,
 			    "gfarm_lru_cache_delref_entry: %d\n",
 			    entry->acquired);
+			abort();
 		}
 		if (entry->prev != NULL) /* i.e. if cached entry */
 			++cache->free_cached_entries; /* now, this is free */
@@ -137,8 +120,9 @@ gfarm_lru_cache_gc(struct gfarm_lru_cache *cache, int free_target,
 			    cache->free_cached_entries, free_target);
 			gflog_error(GFARM_MSG_1000005,
 			    "But no free %s is found.", entry_name);
-			gflog_fatal(GFARM_MSG_1000006,
+			gflog_error(GFARM_MSG_1000006,
 			    "This shouldn't happen");
+			abort();
 		}
 
 		if (entry->acquired <= 0) {

@@ -923,20 +923,6 @@ enable のとき、デフォルトのマスターgfmdとして設定されている場合でも、スレーブgfm
 	metadb_server_force_slave enable
 .fi
 .TP
-\fBmetadb_server_slave_listen \fI有効性\fB\fR
-enable のとき、スレーブgfmdとして設定されている場合でも、クライアントからの要求を受け付けます。
-デフォルトはdisableです。
-
-注意: この機能は開発用に用意されていますので、通常の用途では設定しないでください。
-
-この文はgfmd.confのみで有効です。
-
-例:
-
-.nf
-	metadb_server_slave_listen enable
-.fi
-.TP
 \fBmetadb_server_slave_max_size \fIノード数\fB\fR
 スレーブgfmdの最大ノード数を指定します。デフォルトは16です。
 
@@ -1049,7 +1035,6 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 		\~\~<synchronous_replication_timeout_statement> |
 		\~\~<synchronous_journaling_statement> |
 		\~\~<metadb_server_force_slave_statement> |
-		\~\~<metadb_server_slave_listen_statement> |
 		\~\~<metadb_server_slave_max_size_statement> |
 		\~\~<metadb_journal_dir_statement> |
 		\~\~<metadb_journal_max_size_statement> |
@@ -1137,7 +1122,6 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 	<synchronous_replication_timeout_statement> ::= "synchronous_replication_timeout" <number>
 	<synchronous_journaling_statement> ::= "synchronous_journaling" <validity>
 	<metadb_server_force_slave_statement> ::= "metadb_server_force_slave" <validity>
-	<metadb_server_slave_listen_statement> ::= "metadb_server_slave_listen" <validity>
 	<metadb_server_slave_max_size_statement> ::= "metadb_server_slave_max_size" <number>
 	<metadb_journal_dir_statement> ::= "metadb_journal_dir" <pathname>
 	<metadb_journal_max_size_statement> ::= "metadb_journal_max_size" <number>

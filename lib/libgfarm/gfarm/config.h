@@ -1,4 +1,4 @@
-#define GFARM_CONFIG_MISC_DEFAULT	-1
+extern char *gfarm_config_file;
 
 /* gfsd dependent */
 /* GFS dependent */
@@ -15,6 +15,14 @@ enum gfarm_backend_db_type {
 extern enum gfarm_backend_db_type gfarm_backend_db_type;
 
 /* GFM dependent */
+extern int gfarm_gfmd_connection_cache;
+/* XXX FIXME these should disappear to support multiple metadata server */
+extern char *gfarm_metadb_server_name;
+extern int gfarm_metadb_server_port;
+
+extern char *gfarm_metadb_admin_user;
+extern char *gfarm_metadb_admin_user_gsi_dn;
+
 extern int gfarm_metadb_stack_size;
 extern int gfarm_metadb_thread_pool_size;
 extern int gfarm_metadb_job_queue_length;
@@ -54,11 +62,22 @@ extern char *gfarm_postgresql_conninfo;
 extern char *gfarm_localfs_datadir;
 
 /* miscellaneous configurations */
-#ifdef not_def_REPLY_QUEUE
-extern int gfm_proto_reply_to_gfsd_window;
-#endif
-extern int gfs_proto_fhremove_request_window;
-extern int gfs_proto_replication_request_window;
+extern int gfarm_log_level; /* syslog priority level to log */
+extern int gfarm_no_file_system_node_timeout;
+extern int gfarm_gfmd_reconnection_timeout;
+extern int gfarm_attr_cache_limit;
+extern int gfarm_attr_cache_timeout;
+extern int gfarm_schedule_cache_timeout;
+extern float gfarm_schedule_idle_load;
+extern float gfarm_schedule_busy_load;
+extern float gfarm_schedule_virtual_load;
+extern int gfarm_simultaneous_replication_receivers;
+extern int gfarm_gfsd_connection_cache;
+extern int gfarm_record_atime;
+extern int gfarm_client_file_bufsize;
+extern int gfarm_client_parallel_copy;
+
+extern int gf_on_demand_replication;
 
 int gfarm_schedule_write_local_priority(void);
 char *gfarm_schedule_write_target_domain(void);
@@ -78,14 +97,10 @@ int gfarm_get_journal_sync_slave_timeout(void);
 int gfarm_get_metadb_server_slave_max_size(void);
 int gfarm_get_metadb_server_force_slave(void);
 void gfarm_set_metadb_server_force_slave(int);
-int gfarm_get_metadb_server_slave_listen(void);
 
 /* miscellaneous */
 extern int gfarm_network_receive_timeout;
 extern int gfarm_file_trace;
-
-void gfarm_config_set_filename(char *);
-char *gfarm_config_get_filename(void);
 
 void gfarm_config_clear(void);
 #ifdef GFARM_USE_STDIO
@@ -100,7 +115,6 @@ void gfs_display_timers(void);
 int gfarm_xattr_caching_patterns_number(void);
 char **gfarm_xattr_caching_patterns(void);
 
-gfarm_error_t gfarm_set_local_user_for_this_uid(uid_t);
 
 /* for client */
 struct gfs_connection;
@@ -110,12 +124,3 @@ gfarm_error_t gfarm_client_process_set(struct gfs_connection *,
 	struct gfm_connection *);
 gfarm_error_t gfarm_client_process_reset(struct gfs_connection *,
 	struct gfm_connection *);
-
-/* for server */
-gfarm_error_t gfarm_server_initialize(char *, int *, char ***);
-gfarm_error_t gfarm_server_terminate(void);
-gfarm_error_t gfarm_server_config_read(void);
-
-/* for linux helper */
-extern void(*gfarm_ug_maps_notify)(const char *, int , int , const char *);
-

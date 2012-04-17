@@ -19,10 +19,6 @@
 #include "iobuffer.h"
 #include "gfp_xdr.h"
 
-#ifndef INT64T_IS_FLOAT
-#define INT64T_IS_FLOAT 0
-#endif /* INT64T_IS_FLOAT */
-
 #if INT64T_IS_FLOAT
 #include <math.h>
 
@@ -299,18 +295,17 @@ gfp_xdr_vsend_size_add(size_t *sizep, const char **formatp, va_list *app)
 	gfarm_uint8_t c;
 	gfarm_int16_t h;
 	gfarm_int32_t i, n;
+	gfarm_int64_t o;
 	gfarm_uint32_t lv[2];
 #if INT64T_IS_FLOAT
 	int minus;
 #endif
-#ifndef __KERNEL__
+	double d;
 #ifndef WORDS_BIGENDIAN
 	struct { char c[8]; } nd;
 #else
-	double d;
 #	define nd d
 #endif
-#endif /* __KERNEL__ */
 	const char *s;
 
 	for (; *format; format++) {
@@ -332,7 +327,7 @@ gfp_xdr_vsend_size_add(size_t *sizep, const char **formatp, va_list *app)
 			 * note that because actual type of gfarm_int64_t
 			 * may be diffenent (int64_t or double), we use lv here
 			 */
-			(void)va_arg(*app, gfarm_int64_t);
+			o = va_arg(*app, gfarm_int64_t);
 			size += sizeof(lv);
 			continue;
 		case 's':
@@ -342,7 +337,7 @@ gfp_xdr_vsend_size_add(size_t *sizep, const char **formatp, va_list *app)
 			size += n;
 			continue;
 		case 'S':
-			(void)va_arg(*app, const char *);
+			s = va_arg(*app, const char *);
 			n = va_arg(*app, size_t);
 			size += sizeof(i);
 			size += n;
@@ -354,32 +349,21 @@ gfp_xdr_vsend_size_add(size_t *sizep, const char **formatp, va_list *app)
 			 * pass this as is via network.
 			 */
 			n = va_arg(*app, size_t);
-			(void)va_arg(*app, const char *);
+			s = va_arg(*app, const char *);
 			size += sizeof(i);
 			size += n;
 			continue;
 		case 'r':
 			n = va_arg(*app, size_t);
-			(void)va_arg(*app, const char *);
+			s = va_arg(*app, const char *);
 			size += n;
 			continue;
 		case 'f':
-#ifndef __KERNEL__
-			(void)va_arg(*app, double);
+			d = va_arg(*app, double);
 			size += sizeof(nd);
 			continue;
-#else /* __KERNEL__ */
-			gflog_fatal(GFARM_MSG_UNFIXED, "floating format is not "
-				"supported. '%s'", *formatp);
-			return (GFARM_ERR_PROTOCOL);  /* floating */
-#endif /* __KERNEL__ */
-		case '/':
-			break;
 
 		default:
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_size_add: unimplemented format '%c'",
-			    *format);
 			break;
 		}
 
@@ -403,14 +387,12 @@ gfp_xdr_vsend(struct gfp_xdr *conn,
 #if INT64T_IS_FLOAT
 	int minus;
 #endif
-#ifndef __KERNEL__
 	double d;
 #ifndef WORDS_BIGENDIAN
 	struct { char c[8]; } nd;
 #else
 #	define nd d
 #endif
-#endif /* __KERNEL__ */
 	const char *s;
 
 	for (; *format; format++) {
@@ -499,8 +481,6 @@ gfp_xdr_vsend(struct gfp_xdr *conn,
 			    s, n);
 			continue;
 		case 'f':
-#ifndef __KERNEL__
-
 			d = va_arg(*app, double);
 #ifndef WORDS_BIGENDIAN
 			swab(&d, &nd, sizeof(nd));
@@ -508,257 +488,8 @@ gfp_xdr_vsend(struct gfp_xdr *conn,
 			gfarm_iobuffer_put_write(conn->sendbuffer,
 			    &nd, sizeof(nd));
 			continue;
-#else /* __KERNEL__ */
-			gflog_fatal(GFARM_MSG_UNFIXED, "floating format is not "
-				"supported. '%s'", *formatp);
-			return (GFARM_ERR_PROTOCOL);  /* floating */
-#endif /* __KERNEL__ */
-		case '/':
-			break;
 
 		default:
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend: unimplemented format '%c'",
-			    *format);
-			break;
-		}
-
-		break;
-	}
-	*formatp = format;
-	return (gfarm_iobuffer_get_error(conn->sendbuffer));
-}
-
-gfarm_error_t
-gfp_xdr_vsend_ref_size_add(size_t *sizep, const char **formatp, va_list *app)
-{
-	const char *format = *formatp;
-	size_t size = *sizep;
-	gfarm_int32_t i, n;
-	gfarm_uint32_t lv[2];
-#if INT64T_IS_FLOAT
-	int minus;
-#endif
-
-#ifndef WORDS_BIGENDIAN
-	struct { char c[8]; } nd;
-#else
-	double d;
-#	define nd d
-#endif
-	const char **sp, *s;
-	size_t *szp;
-
-	for (; *format; format++) {
-		switch (*format) {
-		case 'c':
-			(void)va_arg(*app, gfarm_int8_t *);
-			size += sizeof(gfarm_int8_t);
-			continue;
-		case 'h':
-			(void)va_arg(*app, gfarm_int16_t *);
-			size += sizeof(gfarm_int16_t);
-			continue;
-		case 'i':
-			(void)va_arg(*app, gfarm_int32_t *);
-			size += sizeof(gfarm_int32_t);
-			continue;
-		case 'l':
-			/*
-			 * note that because actual type of gfarm_int64_t
-			 * may be diffenent (int64_t or double), we use lv here
-			 */
-			(void)va_arg(*app, gfarm_int64_t *);
-			size += sizeof(lv);
-			continue;
-		case 's':
-			sp = va_arg(*app, const char **);
-			s = *sp;
-			n = strlen(s);
-			size += sizeof(i);
-			size += n;
-			continue;
-		case 'S':
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_ref_size_add: unimplemented "
-			    "format 'S'");
-		case 'b':
-			/*
-			 * note that because actual type of size_t may be
-			 * diffenent ([u]int32_t or [u]int64_t), we must not
-			 * pass this as is via network.
-			 */
-			(void)va_arg(*app, size_t); /* this is ignored */
-			szp = va_arg(*app, size_t *);
-			n = *szp;
-			i = htonl(n);
-			size += sizeof(i);
-			size += n;
-			continue;
-		case 'r':
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_ref_size_add: unimplemented "
-			    "format 'r'");
-			continue;
-		case 'f':
-			(void)va_arg(*app, double *);
-			size += sizeof(nd);
-			continue;
-		case '/':
-			break;
-
-		default:
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_ref_size_add: unimplemented "
-			    "format '%c'",
-			    *format);
-			break;
-		}
-
-		break;
-	}
-	*sizep = size;
-	*formatp = format;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-
-/*
- * gfp_xdr_vsend_ref() does almost same thing with gfp_xdr_vsend(),
- * only difference is that its parameter format is same with gfp_xdr_vrecv().
- * i.e. gfp_xdr_vsend_ref() takes references to parameter variables,
- * instead of values like what gfp_xdr_vsend() deos.
- */
-gfarm_error_t
-gfp_xdr_vsend_ref(struct gfp_xdr *conn,
-	const char **formatp, va_list *app)
-{
-	const char *format = *formatp;
-	gfarm_int8_t *cp;
-	gfarm_int16_t *hp, h;
-	gfarm_int32_t *ip, i, n;
-	gfarm_int64_t *op, o;
-	gfarm_uint32_t lv[2];
-#if INT64T_IS_FLOAT
-	int minus;
-#endif
-	double *dp, d;
-#ifndef WORDS_BIGENDIAN
-	struct { char c[8]; } nd;
-#else
-#	define nd d
-#endif
-	const char **sp, *s;
-	size_t *szp;
-
-	for (; *format; format++) {
-		switch (*format) {
-		case 'c':
-			cp = va_arg(*app, gfarm_int8_t *);
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    cp, sizeof(*cp));
-			continue;
-		case 'h':
-			hp = va_arg(*app, gfarm_int16_t *);
-			h = htons(*hp);
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    &h, sizeof(h));
-			continue;
-		case 'i':
-			ip = va_arg(*app, gfarm_int32_t *);
-			i = htonl(*ip);
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    &i, sizeof(i));
-			continue;
-		case 'l':
-			/*
-			 * note that because actual type of gfarm_int64_t
-			 * may be diffenent (int64_t or double), we must
-			 * not pass this as is via network.
-			 */
-			op = va_arg(*app, gfarm_int64_t *);
-			o = *op;
-#if INT64T_IS_FLOAT
-			minus = o < 0;
-			if (minus)
-				o = -o;
-			lv[0] = o / POWER2_32;
-			lv[1] = o - lv[0] * POWER2_32;
-			if (minus) {
-				lv[0] = ~lv[0];
-				lv[1] = ~lv[1];
-				if (++lv[1] == 0)
-					++lv[0];
-			}
-#else
-			lv[0] = o >> 32;
-			lv[1] = o;
-#endif
-			lv[0] = htonl(lv[0]);
-			lv[1] = htonl(lv[1]);
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    lv, sizeof(lv));
-			continue;
-		case 's':
-			sp = va_arg(*app, const char **);
-			s = *sp;
-			n = strlen(s);
-			i = htonl(n);
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    &i, sizeof(i));
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    s, n);
-			continue;
-		case 'S':
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_ref: unimplemented format 'S'");
-			continue;
-		case 'b':
-			/*
-			 * note that because actual type of size_t may be
-			 * diffenent ([u]int32_t or [u]int64_t), we must not
-			 * pass this as is via network.
-			 */
-			(void)va_arg(*app, size_t); /* this is ignored */
-			szp = va_arg(*app, size_t *);
-			n = *szp;
-			i = htonl(n);
-			s = va_arg(*app, const char *);
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    &i, sizeof(i));
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    s, n);
-			continue;
-		case 'B':
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_ref: unimplemented format 'B'");
-			continue;
-		case 'r':
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_ref: unimplemented format 'r'");
-			continue;
-		case 'f':
-#ifndef __KERNEL__
-			dp = va_arg(*app, double *);
-			d = *dp;
-#ifndef WORDS_BIGENDIAN
-			swab(&d, &nd, sizeof(nd));
-#endif
-			gfarm_iobuffer_put_write(conn->sendbuffer,
-			    &nd, sizeof(nd));
-			continue;
-#else
-			gflog_fatal(GFARM_MSG_UNFIXED, "floating format is not "
-				"supported. '%s'", *formatp);
-			return (GFARM_ERR_PROTOCOL);  /* floating */
-#endif /* __KERNEL__ */
-		case '/':
-			break;
-
-		default:
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vsend_ref: unimplemented format '%c'",
-			    *format);
 			break;
 		}
 
@@ -795,7 +526,7 @@ recv_sized(struct gfp_xdr *conn, int just, int do_timeout, void *p, size_t sz,
 }
 
 gfarm_error_t
-gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
+gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout, 
 	size_t *sizep, int *eofp, const char **formatp, va_list *app)
 {
 	gfarm_error_t e = GFARM_ERR_NO_ERROR, e_save = GFARM_ERR_NO_ERROR;
@@ -808,12 +539,10 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 #if INT64T_IS_FLOAT
 	int minus;
 #endif
-#ifndef __KERNEL__
 	double *dp;
 #ifndef WORDS_BIGENDIAN
 	struct { char c[8]; } nd;
 #endif
-#endif /* __KERNEL__ */
 	char **sp, *s;
 	size_t *szp, sz;
 	size_t size;
@@ -865,7 +594,7 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 			 * may be diffenent (int64_t or double), we must
 			 * not pass this as is via network.
 			 */
-			if ((e = recv_sized(conn, just, do_timeout, lv,
+			if ((e = recv_sized(conn, just, do_timeout, lv, 
 			    sizeof(lv), &size)) != GFARM_ERR_NO_ERROR) {
 				if (e == GFARM_ERR_UNEXPECTED_EOF)
 					return (GFARM_ERR_NO_ERROR); /* EOF */
@@ -885,20 +614,12 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 			if (minus)
 				*op = -*op;
 #else
-				*op = ((gfarm_int64_t)lv[0] << 32) | lv[1];
+			*op = ((gfarm_int64_t)lv[0] << 32) | lv[1];
 #endif
-			continue;
-		case 'r':
-			sz = va_arg(*app, size_t);
-			szp = va_arg(*app, size_t *);
-			s = va_arg(*app, char *);
-			if ((e = recv_sized(conn, just, do_timeout, s,
-			    sz, szp)) != GFARM_ERR_NO_ERROR)
-				break;
 			continue;
 		case 's':
 			sp = va_arg(*app, char **);
-			if ((e = recv_sized(conn, just, do_timeout, &i,
+			if ((e = recv_sized(conn, just, do_timeout, &i, 
 			    sizeof(i), &size)) != GFARM_ERR_NO_ERROR) {
 				if (e == GFARM_ERR_UNEXPECTED_EOF)
 					return (GFARM_ERR_NO_ERROR); /* EOF */
@@ -918,7 +639,7 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 				e_save = GFARM_ERR_NO_MEMORY;
 				continue;
 			}
-			if ((e = recv_sized(conn, just, do_timeout, *sp, i,
+			if ((e = recv_sized(conn, just, do_timeout, *sp, i, 
 			    &size)) != GFARM_ERR_NO_ERROR)
 				break;
 			(*sp)[i] = '\0';
@@ -932,7 +653,7 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 			 * diffenent ([u]int32_t or [u]int64_t), we must not
 			 * pass this as is via network.
 			 */
-			if ((e = recv_sized(conn, just, do_timeout, &i,
+			if ((e = recv_sized(conn, just, do_timeout, &i, 
 			    sizeof(i), &size)) != GFARM_ERR_NO_ERROR) {
 				if (e == GFARM_ERR_UNEXPECTED_EOF)
 					return (GFARM_ERR_NO_ERROR); /* EOF */
@@ -966,7 +687,7 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 			 * diffenent ([u]int32_t or [u]int64_t), we must not
 			 * pass this as is via network.
 			 */
-			if ((e = recv_sized(conn, just, do_timeout, &i,
+			if ((e = recv_sized(conn, just, do_timeout, &i, 
 			    sizeof(i), &size)) != GFARM_ERR_NO_ERROR) {
 				if (e == GFARM_ERR_UNEXPECTED_EOF)
 					return (GFARM_ERR_NO_ERROR); /* EOF */
@@ -988,15 +709,14 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 				e_save = GFARM_ERR_NO_MEMORY;
 				continue;
 			}
-			if ((e = recv_sized(conn, just, do_timeout, *sp, i,
+			if ((e = recv_sized(conn, just, do_timeout, *sp, i, 
 			    &size)) != GFARM_ERR_NO_ERROR)
 				break;
 			continue;
 		case 'f':
-#ifndef __KERNEL__
 			dp = va_arg(*app, double *);
 			assert(sizeof(*dp) == 8);
-			if ((e = recv_sized(conn, just, do_timeout, dp,
+			if ((e = recv_sized(conn, just, do_timeout, dp, 
 			    sizeof(*dp), &size)) != GFARM_ERR_NO_ERROR) {
 				if (e == GFARM_ERR_UNEXPECTED_EOF)
 					return (GFARM_ERR_NO_ERROR); /* EOF */
@@ -1007,18 +727,8 @@ gfp_xdr_vrecv_sized_x(struct gfp_xdr *conn, int just, int do_timeout,
 			*dp = *(double *)&nd;
 #endif
 			continue;
-#else /* __KERNEL__ */
-			gflog_fatal(GFARM_MSG_UNFIXED, "floating format is not "
-				"supported. '%s'", *formatp);
-			return (GFARM_ERR_PROTOCOL);  /* floating */
-#endif /* __KERNEL__ */
-		case '/':
-			break;
 
 		default:
-			gflog_fatal(GFARM_MSG_UNFIXED,
-			    "gfp_xdr_vrecv_sized_x: unimplemented format '%c'",
-			    *format);
 			break;
 		}
 
@@ -1045,8 +755,7 @@ gfarm_error_t
 gfp_xdr_vrecv_sized(struct gfp_xdr *conn, int just, size_t *sizep,
 	int *eofp, const char **formatp, va_list *app)
 {
-	return (gfp_xdr_vrecv_sized_x(conn, just, 1, sizep, eofp, formatp,
-		app));
+	return gfp_xdr_vrecv_sized_x(conn, just, 1, sizep, eofp, formatp, app);
 }
 
 gfarm_error_t
@@ -1226,14 +935,6 @@ gfarm_error_t
 gfp_xdr_vrpc_request(struct gfp_xdr *conn, gfarm_int32_t command,
 	const char **formatp, va_list *app)
 {
-	return (gfp_xdr_vrpc_request_with_ref(conn, command,
-	    formatp, app, 0));
-}
-
-gfarm_error_t
-gfp_xdr_vrpc_request_with_ref(struct gfp_xdr *conn, gfarm_int32_t command,
-	const char **formatp, va_list *app, int isref)
-{
 	gfarm_error_t e;
 
 	/*
@@ -1247,8 +948,7 @@ gfp_xdr_vrpc_request_with_ref(struct gfp_xdr *conn, gfarm_int32_t command,
 			gfarm_error_string(e));
 		return (e);
 	}
-	return ((isref ? gfp_xdr_vsend_ref : gfp_xdr_vsend)
-	    (conn, formatp, app));
+	return (gfp_xdr_vsend(conn, formatp, app));
 }
 
 /*
@@ -1263,10 +963,8 @@ gfp_xdr_vrpc_request_with_ref(struct gfp_xdr *conn, gfarm_int32_t command,
  *	*sizep == 0
  */
 gfarm_error_t
-gfp_xdr_vrpc_wrapped_result_sized(struct gfp_xdr *conn, int just,
-	size_t *sizep, gfarm_int32_t *errorp,
-	const char *wrapping_format, va_list *wrapping_app,
-	const char **formatp, va_list *app)
+gfp_xdr_vrpc_result_sized(struct gfp_xdr *conn, int just, size_t *sizep,
+	gfarm_int32_t *errorp, const char **formatp, va_list *app)
 {
 	gfarm_error_t e;
 	int eof;
@@ -1274,21 +972,7 @@ gfp_xdr_vrpc_wrapped_result_sized(struct gfp_xdr *conn, int just,
 	/*
 	 * receive response
 	 */
-	if (wrapping_format != NULL &&
-	    ((e = gfp_xdr_vrecv_sized(conn, just, sizep, &eof,
-		&wrapping_format, wrapping_app)) != GFARM_ERR_NO_ERROR)) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		return (e);
-	}
-
-	if ((e = gfp_xdr_recv_sized(conn, just, sizep, &eof, "i", errorp))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "%s", gfarm_error_string(e));
-		return (e);
-	}
-
+	e = gfp_xdr_recv_sized(conn, just, sizep, &eof, "i", errorp);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001010,
 			"receiving response (%d) failed: %s",
@@ -1318,19 +1002,11 @@ gfp_xdr_vrpc_wrapped_result_sized(struct gfp_xdr *conn, int just,
 		return (GFARM_ERR_UNEXPECTED_EOF);
 	}
 	if (**formatp != '\0') {
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1001014, "gfp_xdr_vrpc_result_sized: "
 		    "invalid format character: %c(%x)", **formatp, **formatp);
 		return (GFARM_ERRMSG_GFP_XDR_VRPC_INVALID_FORMAT_CHARACTER);
 	}
 	return (GFARM_ERR_NO_ERROR);
-}
-
-gfarm_error_t
-gfp_xdr_vrpc_result_sized(struct gfp_xdr *conn, int just, size_t *sizep,
-	gfarm_int32_t *errorp, const char **formatp, va_list *app)
-{
-	return (gfp_xdr_vrpc_wrapped_result_sized(conn, just, sizep, errorp,
-		NULL, NULL, formatp, app));
 }
 
 /*
@@ -1340,8 +1016,8 @@ gfarm_error_t
 gfp_xdr_vrpc_result(struct gfp_xdr *conn,
 	int just, gfarm_int32_t *errorp, const char **formatp, va_list *app)
 {
-	return (gfp_xdr_vrpc_wrapped_result_sized(conn, just, NULL,
-	    errorp, NULL, NULL, formatp, app));
+	return (gfp_xdr_vrpc_result_sized(conn, just, NULL,
+	    errorp, formatp, app));
 }
 
 /*
@@ -1370,6 +1046,7 @@ gfp_xdr_vrpc(struct gfp_xdr *conn, int just, gfarm_int32_t command,
 #if 1
 		gflog_fatal(GFARM_MSG_1000018, "%s",
 		    gfarm_error_string(GFARM_ERRMSG_GFP_XDR_VRPC_MISSING_RESULT_IN_FORMAT_STRING));
+		abort();
 #endif
 		return (GFARM_ERRMSG_GFP_XDR_VRPC_MISSING_RESULT_IN_FORMAT_STRING);
 	}

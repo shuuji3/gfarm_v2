@@ -16,7 +16,6 @@
 #include "lookup.h"
 #include "schedule.h"
 #include "gfs_misc.h"
-#include "gfs_failover.h"
 
 /*#define V2_4 1*/
 
@@ -69,11 +68,11 @@ gfs_replicate_file_from_to_request(
 	closure.srchost = srchost;
 	closure.dsthost = dsthost;
 	closure.flags = (flags & ~GFS_REPLICATE_FILE_MIGRATE);
-	e = gfm_inode_op_modifiable(file, GFARM_FILE_LOOKUP,
+	e = gfm_inode_op(file, GFARM_FILE_LOOKUP,
 	    gfm_replicate_file_from_to_request,
 	    gfm_replicate_file_from_to_result,
 	    gfm_inode_success_op_connection_free,
-	    NULL, NULL,
+	    NULL,
 	    &closure);
 
 	/*
@@ -134,40 +133,32 @@ gfs_replicate_from_to_internal(GFS_File gf, char *srchost, int srcport,
 	gfarm_error_t e;
 	struct gfm_connection *gfm_server = gfs_pio_metadb(gf);
 	struct gfs_connection *gfs_server;
-	int nretry = 1;
+	int retry = 0;
 
-retry:
-	gfm_server = gfs_pio_metadb(gf);
-	if ((e = gfs_client_connection_and_process_acquire(
-	    &gfm_server, dsthost, dstport, &gfs_server, NULL))
-		!= GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001388,
-			"acquirement of client connection failed: %s",
-			gfarm_error_string(e));
-		return (e);
-	}
+	for (;;) {
+		if ((e = gfs_client_connection_acquire_by_host(gfm_server,
+		    dsthost, dstport, &gfs_server, NULL))
+			!= GFARM_ERR_NO_ERROR) {
+			gflog_debug(GFARM_MSG_1001388,
+				"acquirement of client connection failed: %s",
+				gfarm_error_string(e));
+			return (e);
+		}
 
-	e = gfs_client_replica_add_from(gfs_server, srchost, srcport,
-	    gfs_pio_fileno(gf));
-	gfs_client_connection_free(gfs_server);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfs_client_replica_add_from: %s",
-		    gfarm_error_string(e));
-		if (nretry-- > 0) {
-			if (gfs_client_is_connection_error(e))
-				goto retry;
-			if (gfs_pio_should_failover(gf, e)) {
-				if ((e = gfs_pio_failover(gf))
-				    != GFARM_ERR_NO_ERROR) {
-					gflog_debug(GFARM_MSG_UNFIXED,
-					    "gfs_pio_failover: %s",
-					    gfarm_error_string(e));
-				} else
-					goto retry;
+		if (gfs_client_pid(gfs_server) == 0)
+			e = gfarm_client_process_set(gfs_server, gfm_server);
+		if (e == GFARM_ERR_NO_ERROR) {
+			e = gfs_client_replica_add_from(gfs_server,
+			    srchost, srcport, gfs_pio_fileno(gf));
+			if (gfs_client_is_connection_error(e) && ++retry<=1) {
+				gfs_client_connection_free(gfs_server);
+				continue;
 			}
 		}
+
+		break;
 	}
+	gfs_client_connection_free(gfs_server);
 	return (e);
 }
 

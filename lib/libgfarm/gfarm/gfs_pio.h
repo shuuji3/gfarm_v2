@@ -3,7 +3,7 @@
  *
  * This defines internal structure of gfs_pio module.
  *
- * Only gfs_pio_section.c, gfs_pio_{local,remote}.c, gfs_pio.c and context.c
+ * Only gfs_pio_{global,section}.c, gfs_pio_{local,remote}.c and gfs_pio.c
  * are allowed to include this header file.
  * Every other modules shouldn't include this.
  */
@@ -110,10 +110,8 @@ struct gfs_file_section_context {
 	int fd; /* this isn't used for remote case, but only local case */
 	pid_t pid;
 
-#ifdef EVP_MD_CTX_FLAG_ONESHOT /* for kernel mode */
 	/* for checksum, maintained only if GFS_FILE_MODE_CALC_DIGEST */
 	EVP_MD_CTX md_ctx;
-#endif
 };
 
 /*

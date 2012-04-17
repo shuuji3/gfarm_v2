@@ -19,8 +19,6 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 #include "hash.h"
 #include "thrsubr.h"
@@ -37,17 +35,12 @@
 #include "rpcsubr.h"
 #include "db_access.h"
 #include "host.h"
-#include "mdhost.h"
 #include "user.h"
 #include "peer.h"
 #include "inode.h"
 #include "abstract_host.h"
-#include "abstract_host_impl.h"
-#include "netsendq.h"
 #include "dead_file_copy.h"
-#include "file_replication.h"
 #include "back_channel.h"
-#include "relay.h"
 
 #define HOST_HASHTAB_SIZE	3079	/* prime number */
 
@@ -66,19 +59,12 @@ struct host {
 	 */
 	struct gfarm_host_info hi;
 
-	/*
-	 * This should be included in the struct gfarm_host_info as a
-	 * member, but with several reasons (mainly for ABI backward
-	 * compatibilities), it is here.
-	 */
-	char *fsngroupname;
-
 	pthread_mutex_t back_channel_mutex;
 
 #ifdef COMPAT_GFARM_2_3
 	/* used by synchronous protocol (i.e. until gfarm-2.3.0) only */
-	result_callback_t back_channel_result;
-	disconnect_callback_t back_channel_disconnect;
+	gfarm_int32_t (*back_channel_result)(void *, void *, size_t);
+	void (*back_channel_disconnect)(void *, void *);
 	struct peer *back_channel_callback_peer;
 	void *back_channel_callback_closure;
 #endif
@@ -91,8 +77,7 @@ struct host {
 	int status_callout_retry;
 };
 
-/* referenced from fsngroup.c, it needs host_hashtab. */
-struct gfarm_hash_table *host_hashtab = NULL;
+static struct gfarm_hash_table *host_hashtab = NULL;
 static struct gfarm_hash_table *hostalias_hashtab = NULL;
 
 static struct host *host_new(struct gfarm_host_info *, struct callout *);
@@ -287,7 +272,7 @@ host_enter(struct gfarm_host_info *hi, struct host **hpp)
 
 /* XXX FIXME missing hostaliases */
 static gfarm_error_t
-host_remove_internal(const char *hostname, int update_netsendq)
+host_remove_internal(const char *hostname, int update_deadfilecopy)
 {
 	struct host *h = host_lookup(hostname);
 
@@ -302,11 +287,8 @@ host_remove_internal(const char *hostname, int update_netsendq)
 	 */
 	host_invalidate(h);
 
-	if (update_netsendq) {
+	if (update_deadfilecopy)
 		dead_file_copy_host_removed(h);
-		netsendq_host_remove(
-		    abstract_host_get_sendq(host_to_abstract_host(h)));
-	}
 
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -338,7 +320,8 @@ host_downcast_to_host(struct abstract_host *h)
 static struct mdhost *
 host_downcast_to_mdhost(struct abstract_host *h)
 {
-	gflog_fatal(GFARM_MSG_1002761, "downcasting host %p to mdhost", h);
+	gflog_error(GFARM_MSG_1002761, "downcasting host %p to mdhost", h);
+	abort();
 	return (NULL);
 }
 
@@ -395,18 +378,6 @@ host_flags(struct host *h)
 	return (h->hi.flags);
 }
 
-char *
-host_fsngroup(struct host *h)
-{
-	return ((h->fsngroupname != NULL) ? h->fsngroupname : "");
-}
-
-struct netsendq *
-host_sendq(struct host *h)
-{
-	return (h->ah.sendq);
-}
-
 int
 host_supports_async_protocols(struct host *h)
 {
@@ -429,8 +400,8 @@ back_channel_mutex_unlock(struct host *h, const char *diag)
 #ifdef COMPAT_GFARM_2_3
 void
 host_set_callback(struct abstract_host *ah, struct peer *peer,
-	result_callback_t result_callback,
-	disconnect_callback_t disconnect_callback,
+	gfarm_int32_t (*result_callback)(void *, void *, size_t),
+	void (*disconnect_callback)(void *, void *),
 	void *closure)
 {
 	struct host *h = abstract_host_to_host(ah);
@@ -447,14 +418,13 @@ host_set_callback(struct abstract_host *ah, struct peer *peer,
 
 int
 host_get_result_callback(struct host *h, struct peer *peer,
-	result_callback_t *callbackp, void **closurep)
+	gfarm_int32_t (**callbackp)(void *, void *, size_t), void **closurep)
 {
 	int ok;
 	static const char diag[] = "host_get_result_callback";
 
 	back_channel_mutex_lock(h, diag);
 
-	/* peer comparison works only if at least one is a local peer */
 	if (h->back_channel_result == NULL ||
 	    h->back_channel_callback_peer != peer) {
 		ok = 0;
@@ -474,7 +444,7 @@ host_get_result_callback(struct host *h, struct peer *peer,
 
 int
 host_get_disconnect_callback(struct host *h,
-	disconnect_callback_t *callbackp,
+	void (**callbackp)(void *, void *),
 	struct peer **peerp, void **closurep)
 {
 	int ok;
@@ -542,6 +512,13 @@ host_is_disk_available(struct host *h, gfarm_off_t size)
 	return (avail >= minfree);
 }
 
+int
+host_check_busy(struct host *host, gfarm_int64_t now)
+{
+	return (abstract_host_check_busy(host_to_abstract_host(host), now,
+		BACK_CHANNEL_DIAG));
+}
+
 struct callout *
 host_status_callout(struct host *h)
 {
@@ -549,9 +526,39 @@ host_status_callout(struct host *h)
 }
 
 struct peer *
-host_get_peer(struct host *h)
+host_peer(struct host *h)
 {
 	return (abstract_host_get_peer(&h->ah, BACK_CHANNEL_DIAG));
+}
+
+static struct peer *
+host_peer_unlocked(struct host *h)
+{
+	return (abstract_host_get_peer_unlocked(&h->ah));
+}
+
+int
+host_status_callout_retry(struct host *host)
+{
+	long interval;
+	int ok;
+	static const char diag[] = "host_status_callout_retry";
+
+	back_channel_mutex_lock(host, diag);
+
+	++host->status_callout_retry;
+	interval = 1 << host->status_callout_retry;
+	ok = (interval <= gfarm_metadb_heartbeat_interval);
+
+	back_channel_mutex_unlock(host, diag);
+
+	if (ok) {
+		callout_schedule(host->status_callout, interval);
+		gflog_debug(GFARM_MSG_1002215,
+		    "%s(%s): retrying in %ld seconds",
+		    diag, host_name(host), interval);
+	}
+	return (ok);
 }
 
 void
@@ -668,10 +675,7 @@ host_set_peer_locked(struct abstract_host *ah, struct peer *p)
 static void
 host_set_peer_unlocked(struct abstract_host *ah, struct peer *p)
 {
-	struct host *host = abstract_host_to_host(ah);
-
-	dead_file_copy_host_becomes_up(host);
-	netsendq_host_becomes_up(abstract_host_get_sendq(ah));
+	dead_file_copy_host_becomes_up(abstract_host_to_host(ah));
 }
 
 /*
@@ -713,8 +717,7 @@ host_disabled(struct abstract_host *ah, struct peer *peer, void *closure)
 
 	host_total_disk_update(c->saved_used, c->saved_avail, 0, 0);
 	free(closure);
-
-	netsendq_host_becomes_down(abstract_host_get_sendq(ah));
+	dead_file_copy_host_becomes_down(abstract_host_to_host(ah));
 }
 
 /* giant_lock should be held before calling this */
@@ -737,31 +740,17 @@ struct abstract_host_ops host_ops = {
 	host_disabled,
 };
 
-struct netsendq_manager *back_channel_send_manager;
-
 static struct host *
 host_new(struct gfarm_host_info *hi, struct callout *callout)
 {
-	gfarm_error_t e;
 	struct host *h;
 	static const char diag[] = "host_new";
 
 	GFARM_MALLOC(h);
-	if (h == NULL) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "host %s: no memory", hi->hostname);
+	if (h == NULL)
 		return (NULL);
-	}
-	e = abstract_host_init(&h->ah, &host_ops, back_channel_send_manager,
-	    diag);
-	if (e != GFARM_ERR_NO_ERROR) {
-		free(h);
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "host %s: %s", hi->hostname, gfarm_error_string(e));
-		return (NULL);
-	}
+	abstract_host_init(&h->ah, &host_ops, "host_new");
 	h->hi = *hi;
-	h->fsngroupname = NULL;
 	gfarm_mutex_init(&h->back_channel_mutex, diag, BACK_CHANNEL_DIAG);
 #ifdef COMPAT_GFARM_2_3
 	h->back_channel_result = NULL;
@@ -789,6 +778,17 @@ host_free(struct host *h)
 	free(h);
 }
 
+/* only file_replicating_new() is allowed to call this routine */
+gfarm_error_t
+host_replicating_new(struct host *dst, struct file_replicating **frp)
+{
+	struct peer *peer = host_peer_unlocked(dst);
+
+	if (peer == NULL)
+		return (GFARM_ERR_NO_ROUTE_TO_HOST);
+	return (peer_replicating_new(peer, dst, frp));
+}
+
 static int
 host_order(const void *a, const void *b)
 {
@@ -799,7 +799,7 @@ host_order(const void *a, const void *b)
 	else if (*h1 > *h2)
 		return (1);
 	else
-		return (0);
+		return (0);			
 }
 
 static void
@@ -1083,36 +1083,14 @@ host_info_close_for_seq_write(void)
 
 /* The memory owner of `*hi' is changed to host.c */
 void
-host_add_one(void *closure,
-	struct gfarm_internal_host_info *hi)
+host_add_one(void *closure, struct gfarm_host_info *hi)
 {
-	struct host *h = NULL;
-	gfarm_error_t e = host_enter(&(hi->hi), &h);
+	gfarm_error_t e = host_enter(hi, NULL);
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_warning(GFARM_MSG_1000266,
 		    "host_add_one: %s", gfarm_error_string(e));
-
-	if (h != NULL) {
-		if (hi->fsngroupname != NULL)
-			/*
-			 * Not strdup() but just change the ownership.
-			 */
-			h->fsngroupname = hi->fsngroupname;
-		else
-			h->fsngroupname = NULL;
-	}
 }
-
-const struct netsendq_type *
-	back_channel_queue_types[NETSENDQ_TYPE_GFS_PROTO_NUM_TYPES] = {
-	&gfs_proto_status_queue,
-#ifdef not_def_REPLY_QUEUE
-	&gfm_async_server_reply_to_gfsd_queue,
-#endif
-	&gfs_proto_fhremove_queue,
-	&gfs_proto_replication_request_queue,
-};
 
 void
 host_init(void)
@@ -1135,12 +1113,6 @@ host_init(void)
 		    "no memory for hostalias hashtab");
 	}
 
-	back_channel_send_manager = netsendq_manager_new(
-	    NETSENDQ_TYPE_GFS_PROTO_NUM_TYPES, back_channel_queue_types,
-	    /* XXX FIXME: use different config parameter */
-	    gfarm_metadb_thread_pool_size, gfarm_metadb_job_queue_length,
-	    "send queue to gfsd");
-
 	e = db_host_load(NULL, host_add_one);
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_error(GFARM_MSG_1000269,
@@ -1159,8 +1131,7 @@ host_init(void)
  *	but host::back_channel_mutex won't be blocked while sleeping.
  */
 static gfarm_error_t
-gfm_server_host_generic_get(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_host_generic_get(struct peer *peer,
 	gfarm_error_t (*reply)(struct host *, struct peer *, const char *),
 	int (*filter)(struct host *, void *), void *closure,
 	int no_match_is_ok, const char *diag)
@@ -1210,8 +1181,7 @@ gfm_server_host_generic_get(
 			    "%s: no matching host", diag);
 		}
 	}
-	/* XXXRELAY FIXME, reply size is not correct */
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "i", nmatch);
+	e2 = gfm_server_put_reply(peer, diag, e, "i", nmatch);
 	if (e2 != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002218,
 		    "gfm_server_put_reply(%s) failed: %s",
@@ -1223,7 +1193,6 @@ gfm_server_host_generic_get(
 				break;
 			h = host_iterator_access(&it);
 			if (match[i]) {
-				/* XXXRELAY FIXME */
 				e2 = (*reply)(h, peer, diag);
 				if (e2 != GFARM_ERR_NO_ERROR) {
 					gflog_debug(GFARM_MSG_1002219,
@@ -1261,8 +1230,7 @@ host_info_reply(struct host *h, struct peer *peer, const char *diag)
 }
 
 gfarm_error_t
-gfm_server_host_info_get_common(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_host_info_get_common(struct peer *peer,
 	int (*filter)(struct host *, void *), void *closure, const char *diag)
 {
 	gfarm_error_t e;
@@ -1270,8 +1238,7 @@ gfm_server_host_info_get_common(
 	/* XXX FIXME too long giant lock */
 	giant_lock();
 
-	e = gfm_server_host_generic_get(peer, xid, sizep,
-	    host_info_reply, filter, closure,
+	e = gfm_server_host_generic_get(peer, host_info_reply, filter, closure,
 	    filter == NULL, diag);
 
 	giant_unlock();
@@ -1280,26 +1247,14 @@ gfm_server_host_info_get_common(
 }
 
 gfarm_error_t
-gfm_server_host_info_get_all(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_host_info_get_all(struct peer *peer, int from_client, int skip)
 {
-	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_HOST_INFO_GET_ALL";
 
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
-	e = wait_db_update_info(peer, DBUPDATE_HOST, diag);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "failed to wait for the backend DB to be updated: %s",
-		    gfarm_error_string(e));
-		return (e);
-	}
-
-	return (gfm_server_host_info_get_common(peer, xid, sizep,
-	    NULL, NULL, diag));
+	return (gfm_server_host_info_get_common(peer, NULL, NULL, diag));
 }
 
 static int
@@ -1311,18 +1266,17 @@ arch_filter(struct host *h, void *closure)
 }
 
 gfarm_error_t
-gfm_server_host_info_get_by_architecture(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_host_info_get_by_architecture(struct peer *peer,
 	int from_client, int skip)
 {
 	gfarm_error_t e;
 	char *architecture;
 	static const char diag[] = "GFM_PROTO_HOST_INFO_GET_BY_ARCHITECTURE";
 
-	e = gfm_server_get_request(peer, sizep, diag, "s", &architecture);
+	e = gfm_server_get_request(peer, diag, "s", &architecture);
 	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfm_server_get_request() failed: %s",
+		gflog_debug(GFARM_MSG_1001555,
+		    "host_info_get_by_architecture request failure: %s",
 		    gfarm_error_string(e));
 		return (e);
 	}
@@ -1331,179 +1285,125 @@ gfm_server_host_info_get_by_architecture(
 		return (GFARM_ERR_NO_ERROR);
 	}
 
-	e = wait_db_update_info(peer, DBUPDATE_HOST, diag);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "failed to wait for the backend DB to be updated: %s",
-		    gfarm_error_string(e));
-		return (e);
-	}
+	e = gfm_server_host_info_get_common(peer, arch_filter, architecture,
+	    diag);
 
-	e = gfm_server_host_info_get_common(peer, xid, sizep,
-	    arch_filter, architecture, diag);
+	free(architecture);
 	return (e);
 }
 
 gfarm_error_t
-gfm_server_host_info_get_by_names_common(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_host_info_get_by_names_common(struct peer *peer,
 	int from_client, int skip,
 	struct host *(*lookup)(const char *), const char *diag)
 {
 	struct gfp_xdr *client = peer_get_conn(peer);
-	gfarm_error_t e = GFARM_ERR_NO_ERROR;
-	gfarm_error_t e2;
+	gfarm_error_t e;
 	gfarm_int32_t nhosts;
-	char *host = NULL, **hosts = NULL;
-	int i, eof;
+	char *host, **hosts;
+	int i, j, eof, no_memory = 0;
 	struct host *h;
 
-	e2 = gfm_server_get_request(peer, sizep, diag, "i", &nhosts);
-	if (e2 != GFARM_ERR_NO_ERROR) {
+	e = gfm_server_get_request(peer, diag, "i", &nhosts);
+	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001558,
-		    "gfm_server_get_request() failed: %s",
-		    gfarm_error_string(e2));
-		if (e == GFARM_ERR_NO_ERROR)
-			e = e2;
-		goto end;
+			"gfm_server_get_request() failed: %s",
+			gfarm_error_string(e));
+		return (e);
 	}
-	if (skip) {
-		e = GFARM_ERR_NO_ERROR;
-		goto end;
-	}
-	if (!mdhost_self_is_master()) {
-		if (e == GFARM_ERR_NO_ERROR)
-			e = GFARM_ERR_FUNCTION_NOT_IMPLEMENTED; /* XXX RELAY */
-		goto end;
-	}
-
-	GFARM_CALLOC_ARRAY(hosts, nhosts);
-	if (hosts == NULL) {
-		if (e == GFARM_ERR_NO_ERROR)
-			e = GFARM_ERR_NO_MEMORY;
-		/* Continue processing. */
-	}
+	if (skip)
+		return (GFARM_ERR_NO_ERROR);
+	GFARM_MALLOC_ARRAY(hosts, nhosts);
+	if (hosts == NULL)
+		no_memory = 1;
 	for (i = 0; i < nhosts; i++) {
-		e2 = gfp_xdr_recv(client, 0, &eof, "s", &host);
-		if (eof)
-			e2 = GFARM_ERR_PROTOCOL;
-		if (e2 != GFARM_ERR_NO_ERROR) {
+		e = gfp_xdr_recv(client, 0, &eof, "s", &host);
+		if (e != GFARM_ERR_NO_ERROR || eof) {
 			gflog_debug(GFARM_MSG_1001559,
-			    "gfp_xdr_recv(host_info_get_by_names_common) "
-			    "failed: %s",
-			    gfarm_error_string(e2));
-			if (e == GFARM_ERR_NO_ERROR)
-				e = e2;
-			goto end;
+				"gfp_xdr_recv(host) failed: %s",
+				gfarm_error_string(e));
+			if (e == GFARM_ERR_NO_ERROR) /* i.e. eof */
+				e = GFARM_ERR_PROTOCOL;
+			if (hosts != NULL) {
+				for (j = 0; j < i; j++) {
+					if (hosts[j] != NULL)
+						free(hosts[j]);
+				}
+				free(hosts);
+			}
+			return (e);
 		}
 		if (hosts == NULL) {
 			free(host);
-			continue;
+		} else {
+			hosts[i] = host;
 		}
-		if (host == NULL) {
-			if (e == GFARM_ERR_NO_ERROR)
-				e = GFARM_ERR_NO_MEMORY;
-		}
-		hosts[i] = host;
 	}
-
-	if (skip) {
-		e = GFARM_ERR_NO_ERROR;
-		goto end;
-	}
-	e2 = wait_db_update_info(peer, DBUPDATE_HOST, diag);
-	if (e2 != GFARM_ERR_NO_ERROR) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "failed to wait for the backend DB to be updated: %s",
-		    gfarm_error_string(e2));
-		if (e == GFARM_ERR_NO_ERROR)
-			e = e2;
-		/* Continue processing. */
-	}
-
-	e2 = gfm_server_put_reply(peer, xid, sizep, diag, e, "");
-	if (e2 != GFARM_ERR_NO_ERROR) {
+	if (no_memory)
+		e = gfm_server_put_reply(peer, diag, GFARM_ERR_NO_MEMORY, "");
+	else
+		e = gfm_server_put_reply(peer, diag, GFARM_ERR_NO_ERROR, "");
+	if (no_memory || e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001560,
-		    "gfm_server_put_reply(host_info_get_by_names_common) "
-		    "failed: %s",
-		    gfarm_error_string(e2));
-		if (e == GFARM_ERR_NO_ERROR)
-			e = e2;
+			"gfp_xdr_recv(host) failed: %s",
+			gfarm_error_string(e));
+		if (hosts != NULL) {
+			for (i = 0; i < nhosts; i++) {
+				if (hosts[i] != NULL)
+					free(hosts[i]);
+			}
+			free(hosts);
+		}
+		return (e);
 	}
-	if (e != GFARM_ERR_NO_ERROR)
-		goto end;
-
 	/* XXX FIXME too long giant lock */
 	giant_lock();
 	for (i = 0; i < nhosts; i++) {
 		h = (*lookup)(hosts[i]);
 		if (h == NULL) {
-			gflog_debug(GFARM_MSG_1000270,
-			    "host lookup failed: %s", hosts[i]);
-			e2 = gfm_server_put_reply(peer, 0, NULL, diag,
+			if (debug_mode)
+				gflog_info(GFARM_MSG_1000270,
+				    "host lookup <%s>: failed",
+				    hosts[i]);
+			e = gfm_server_put_reply(peer, diag,
 			    GFARM_ERR_UNKNOWN_HOST, "");
-			if (e2 != GFARM_ERR_NO_ERROR) {
-				gflog_debug(GFARM_MSG_UNFIXED,
-				    "gfm_server_put_reply"
-				    "(host_info_get_by_names_common) "
-				    "failed: %s",
-				    gfarm_error_string(e2));
-				if (e == GFARM_ERR_NO_ERROR)
-					e = e2;
-				break;
-			}
 		} else {
-			gflog_debug(GFARM_MSG_1000271,
-			    "host lookup succeeded: %s", hosts[i]);
-			e2 = gfm_server_put_reply(peer, 0, NULL, diag,
+			if (debug_mode)
+				gflog_info(GFARM_MSG_1000271,
+				    "host lookup <%s>: ok", hosts[i]);
+			e = gfm_server_put_reply(peer, diag,
 			    GFARM_ERR_NO_ERROR, "");
-			if (e2 != GFARM_ERR_NO_ERROR) {
-				gflog_debug(GFARM_MSG_UNFIXED,
-				    "gfm_server_put_reply"
-				    "(host_info_get_by_names_common) "
-				    "failed: %s",
-				    gfarm_error_string(e2));
-				if (e == GFARM_ERR_NO_ERROR)
-					e = e2;
-				break;
-			}
-			e2 = host_info_send(client, h);
-			if (e2 != GFARM_ERR_NO_ERROR) {
-				if (e == GFARM_ERR_NO_ERROR)
-					e = e2;
-				break;
-			}
+			if (e == GFARM_ERR_NO_ERROR)
+				e = host_info_send(client, h);
+		}
+		if (e != GFARM_ERR_NO_ERROR) {
+			gflog_debug(GFARM_MSG_1001561,
+				"error occurred during process: %s",
+				gfarm_error_string(e));
+			break;
 		}
 	}
+	for (i = 0; i < nhosts; i++)
+		free(hosts[i]);
+	free(hosts);
 	giant_unlock();
-
-end:
-	if (hosts != NULL) {
-		for (i = 0; i < nhosts; i++)
-			free(hosts[i]);
-		free(hosts);
-	}
 	return (e);
 }
 
 gfarm_error_t
-gfm_server_host_info_get_by_names(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_host_info_get_by_names(struct peer *peer, int from_client, int skip)
 {
 	return (gfm_server_host_info_get_by_names_common(
-	    peer, xid, sizep, from_client, skip,
-	    host_lookup, "host_info_get_by_names"));
+	    peer, from_client, skip, host_lookup, "host_info_get_by_names"));
 }
 
 gfarm_error_t
-gfm_server_host_info_get_by_namealiases(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_host_info_get_by_namealiases(struct peer *peer,
 	int from_client, int skip)
 {
 	return (gfm_server_host_info_get_by_names_common(
-	    peer, xid, sizep, from_client, skip,
-	    host_namealiases_lookup, "host_info_get_by_namealiases"));
+	    peer, from_client, skip, host_namealiases_lookup,
+	    "host_info_get_by_namealiases"));
 }
 
 gfarm_error_t
@@ -1536,73 +1436,65 @@ host_info_verify(struct gfarm_host_info *hi, const char *diag)
 }
 
 gfarm_error_t
-gfm_server_host_info_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_host_info_set(struct peer *peer, int from_client, int skip)
 {
-	gfarm_error_t e;
+	gfarm_int32_t e;
 	struct user *user = peer_get_user(peer);
 	gfarm_int32_t ncpu, port, flags;
 	struct gfarm_host_info hi;
-	struct relayed_request *relay;
 	static const char diag[] = "GFM_PROTO_HOST_INFO_SET";
 
-	e = gfm_server_get_request_with_relay(peer, sizep, skip, &relay, diag,
-	    GFM_PROTO_HOST_INFO_SET, "ssiii",
+	e = gfm_server_get_request(peer, diag, "ssiii",
 	    &hi.hostname, &hi.architecture, &ncpu, &port, &flags);
-	if (e != GFARM_ERR_NO_ERROR)
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001562,
+			"host_info_set request failure: %s",
+			gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(hi.hostname);
 		free(hi.architecture);
 		return (GFARM_ERR_NO_ERROR);
 	}
+	hi.ncpu = ncpu;
+	hi.port = port;
+	hi.flags = flags;
+	/* XXX FIXME missing hostaliases */
+	hi.nhostaliases = 0;
+	hi.hostaliases = NULL;
 
-	if (relay != NULL) {
-		free(hi.hostname);
-		free(hi.architecture);
-	} else {
-		/* do not relay RPC to master gfmd */
-		hi.ncpu = ncpu;
-		hi.port = port;
-		hi.flags = flags;
-		/* XXX FIXME missing hostaliases */
-		hi.nhostaliases = 0;
-		hi.hostaliases = NULL;
-
-		giant_lock();
-		if (!from_client || user == NULL || !user_is_admin(user)) {
-			gflog_debug(GFARM_MSG_1001563,
-			    "operation is not permitted");
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		} else if (host_lookup(hi.hostname) != NULL) {
-			gflog_debug(GFARM_MSG_1001564,
-			    "host already exists");
-			e = GFARM_ERR_ALREADY_EXISTS;
-		} else if ((e = host_info_verify(&hi, diag)) !=
-		    GFARM_ERR_NO_ERROR) {
-			/* nothing to do */
-		} else if ((e = host_enter(&hi, NULL)) != GFARM_ERR_NO_ERROR) {
-			/* nothing to do */
-		} else if ((e = db_host_add(&hi)) != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001565,
-			    "db_host_add() failed: %s",
-			    gfarm_error_string(e));
-			host_remove(hi.hostname);
-			hi.hostname = hi.architecture = NULL;
-		}
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001566,
-			    "error occurred during process: %s",
-			    gfarm_error_string(e));
-			if (hi.hostname != NULL)
-				free(hi.hostname);
-			if (hi.architecture != NULL)
-				free(hi.architecture);
-		}
-		giant_unlock();
+	giant_lock();
+	if (!from_client || user == NULL || !user_is_admin(user)) {
+		gflog_debug(GFARM_MSG_1001563,
+			"operation is not permitted");
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+	} else if (host_lookup(hi.hostname) != NULL) {
+		gflog_debug(GFARM_MSG_1001564,
+			"host already exists");
+		e = GFARM_ERR_ALREADY_EXISTS;
+	} else if ((e = host_info_verify(&hi, diag)) != GFARM_ERR_NO_ERROR) {
+		/* nothing to do */
+	} else if ((e = host_enter(&hi, NULL)) != GFARM_ERR_NO_ERROR) {
+		/* nothing to do */
+	} else if ((e = db_host_add(&hi)) != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001565,
+			"db_host_add() failed: %s",
+			gfarm_error_string(e));
+		host_remove(hi.hostname);
+		hi.hostname = hi.architecture = NULL;
 	}
-	return (gfm_server_put_reply_with_relay(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001566,
+			"error occurred during process: %s",
+			gfarm_error_string(e));
+		if (hi.hostname != NULL)
+			free(hi.hostname);
+		if (hi.architecture != NULL)
+			free(hi.architecture);
+	}
+	giant_unlock();
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 void
@@ -1616,22 +1508,8 @@ host_modify(struct host *h, struct gfarm_host_info *hi)
 	h->hi.flags = hi->flags;
 }
 
-void
-host_fsngroup_modify(struct host *h, const char *fsngroupname)
-{
-	if (h->fsngroupname != NULL)
-		free(h->fsngroupname);
-	if (fsngroupname != NULL)
-		h->fsngroupname = strdup_ck(fsngroupname,
-					"host_fsngroup_modify");
-	else
-		h->fsngroupname = NULL;
-}
-
 gfarm_error_t
-gfm_server_host_info_modify(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_host_info_modify(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	struct user *user = peer_get_user(peer);
@@ -1639,64 +1517,57 @@ gfm_server_host_info_modify(
 	struct gfarm_host_info hi;
 	struct host *h;
 	int needs_free = 0;
-	struct relayed_request *relay;
 	static const char diag[] = "GFM_PROTO_HOST_INFO_MODIFY";
 
-	e = gfm_server_get_request_with_relay(peer, sizep, skip, &relay, diag,
-	    GFM_PROTO_HOST_INFO_MODIFY,
-	    "ssiii", &hi.hostname, &hi.architecture, &ncpu, &port, &flags);
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "ssiii",
+	    &hi.hostname, &hi.architecture, &ncpu, &port, &flags);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001567,
+			"host_info_modify request failed: %s",
+			gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(hi.hostname);
 		free(hi.architecture);
 		return (GFARM_ERR_NO_ERROR);
 	}
+	hi.ncpu = ncpu;
+	hi.port = port;
+	hi.flags = flags;
+	/* XXX FIXME missing hostaliases */
 
-	if (relay != NULL) {
+	/* XXX should we disconnect a back channel to the host? */
+	giant_lock();
+	if (!from_client || user == NULL || !user_is_admin(user)) {
+		gflog_debug(GFARM_MSG_1001568,
+			"operation is not permitted");
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		needs_free = 1;
+	} else if ((h = host_lookup(hi.hostname)) == NULL) {
+		gflog_debug(GFARM_MSG_1001569, "host does not exists");
+		e = GFARM_ERR_NO_SUCH_OBJECT;
+		needs_free = 1;
+	} else if ((e = host_info_verify(&hi, diag)) != GFARM_ERR_NO_ERROR) {
+		needs_free = 1;
+	} else if ((e = db_host_modify(&hi,
+	    DB_HOST_MOD_ARCHITECTURE|DB_HOST_MOD_NCPU|DB_HOST_MOD_FLAGS,
+	    /* XXX */ 0, NULL, 0, NULL)) != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001570,
+			"db_host_modify failed: %s",
+			gfarm_error_string(e));
+		needs_free = 1;
+	} else {
+		host_modify(h, &hi);
+		free(hi.hostname);
+	}
+	if (needs_free) {
 		free(hi.hostname);
 		free(hi.architecture);
-	} else {
-		/* do not relay RPC to master gfmd */
-		hi.ncpu = ncpu;
-		hi.port = port;
-		hi.flags = flags;
-		/* XXX FIXME missing hostaliases */
-
-		/* XXX should we disconnect a back channel to the host? */
-		giant_lock();
-		if (!from_client || user == NULL || !user_is_admin(user)) {
-			gflog_debug(GFARM_MSG_1001568,
-			    "operation is not permitted");
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			needs_free = 1;
-		} else if ((h = host_lookup(hi.hostname)) == NULL) {
-			gflog_debug(GFARM_MSG_1001569,
-			    "host does not exists");
-			e = GFARM_ERR_NO_SUCH_OBJECT;
-			needs_free = 1;
-		} else if ((e = host_info_verify(&hi, diag)) !=
-		    GFARM_ERR_NO_ERROR) {
-			needs_free = 1;
-		} else if ((e = db_host_modify(&hi,
-		DB_HOST_MOD_ARCHITECTURE|DB_HOST_MOD_NCPU|DB_HOST_MOD_FLAGS,
-		    /* XXX */ 0, NULL, 0, NULL)) != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001570,
-			    "db_host_modify failed: %s",
-			    gfarm_error_string(e));
-			needs_free = 1;
-		} else {
-			host_modify(h, &hi);
-			free(hi.hostname);
-		}
-		if (needs_free) {
-			free(hi.hostname);
-			free(hi.architecture);
-		}
-		giant_unlock();
 	}
-	return (gfm_server_put_reply_with_relay(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	giant_unlock();
+
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 /* this interface is exported for a use from a private extension */
@@ -1729,44 +1600,39 @@ gfarm_error_t (*host_info_remove)(const char *, const char *) =
 	host_info_remove_default;
 
 gfarm_error_t
-gfm_server_host_info_remove(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_host_info_remove(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	struct user *user = peer_get_user(peer);
 	char *hostname;
-	struct relayed_request *relay;
 	static const char diag[] = "GFM_PROTO_HOST_INFO_REMOVE";
 
-	e = gfm_server_get_request_with_relay(peer, sizep, skip, &relay, diag,
-	    GFM_PROTO_HOST_INFO_REMOVE, "s", &hostname);
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "s", &hostname);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001571,
+			"host_info_remove request failure: %s",
+			gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(hostname);
 		return (GFARM_ERR_NO_ERROR);
 	}
+	/*
+	 * XXX should we remove all file copy entries stored on the
+	 * specified host?
+	 */
+	giant_lock();
+	if (!from_client || user == NULL || !user_is_admin(user)) {
+		gflog_debug(GFARM_MSG_1001572,
+			"operation is not permitted");
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+	} else
+		e = host_info_remove(hostname, diag);
+	free(hostname);
+	giant_unlock();
 
-	if (relay != NULL) {
-		free(hostname);
-	} else {
-		/*
-		 * XXX should we remove all file copy entries stored on the
-		 * specified host?
-		 */
-		giant_lock();
-		if (!from_client || user == NULL || !user_is_admin(user)) {
-			gflog_debug(GFARM_MSG_1001572,
-			    "operation is not permitted");
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		} else
-			e = host_info_remove(hostname, diag);
-		free(hostname);
-		giant_unlock();
-	}
-	return (gfm_server_put_reply_with_relay(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 /* called from fs.c:gfm_server_schedule_file() as well */
@@ -1793,48 +1659,42 @@ host_schedule_reply(struct host *h, struct peer *peer, const char *diag)
 }
 
 gfarm_error_t
-host_schedule_reply_all(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+host_schedule_reply_all(struct peer *peer,
 	int (*filter)(struct host *, void *), void *closure, const char *diag)
 {
-	return (gfm_server_host_generic_get(peer, xid, sizep,
-	    host_schedule_reply, filter, closure, 1, diag));
+	return (gfm_server_host_generic_get(peer, host_schedule_reply,
+	    filter, closure, 1, diag));
 }
 
 gfarm_error_t
-gfm_server_hostname_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_hostname_set(struct peer *peer, int from_client, int skip)
 {
 	gfarm_int32_t e;
 	char *hostname;
-	struct relayed_request *relay;
 	static const char diag[] = "GFM_PROTO_HOSTNAME_SET";
 
-	e = gfm_server_get_request_with_relay(peer, sizep, skip, &relay, diag,
-	    GFM_PROTO_HOSTNAME_SET, "s", &hostname);
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "s", &hostname);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001577,
+			"gfm_server_get_request() failure");
 		return (e);
+	}
 	if (skip) {
 		free(hostname);
 		return (GFARM_ERR_NO_ERROR);
 	}
 
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		giant_lock();
-		if (from_client) {
-			gflog_debug(GFARM_MSG_1001578,
-			    "operation is not permitted for from_client");
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		} else
-			e = peer_set_host(peer, hostname);
-		giant_unlock();
-	}
-
+	giant_lock();
+	if (from_client) {
+		gflog_debug(GFARM_MSG_1001578,
+			"operation is not permitted for from_client");
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+	} else
+		e = peer_set_host(peer, hostname);
+	giant_unlock();
 	free(hostname);
 
-	return (gfm_server_put_reply_with_relay(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 static int
@@ -1847,31 +1707,27 @@ up_and_domain_filter(struct host *h, void *d)
 }
 
 gfarm_error_t
-gfm_server_schedule_host_domain(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_schedule_host_domain(struct peer *peer, int from_client, int skip)
 {
 	gfarm_int32_t e;
 	char *domain;
-	struct relayed_request *relay;
 	static const char diag[] = "GFM_PROTO_SCHEDULE_HOST_DOMAIN";
 
-	e = gfm_server_get_request_with_relay(peer, sizep, skip, &relay, diag,
-	      GFM_PROTO_SCHEDULE_HOST_DOMAIN, "s", &domain);
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "s", &domain);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001579,
+			"schedule_host_domain request failure: %s",
+			gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(domain);
 		return (GFARM_ERR_NO_ERROR);
 	}
-	if (relay != NULL)
-		return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED); /* XXX RELAY */
 
 	/* XXX FIXME too long giant lock */
 	giant_lock();
-	/* XXXRELAY FIXME, reply size is not correct */
-	e = host_schedule_reply_all(peer, xid, sizep,
-	    up_and_domain_filter, domain, diag);
+	e = host_schedule_reply_all(peer, up_and_domain_filter, domain, diag);
 	giant_unlock();
 	free(domain);
 
@@ -1879,32 +1735,22 @@ gfm_server_schedule_host_domain(
 }
 
 gfarm_error_t
-gfm_server_statfs(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_statfs(struct peer *peer, int from_client, int skip)
 {
-	gfarm_error_t e;
-	gfarm_uint64_t used = 0, avail = 0, files = 0;
-	struct relayed_request *relay;
+	gfarm_uint64_t used, avail, files;
 	static const char diag[] = "GFM_PROTO_STATFS";
 
-	e = gfm_server_get_request_with_relay(peer, sizep, skip, &relay, diag,
-	      GFM_PROTO_STATFS, "");
-	if (e != GFARM_ERR_NO_ERROR)
-		return (e);
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		files = inode_total_num();
-		gfarm_mutex_lock(&total_disk_mutex, diag, total_disk_diag);
-		used = total_disk_used;
-		avail = total_disk_avail;
-		gfarm_mutex_unlock(&total_disk_mutex, diag, total_disk_diag);
-	}
+	files = inode_total_num();
+	gfarm_mutex_lock(&total_disk_mutex, diag, total_disk_diag);
+	used = total_disk_used;
+	avail = total_disk_avail;
+	gfarm_mutex_unlock(&total_disk_mutex, diag, total_disk_diag);
 
-	return (gfm_server_put_reply_with_relay(peer, xid, sizep, relay, diag,
-	    &e, "lll", &used, &avail, &files));
+	return (gfm_server_put_reply(peer, diag, GFARM_ERR_NO_ERROR, "lll",
+		    used, avail, files));
 }
 
 #endif /* TEST */

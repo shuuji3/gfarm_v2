@@ -18,7 +18,6 @@
 #include <gfarm/gfarm.h>
 
 #include "config.h"
-#include "context.h"
 #include "gfm_client.h"
 #include "gfutil.h"
 #include "hash.h"
@@ -2543,7 +2542,7 @@ main(int argc, char *argv[])
 		}
 	}
 	if (opt_n_para <= 0)
-		opt_n_para = gfarm_ctxp->client_parallel_copy;
+		opt_n_para = gfarm_client_parallel_copy;
 	if (opt_n_para <= 0) {
 		gfprep_error("client_parallel_copy must be "
 			     "a positive interger");
