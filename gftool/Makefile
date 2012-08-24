@@ -20,7 +20,6 @@ SUBDIRS = \
 	gfhost \
 	gfjournal \
 	gfjournaladmin \
-	gfjournaldump \
 	gfkey \
 	gfln \
 	gfls \
@@ -45,8 +44,6 @@ SUBDIRS = \
 	gfwhoami \
 	gfxattr \
 	config-gfarm \
-	gfhostgroup \
-	gfrepattr \
 	$(optional_targets)
 
 #	gfexec \

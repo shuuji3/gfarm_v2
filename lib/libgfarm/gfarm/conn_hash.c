@@ -15,16 +15,9 @@ gfp_conn_hash_index(const void *key, int keylen)
 {
 	const struct gfp_conn_hash_id *id = key;
 
-	/*
-	 * XXX FIXME: username is currently removed from keys,
-	 * to make GSI authentication work.
-	 * (Should we change GSI authentication protocol?)
-	 */
+	/* username is not key */
 	return (gfarm_hash_casefold(id->hostname, strlen(id->hostname)) +
-#ifdef __KERNEL__
-		gfarm_hash_default(id->username, strlen(id->username)) +
-#endif /* __KERNEL__ */
-		id->port * 3);
+	    id->port * 3);
 }
 
 static int
@@ -33,12 +26,9 @@ gfp_conn_hash_equal(const void *key1, int key1len,
 {
 	const struct gfp_conn_hash_id *id1 = key1, *id2 = key2;
 
-	/* XXX FIXME: username is currently removed from keys */
+	/* username is not key */
 	return (strcasecmp(id1->hostname, id2->hostname) == 0 &&
-#ifdef __KERNEL__
-		strcmp(id1->username, id2->username) == 0 &&
-#endif /* __KERNEL__ */
-		id1->port == id2->port);
+	    id1->port == id2->port);
 }
 
 const char *
@@ -84,27 +74,8 @@ gfp_conn_hash_table_init(
 	return (GFARM_ERR_NO_ERROR);
 }
 
-void
-gfp_conn_hash_table_dispose(struct gfarm_hash_table *hashtab)
-{
-	struct gfarm_hash_iterator it;
-	struct gfarm_hash_entry *entry;
-
-	gfarm_hash_iterator_begin(hashtab, &it);
-	for (;;) {
-		if (gfarm_hash_iterator_is_end(&it))
-			break;
-		entry = gfarm_hash_iterator_access(&it);
-		gfarm_hash_iterator_next(&it);
-		gfp_conn_hash_dispose(hashtab, entry);
-	}
-
-	gfarm_hash_table_free(hashtab);
-}
-
 gfarm_error_t
-gfp_conn_hash_id_enter_noalloc(struct gfarm_hash_table **hashtabp,
-	int hashtabsize,
+gfp_conn_hash_id_enter_noalloc(struct gfarm_hash_table **hashtabp, int hashtabsize,
 	size_t entrysize, struct gfp_conn_hash_id *idp,
 	struct gfarm_hash_entry **entry_ret, int *created_ret)
 {
@@ -116,14 +87,14 @@ gfp_conn_hash_id_enter_noalloc(struct gfarm_hash_table **hashtabp,
 	    (e = gfp_conn_hash_table_init(hashtabp, hashtabsize))
 	    != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001082,
-		    "initialization of connection hashtable (%d) failed: %s",
-		    hashtabsize, gfarm_error_string(e));
+			"initialization of connection hashtable (%d) failed: %s",
+			hashtabsize,
+			gfarm_error_string(e));
 		return (e);
 	}
 
 	assert(idp);
 	assert(idp->hostname);
-	assert(idp->username);
 	assert(idp->port > 0);
 	entry = gfarm_hash_enter(*hashtabp, idp, sizeof(*idp), entrysize,
 	    &created);
@@ -204,18 +175,6 @@ gfp_conn_hash_enter(struct gfarm_hash_table **hashtabp, int hashtabsize,
 	    &id, entry_ret, created_ret));
 }
 
-void
-gfp_conn_hash_dispose(struct gfarm_hash_table *hashtab,
-    struct gfarm_hash_entry *entry)
-{
-	struct gfp_conn_hash_id *idp = gfarm_hash_entry_key(entry);
-	int keylen = gfarm_hash_entry_key_length(entry);
-
-	free(idp->hostname);
-	free(idp->username);
-	gfarm_hash_purge(hashtab, idp, keylen);
-}
-
 gfarm_error_t
 gfp_conn_hash_lookup(struct gfarm_hash_table **hashtabp, int hashtabsize,
 	const char *hostname, int port, const char *username,
@@ -229,8 +188,9 @@ gfp_conn_hash_lookup(struct gfarm_hash_table **hashtabp, int hashtabsize,
 	    (e = gfp_conn_hash_table_init(hashtabp, hashtabsize)) !=
 	    GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001085,
-		    "initialization of connection hashtable (%d) failed: %s",
-		    hashtabsize, gfarm_error_string(e));
+			"initialization of connection hashtable (%d) failed: %s",
+			hashtabsize,
+			gfarm_error_string(e));
 		return (e);
 	}
 

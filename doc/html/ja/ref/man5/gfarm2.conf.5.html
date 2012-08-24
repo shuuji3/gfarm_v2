@@ -2042,28 +2042,6 @@ CLASS="LITERALLAYOUT"
 ><DT
 ><SPAN
 CLASS="TOKEN"
->metadb_server_slave_listen</SPAN
-> <CODE
-CLASS="PARAMETER"
->有効性</CODE
-></DT
-><DD
-><P
->enable のとき、スレーブgfmdとして設定されている場合でも、クライアントからの要求を受け付けます。
-デフォルトはdisableです。</P
-><P
->注意: この機能は開発用に用意されていますので、通常の用途では設定しないでください。</P
-><P
->この文はgfmd.confのみで有効です。</P
-><P
->例:</P
-><P
-CLASS="LITERALLAYOUT"
->	metadb_server_slave_listen&nbsp;enable</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
 >metadb_server_slave_max_size</SPAN
 > <CODE
 CLASS="PARAMETER"
@@ -2223,7 +2201,6 @@ CLASS="LITERALLAYOUT"
 		&nbsp;&nbsp;&lt;synchronous_replication_timeout_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;synchronous_journaling_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_server_force_slave_statement&gt;&nbsp;|<br>
-		&nbsp;&nbsp;&lt;metadb_server_slave_listen_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_server_slave_max_size_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_journal_dir_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_journal_max_size_statement&gt;&nbsp;|<br>
@@ -2320,7 +2297,6 @@ CLASS="LITERALLAYOUT"
 	&lt;synchronous_replication_timeout_statement&gt;&nbsp;::=&nbsp;"synchronous_replication_timeout"&nbsp;&lt;number&gt;<br>
 	&lt;synchronous_journaling_statement&gt;&nbsp;::=&nbsp;"synchronous_journaling"&nbsp;&lt;validity&gt;<br>
 	&lt;metadb_server_force_slave_statement&gt;&nbsp;::=&nbsp;"metadb_server_force_slave"&nbsp;&lt;validity&gt;<br>
-	&lt;metadb_server_slave_listen_statement&gt;&nbsp;::=&nbsp;"metadb_server_slave_listen"&nbsp;&lt;validity&gt;<br>
 	&lt;metadb_server_slave_max_size_statement&gt;&nbsp;::=&nbsp;"metadb_server_slave_max_size"&nbsp;&lt;number&gt;<br>
 	&lt;metadb_journal_dir_statement&gt;&nbsp;::=&nbsp;"metadb_journal_dir"&nbsp;&lt;pathname&gt;<br>
 	&lt;metadb_journal_max_size_statement&gt;&nbsp;::=&nbsp;"metadb_journal_max_size"&nbsp;&lt;number&gt;<br>

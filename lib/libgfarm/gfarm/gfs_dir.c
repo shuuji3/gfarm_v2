@@ -28,7 +28,6 @@
 #include "lookup.h"
 #include "gfs_io.h"
 #include "gfs_dir.h"
-#include "gfs_failover.h"
 
 #if 0 /* not yet in gfarm v2 */
 
@@ -124,7 +123,7 @@ gfs_chdir(const char *dir)
 	if (e != NULL)
 		return (e);
 	e = gfs_chdir_canonical(canonic_path);
-	free(canonic_path);
+	free (canonic_path);
 	return (e);
 }
 
@@ -134,7 +133,7 @@ gfs_getcwd(char *cwd, int cwdsize)
 	const char *path;
 	char *default_cwd = NULL, *e, *p;
 	int len;
-
+	
 	if (gfarm_current_working_directory != NULL)
 		path = gfarm_current_working_directory;
 	else if ((path = getenv("GFS_PWD")) != NULL)
@@ -186,58 +185,6 @@ struct gfs_dir_internal {
 	struct gfs_dirent buffer[DIRENTS_BUFCOUNT];
 	int n, index;
 	gfarm_off_t seek_pos;
-
-	/* remember opened url */
-	char *url;
-	/* remember opened inode num */
-	gfarm_ino_t ino;
-};
-
-static struct gfm_connection *
-dir_metadb(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dir_internal *)super)->gfm_server);
-}
-
-static void
-dir_set_metadb(struct gfs_failover_file *super,
-	struct gfm_connection *gfm_server)
-{
-	((struct gfs_dir_internal *)super)->gfm_server = gfm_server;
-}
-
-static gfarm_int32_t
-dir_fileno(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dir_internal *)super)->fd);
-}
-
-static void
-dir_set_fileno(struct gfs_failover_file *super, gfarm_int32_t fd)
-{
-	((struct gfs_dir_internal *)super)->fd = fd;
-}
-
-static const char *
-dir_url(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dir_internal *)super)->url);
-}
-
-static gfarm_ino_t
-dir_ino(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dir_internal *)super)->ino);
-}
-
-static struct gfs_failover_file_ops failover_file_ops = {
-	GFS_DT_DIR,
-	dir_metadb,
-	dir_set_metadb,
-	dir_fileno,
-	dir_set_fileno,
-	dir_url,
-	dir_ino,
 };
 
 static gfarm_error_t
@@ -275,15 +222,12 @@ gfs_readdir_internal(GFS_Dir super, struct gfs_dirent **entry)
 
 	if (dir->index >= dir->n) {
 		n = dir->n;
-		e = gfm_client_compound_fd_op_readonly(
-		    (struct gfs_failover_file *)super,
-		    &failover_file_ops,
-		    gfm_getdirents_request, gfm_getdirents_result,
-		    NULL, dir);
+		e = gfm_client_compound_fd_op(dir->gfm_server, dir->fd,
+		    gfm_getdirents_request, gfm_getdirents_result, NULL, dir);
 		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "gfm_client_compound_readonly_fd: %s",
-			    gfarm_error_string(e));
+			gflog_debug(GFARM_MSG_1001270,
+				"gfm_client_compound_fd_op() failed: %s",
+				gfarm_error_string(e));
 			return (e);
 		}
 
@@ -302,18 +246,11 @@ static gfarm_error_t
 gfs_closedir_internal(GFS_Dir super)
 {
 	struct gfs_dir_internal *dir = (struct gfs_dir_internal *)super;
-	gfarm_error_t e;
+	gfarm_error_t e = gfm_close_fd(dir->gfm_server, dir->fd);
 
-	gfm_client_connection_lock(dir->gfm_server);
-	if ((e = gfm_close_fd(dir->gfm_server, dir->fd)) != GFARM_ERR_NO_ERROR)
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfm_close_fd: %s",
-		    gfarm_error_string(e));
 	gfm_client_connection_free(dir->gfm_server);
-	free(dir->url);
 	free(dir);
-	/* ignore result */
-	return (GFARM_ERR_NO_ERROR);
+	return (e);
 }
 
 gfarm_error_t
@@ -356,8 +293,7 @@ gfs_seekdir_internal(GFS_Dir super, gfarm_off_t off)
 
 	closure.offset = off;
 	closure.whence = 0;
-	e = gfm_client_compound_fd_op_readonly(
-	    (struct gfs_failover_file *)dir, &failover_file_ops,
+	e = gfm_client_compound_fd_op(dir->gfm_server, dir->fd,
 	    gfm_seekdir_request, gfm_seekdir_result, NULL, &closure);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1003417,
@@ -381,7 +317,7 @@ gfs_telldir_internal(GFS_Dir super, gfarm_off_t *offp)
 
 static gfarm_error_t
 gfs_dir_alloc(struct gfm_connection *gfm_server, gfarm_int32_t fd,
-	char *url, gfarm_ino_t ino, GFS_Dir *dirp)
+	GFS_Dir *dirp)
 {
 	struct gfs_dir_internal *dir;
 	static struct gfs_dir_ops ops = {
@@ -401,14 +337,11 @@ gfs_dir_alloc(struct gfm_connection *gfm_server, gfarm_int32_t fd,
 
 	dir->super.ops = &ops;
 	dir->gfm_server = gfm_server;
-	gfm_client_connection_unlock(gfm_server);
 	dir->fd = fd;
 
 	dir->n = dir->index = 0;
 	dir->seek_pos = 0;
 
-	dir->url = url;
-	dir->ino = ino;
 
 	*dirp = &dir->super;
 	return (GFARM_ERR_NO_ERROR);
@@ -420,11 +353,9 @@ gfs_opendir(const char *path, GFS_Dir *dirp)
 	gfarm_error_t e;
 	struct gfm_connection *gfm_server;
 	int fd, type;
-	char *url;
-	gfarm_ino_t ino;
 
-	if ((e = gfm_open_fd_with_ino(path, GFARM_FILE_RDONLY, &gfm_server,
-	    &fd, &type, &url, &ino)) != GFARM_ERR_NO_ERROR) {
+	if ((e = gfm_open_fd(path, GFARM_FILE_RDONLY, &gfm_server, &fd, &type))
+	    != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001274,
 			"gfm_open_fd(%s) failed: %s",
 			path,
@@ -434,7 +365,7 @@ gfs_opendir(const char *path, GFS_Dir *dirp)
 
 	if (type != GFS_DT_DIR)
 		e = GFARM_ERR_NOT_A_DIRECTORY;
-	else if ((e = gfs_dir_alloc(gfm_server, fd, url, ino, dirp)) ==
+	else if ((e = gfs_dir_alloc(gfm_server, fd, dirp)) ==
 	    GFARM_ERR_NO_ERROR)
 		return (GFARM_ERR_NO_ERROR);
 

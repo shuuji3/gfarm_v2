@@ -2186,30 +2186,6 @@ CLASS="LITERALLAYOUT"
 ><DT
 ><SPAN
 CLASS="TOKEN"
->metadb_server_slave_listen</SPAN
-> <CODE
-CLASS="PARAMETER"
->validity</CODE
-></DT
-><DD
-><P
->When "enable" is specified, even if the gfmd is set to slave,
-it receives requests from clients.
-The default is "disable".</P
-><P
->NOTE: Please do not set this directive for ordinary use,
-because this feature is only for development.</P
-><P
->This parameter is only available in gfmd.conf.</P
-><P
->Example:</P
-><P
-CLASS="LITERALLAYOUT"
->	metadb_server_slave_listen&nbsp;enable</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
 >metadb_server_slave_max_size</SPAN
 > <CODE
 CLASS="PARAMETER"
@@ -2372,7 +2348,6 @@ CLASS="LITERALLAYOUT"
 		&nbsp;&nbsp;&lt;synchronous_replication_timeout_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;synchronous_journaling_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_server_force_slave_statement&gt;&nbsp;|<br>
-		&nbsp;&nbsp;&lt;metadb_server_slave_listen_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_server_slave_max_size_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_journal_dir_statement&gt;&nbsp;|<br>
 		&nbsp;&nbsp;&lt;metadb_journal_max_size_statement&gt;&nbsp;|<br>
@@ -2469,7 +2444,6 @@ CLASS="LITERALLAYOUT"
 	&lt;synchronous_replication_timeout_statement&gt;&nbsp;::=&nbsp;"synchronous_replication_timeout"&nbsp;&lt;number&gt;<br>
 	&lt;synchronous_journaling_statement&gt;&nbsp;::=&nbsp;"synchronous_journaling"&nbsp;&lt;validity&gt;<br>
 	&lt;metadb_server_force_slave_statement&gt;&nbsp;::=&nbsp;"metadb_server_force_slave"&nbsp;&lt;validity&gt;<br>
-	&lt;metadb_server_slave_listen_statement&gt;&nbsp;::=&nbsp;"metadb_server_slave_listen"&nbsp;&lt;validity&gt;<br>
 	&lt;metadb_server_slave_max_size_statement&gt;&nbsp;::=&nbsp;"metadb_server_slave_max_size"&nbsp;&lt;number&gt;<br>
 	&lt;metadb_journal_dir_statement&gt;&nbsp;::=&nbsp;"metadb_journal_dir"&nbsp;&lt;pathname&gt;<br>
 	&lt;metadb_journal_max_size_statement&gt;&nbsp;::=&nbsp;"metadb_journal_max_size"&nbsp;&lt;number&gt;<br>

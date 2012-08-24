@@ -14,8 +14,6 @@
 #define GFLOG_USE_STDARG
 #include <gfarm/gflog.h>
 
-#include "thrsubr.h"
-
 #define GFARM_CATALOG_SET_NO 1
 
 static const char *log_identifier = "libgfarm";
@@ -24,7 +22,7 @@ static int log_use_syslog = 0;
 static int log_level = GFARM_DEFAULT_PRIORITY_LEVEL_TO_LOG;
 static nl_catd catd = (nl_catd)-1;
 static const char *catalog_file = "gfarm.cat";
-static pthread_mutex_t mutex = GFARM_MUTEX_INITIALIZER(mutex);
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static int log_message_verbose;
 static int fatal_action = 0;
 
@@ -143,20 +141,14 @@ gflog_init_priority_string(void)
 static void
 gflog_sub(int priority, const char *str1, const char *str2)
 {
-#ifndef __KERNEL__
 	pthread_once(&gflog_priority_string_once, gflog_init_priority_string);
+
 	if (log_use_syslog)
 		syslog(priority, "<%s> %s%s", gflog_priority_string[priority],
 		    str1, str2);
 	else
 		fprintf(stderr, "%s: <%s> %s%s\n", log_identifier,
 		    gflog_priority_string[priority], str1, str2);
-#else /* __KERNEL__ */
-	if (log_use_syslog)
-		printk("<%d>%s%s\n", priority, str1, str2);
-	else
-		printk("%s%s\n", str1, str2);
-#endif /* __KERNEL__ */
 }
 
 void
@@ -270,24 +262,11 @@ gflog_vmessage_errno(int msg_no, int priority, const char *file, int line_no,
 	const char *func, const char *format, va_list ap)
 {
 	int save_errno = errno;
-	int rv;
-	static char buffer[2048];
-	static pthread_mutex_t buffer_mutex = GFARM_MUTEX_INITIALIZER(mutex);
-
-	rv = pthread_mutex_lock(&buffer_mutex);
-	if (rv != 0)
-		gflog_sub(LOG_ERR, "gflog_vmessage_errno: pthread_mutex_lock: ",
-		    strerror(rv));
+	char buffer[2048];
 
 	vsnprintf(buffer, sizeof buffer, format, ap);
 	gflog_message(msg_no, priority, file, line_no, func,
 	    "%s: %s", buffer, strerror(save_errno));
-
-	rv = pthread_mutex_unlock(&buffer_mutex);
-	if (rv != 0)
-		gflog_sub(LOG_ERR,
-		    "gflog_vmessage_errno: pthread_mutex_unlock: %s",
-		    strerror(rv));
 }
 
 void
@@ -377,7 +356,6 @@ gflog_syslog_open(int syslog_option, int syslog_facility)
 	log_use_syslog = 1;
 }
 
-#ifndef __KERNEL__
 int
 gflog_syslog_name_to_facility(const char *name)
 {
@@ -418,7 +396,6 @@ gflog_syslog_name_to_facility(const char *name)
 	}
 	return (-1); /* not found */
 }
-#endif /* __KERNEL__ */
 
 int
 gflog_syslog_name_to_priority(const char *name)
