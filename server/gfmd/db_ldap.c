@@ -19,7 +19,6 @@
 #include <pthread.h>	/* db_access.h currently needs this */
 #include <sys/time.h>
 #include <assert.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
@@ -59,11 +58,8 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 #include "metadb_common.h"
 #include "xattr_info.h"
@@ -1218,36 +1214,32 @@ gfarm_ldap_host_info_set_field(
 	char **vals)
 {
 	gfarm_error_t err = GFARM_ERR_NO_ERROR;
+	struct gfarm_host_info *info = vinfo;
 	static const char diag[] = "gfarm_ldap_host_info_set_field";
-	struct gfarm_internal_host_info *info = vinfo;
 
 	if (strcasecmp(attribute, "hostname") == 0) {
-		info->hi.hostname = strdup_log(vals[0], diag);
-		if (info->hi.hostname == NULL)
+		info->hostname = strdup_log(vals[0], diag);
+		if (info->hostname == NULL)
 			err = GFARM_ERR_NO_MEMORY;
 	} else if (strcasecmp(attribute, "port") == 0) {
-		info->hi.port = strtol(vals[0], NULL, 0);
+		info->port = strtol(vals[0], NULL, 0);
 	} else if (strcasecmp(attribute, "hostalias") == 0) {
-		info->hi.hostaliases = gfarm_strarray_dup_log(vals, diag);
-		if (info->hi.hostaliases == NULL) {
-			info->hi.nhostaliases = 0;
+		info->hostaliases = gfarm_strarray_dup_log(vals, diag);
+		if (info->hostaliases == NULL) {
+			info->nhostaliases = 0;
 			err = GFARM_ERR_NO_MEMORY;
 		} else {
-			info->hi.nhostaliases =
-			    gfarm_strarray_length(info->hi.hostaliases);
+			info->nhostaliases =
+			    gfarm_strarray_length(info->hostaliases);
 		}
 	} else if (strcasecmp(attribute, "architecture") == 0) {
-		info->hi.architecture = strdup_log(vals[0], diag);
-		if (info->hi.architecture == NULL)
+		info->architecture = strdup_log(vals[0], diag);
+		if (info->architecture == NULL)
 			err = GFARM_ERR_NO_MEMORY;
 	} else if (strcasecmp(attribute, "ncpu") == 0) {
-		info->hi.ncpu = strtol(vals[0], NULL, 0);
+		info->ncpu = strtol(vals[0], NULL, 0);
 	} else if (strcasecmp(attribute, "flags") == 0) {
-		info->hi.flags = strtol(vals[0], NULL, 0);
-	} else if (strcasecmp(attribute, "fsngroupname") == 0) {
-		info->fsngroupname = strdup_log(vals[0], diag);
-		if (info->fsngroupname == NULL)
-			err = GFARM_ERR_NO_MEMORY;
+		info->flags = strtol(vals[0], NULL, 0);
 	}
 	return (err);
 }
@@ -1348,7 +1340,7 @@ gfarm_ldap_host_remove(gfarm_uint64_t seqnum, char *hostname)
 
 static gfarm_error_t
 gfarm_ldap_host_load(void *closure,
-	void (*callback)(void *, struct gfarm_internal_host_info *))
+	void (*callback)(void *, struct gfarm_host_info *))
 {
 	struct gfarm_host_info tmp_info;
 
@@ -1356,30 +1348,6 @@ gfarm_ldap_host_load(void *closure,
 	    LDAP_SCOPE_ONELEVEL, gfarm_ldap_host_info_ops.query_type,
 	    &tmp_info, (void (*)(void *, void *))callback, closure,
 	    &gfarm_ldap_host_info_ops));
-}
-
-/**********************************************************************/
-
-static gfarm_error_t
-gfarm_ldap_fsngroup_modify(gfarm_uint64_t seqnum,
-	struct db_fsngroup_modify_arg *arg)
-{
-	int i = 0;
-	LDAPMod * modv[2];
-	struct ldap_string_modify storage[ARRAY_LENGTH(modv) - 1];
-	struct gfarm_ldap_host_info_key key;
-
-	key.hostname = arg->hostname;
-
-	set_string_mod(&modv[i], LDAP_MOD_REPLACE,
-		"objectclass", "GFarmHost", &storage[i]);
-	i++;
-	set_string_mod(&modv[i], LDAP_MOD_REPLACE,
-		"fsngroupname", arg->fsngroupname, &storage[i]);
-	i++;
-
-	return (gfarm_ldap_generic_info_modify(&key, modv,
-			&gfarm_ldap_host_info_ops));
 }
 
 /**********************************************************************/
@@ -3220,6 +3188,4 @@ const struct db_ops db_ldap_ops = {
 	NULL,
 	NULL,
 	NULL,
-
-	gfarm_ldap_fsngroup_modify,
 };

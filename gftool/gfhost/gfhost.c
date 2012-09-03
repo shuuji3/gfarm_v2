@@ -28,7 +28,6 @@
 #include "gfm_client.h"
 #include "gfs_client.h"
 #include "lookup.h"
-#include "filesystem.h"
 #include "config.h"
 
 char *program_name = "gfhost";
@@ -732,8 +731,6 @@ gfarm_paraccess_connect_request(void *closure)
 	struct gfarm_access *a = closure;
 	gfarm_error_t e;
 	struct gfs_client_connect_state *cs;
-	struct gfarm_filesystem *fs =
-	    gfarm_filesystem_get_by_connection(gfm_server);
 
 	e = gfs_client_get_load_result_multiplexed(a->protocol_state,
 	    &a->load);
@@ -743,7 +740,7 @@ gfarm_paraccess_connect_request(void *closure)
 	}
 	e = gfs_client_connect_request_multiplexed(a->pa->q,
 	    a->canonical_hostname, a->port, gfm_client_username(gfm_server),
-	    &a->peer_addr, fs, gfarm_paraccess_connect_finish, a, &cs);
+	    &a->peer_addr, gfarm_paraccess_connect_finish, a, &cs);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfarm_paraccess_callback(a->pa, a, &a->load, NULL, e);
 		return;

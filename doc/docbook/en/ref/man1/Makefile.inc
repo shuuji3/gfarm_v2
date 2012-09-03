@@ -9,6 +9,7 @@ DOCBOOK = \
 	gfgetfacl.1 \
 	gfgroup.1 \
 	gfhost.1 \
+	gfjournaladmin.1 \
 	gfkey.1 \
 	gfln.1 \
 	gfls.1 \
@@ -44,13 +45,7 @@ DOCBOOK = \
 	gfperf-wrapper.sh.1 \
 	gfperf-write.1 \
 	gfperf.rb.1 \
-	gfstress.rb.1 \
-	gfservice.1 \
-	gfservice-agent.1 \
-	gfrepattr.1 \
-	gfhostgroup.1 \
-	gfjournal.1 \
-	gfjournaladmin.1
+	gfstress.rb.1
 
 #	gfarm_agent.1 \
 #	gfcd.1 \

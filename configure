@@ -757,7 +757,6 @@ optional_srcs
 optional_rule
 optional_config
 top_private_dir
-linuxkernel_targets
 gfvoms_sync_targets
 PYTHON_SPECIFIED
 config_gfarm_sysdep_subdir
@@ -899,7 +898,6 @@ with_openldap
 with_postgresql
 enable_voms
 enable_xmlattr
-enable_linuxkernel
 with_private_srcdir
 '
       ac_precious_vars='build_alias
@@ -1535,7 +1533,6 @@ Optional Features:
                           [default=disable]
   --enable-xmlattr        support XML extended attributes and XPath search
                           [default=disable]
-  --enable-linuxkernel    support Linux kernel module utils.[[default=no]]
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -4317,13 +4314,13 @@ if ${lt_cv_nm_interface+:} false; then :
 else
   lt_cv_nm_interface="BSD nm"
   echo "int some_variable = 0;" > conftest.$ac_ext
-  (eval echo "\"\$as_me:4320: $ac_compile\"" >&5)
+  (eval echo "\"\$as_me:4317: $ac_compile\"" >&5)
   (eval "$ac_compile" 2>conftest.err)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:4323: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
+  (eval echo "\"\$as_me:4320: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
   (eval "$NM \"conftest.$ac_objext\"" 2>conftest.err > conftest.out)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:4326: output\"" >&5)
+  (eval echo "\"\$as_me:4323: output\"" >&5)
   cat conftest.out >&5
   if $GREP 'External.*some_variable' conftest.out > /dev/null; then
     lt_cv_nm_interface="MS dumpbin"
@@ -5528,7 +5525,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 5531 "configure"' > conftest.$ac_ext
+  echo '#line 5528 "configure"' > conftest.$ac_ext
   if { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_compile\""; } >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -7053,11 +7050,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7056: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7053: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:7060: \$? = $ac_status" >&5
+   echo "$as_me:7057: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7392,11 +7389,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7395: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7392: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:7399: \$? = $ac_status" >&5
+   echo "$as_me:7396: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7497,11 +7494,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7500: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7497: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:7504: \$? = $ac_status" >&5
+   echo "$as_me:7501: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -7552,11 +7549,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7555: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7552: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:7559: \$? = $ac_status" >&5
+   echo "$as_me:7556: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -9936,7 +9933,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 9939 "configure"
+#line 9936 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -10032,7 +10029,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 10035 "configure"
+#line 10032 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -13046,79 +13043,6 @@ $as_echo "#define ENABLE_XMLATTR 1" >>confdefs.h
 
 fi
 fi
-
-
-###
-###  --enable-linuxkernel		support Linux kernel module utils
-###
-
-# Check whether --enable-linuxkernel was given.
-if test "${enable_linuxkernel+set}" = set; then :
-  enableval=$enable_linuxkernel; if test "${enable_linuxkernel}" = "yes"; then
-	# ug_idmapd uses libevent
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for event_init in -levent" >&5
-$as_echo_n "checking for event_init in -levent... " >&6; }
-if ${ac_cv_lib_event_event_init+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-levent  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char event_init ();
-int
-main ()
-{
-return event_init ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_event_event_init=yes
-else
-  ac_cv_lib_event_event_init=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_event_event_init" >&5
-$as_echo "$ac_cv_lib_event_event_init" >&6; }
-if test "x$ac_cv_lib_event_event_init" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBEVENT 1
-_ACEOF
-
-  LIBS="-levent $LIBS"
-
-fi
-
-	for ac_header in event.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "event.h" "ac_cv_header_event_h" "$ac_includes_default"
-if test "x$ac_cv_header_event_h" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_EVENT_H 1
-_ACEOF
-
-fi
-
-done
-
-	linuxkernel_targets='linux'
-fi
-else
-  linuxkernel_targets=''
-fi
-
 
 
 ###

@@ -15,7 +15,7 @@
 #include <omp.h>
 #define LIBGFARM_NOT_MT_SAFE
 #else
-static void omp_set_num_threads(int n){ return; }
+static void omp_set_num_threads(int n) { return; }
 static int omp_get_num_threads(void){ return (1); }
 static int omp_get_thread_num(void){ return (0); }
 #endif
@@ -183,6 +183,11 @@ create_filelist(char *file, struct gfs_stat *st, void *arg)
 	char **copy;
 	gfarm_error_t e;
 
+	if (!GFARM_S_ISREG(st->st_mode)) {
+		if (opt_verbose)
+			printf("%s: not a regular file, skipped\n", file);
+		return (GFARM_ERR_NO_ERROR);
+	}
 	e = gfs_replica_list_by_name(file, &ncopy, &copy);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -341,7 +346,7 @@ print_file_list(struct gfarm_list *list)
 {
 	int i;
 
-	for (i= 0; i < gfarm_list_length(list); ++i)
+	for (i = 0; i < gfarm_list_length(list); ++i)
 		print_file_info(gfarm_stringlist_elem(list, i));
 }
 
@@ -442,7 +447,7 @@ action(struct action *act, int tnum, int nth, int pi, struct file_info *fi,
 	while (1) {
 		while (fi->surplus_ncopy == 0
 		       && (file_copy_does_exist(fi, dst[di])
-			   || ! is_enough_space(
+			   || !is_enough_space(
 				   dst[di], dst_port[di], fi->filesize))
 		       && max_niter > 0) {
 			if (opt_verbose)
@@ -516,7 +521,7 @@ pfor(struct action *act, int nfinfo, struct file_info **finfo,
 	}
 	omp_set_num_threads(nthreads);
 
-#pragma omp parallel reduction(+:nerr) private(pi,tnum,nth)
+#pragma omp parallel reduction(+:nerr) private(pi, tnum, nth)
 	{
 	pi = 0;
 	tnum = omp_get_thread_num();
@@ -554,8 +559,7 @@ pfor(struct action *act, int nfinfo, struct file_info **finfo,
 			if (!opt_noexec) {
 				e = action(act, tnum, nth, pi, fi, arg);
 				errmsg = gfarm_error_string(e);
-			}
-			else {
+			} else {
 				e = GFARM_ERR_NO_ERROR;
 				errmsg = gfarm_error_string(e);
 			}
@@ -567,7 +571,7 @@ pfor(struct action *act, int nfinfo, struct file_info **finfo,
 				       fi->filesize / t / 1024 / 1024);
 			}
 #ifdef LIBGFARM_NOT_MT_SAFE
-		skip_replication:
+ skip_replication:
 #endif
 			if (e != GFARM_ERR_NO_ERROR) {
 #ifndef LIBGFARM_NOT_MT_SAFE
@@ -581,7 +585,8 @@ pfor(struct action *act, int nfinfo, struct file_info **finfo,
 			sync();
 			_exit(e == GFARM_ERR_NO_ERROR ? 0 : 1);
 		}
-		while ((rv = waitpid(pid, &s, 0)) == -1 && errno == EINTR);
+		while ((rv = waitpid(pid, &s, 0)) == -1 && errno == EINTR)
+			;
 		if (rv == -1 || (WIFEXITED(s) && WEXITSTATUS(s) != 0))
 			++nerr;
 #endif
