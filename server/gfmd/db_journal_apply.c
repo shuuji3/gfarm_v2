@@ -2,27 +2,22 @@
  * $Id$
  */
 
-#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
-#include "gfp_xdr.h"
 #include "config.h"
+#include "quota.h"
 #include "metadb_server.h"
-
+#include "db_ops.h"
 #include "host.h"
 #include "user.h"
 #include "group.h"
 #include "inode.h"
 #include "dir.h"
-#include "quota.h"
 #include "mdhost.h"
 #include "journal_file.h"	/* for enum journal_operation */
-#include "db_ops.h"
 #include "db_journal.h"
 
 /**********************************************************/
@@ -96,29 +91,6 @@ db_journal_apply_host_remove(gfarm_uint64_t seqnum, char *hostname)
 		    "seqnum=%llu hostname=%s : %s",
 		    (unsigned long long)seqnum,
 		    hostname, gfarm_error_string(e));
-	return (e);
-}
-
-/**********************************************************/
-/* fsngroup */
-
-static gfarm_error_t
-db_journal_apply_fsngroup_modify(gfarm_uint64_t seqnum,
-	struct db_fsngroup_modify_arg *arg)
-{
-	gfarm_error_t e;
-	struct host *h;
-	static const char diag[] = "db_journal_apply_fsngroup_modify";
-
-	if ((h = host_lookup(arg->hostname)) == NULL) {
-		e = GFARM_ERR_NO_SUCH_OBJECT;
-		gflog_error(GFARM_MSG_UNFIXED,
-			"seqnum=%llu hostname=%s : %s",
-			(unsigned long long)seqnum,
-			arg->hostname, gfarm_error_string(e));
-	} else {
-		e = host_fsngroup_modify(h, arg->fsngroupname, diag);
-	}
 	return (e);
 }
 
@@ -500,6 +472,16 @@ db_journal_apply_filecopy_add(gfarm_uint64_t seqnum,
 		    gfarm_error_string(e));
 	} else if ((e = inode_add_file_copy_in_cache(n,
 	    host)) != GFARM_ERR_NO_ERROR) {
+#if 1 /* XXX FIXME: workaround for SourceForge #434 (#431) */
+		if (e == GFARM_ERR_ALREADY_EXISTS) {
+			gflog_error(GFARM_MSG_1003546,
+			    "db_journal_apply_filecopy_add: "
+			    "inum=%llu hostname=%s: ignoring - %s",
+			    (unsigned long long)arg->inum, arg->hostname,
+			    gfarm_error_string(e));
+			return (GFARM_ERR_NO_ERROR); /* ignore this error */
+		}
+#endif
 		gflog_error(GFARM_MSG_1003229,
 		    "inum=%llu hostname=%s : %s",
 		    (unsigned long long)arg->inum, arg->hostname,
@@ -898,8 +880,6 @@ const struct db_ops db_journal_apply_ops = {
 	db_journal_apply_mdhost_modify,
 	db_journal_apply_mdhost_remove,
 	NULL,
-
-	db_journal_apply_fsngroup_modify,
 };
 
 void

@@ -79,8 +79,8 @@ gfarm_auth_request_gsi(struct gfp_xdr *conn,
 
 	if (cred == GSS_C_NO_CREDENTIAL) { /* if not delegated */
 		switch (self_type) {
-		case GFARM_AUTH_ID_TYPE_SPOOL_HOST:
-			/*
+		  case GFARM_AUTH_ID_TYPE_SPOOL_HOST:
+			/* 
 			 * If spool_server_cred_service is specified,
 			 * a service certificate is used.
 			 */
@@ -96,15 +96,14 @@ gfarm_auth_request_gsi(struct gfp_xdr *conn,
 			    &initiator_name);
 			if (e != GFARM_ERR_NO_ERROR) {
 				gflog_auth_error(GFARM_MSG_1000698,
-				    "Service credential configuration for "
-				    "%s: %s",
+				    "Service credential configuration for %s: %s",
 				    spool_servicename, gfarm_error_string(e));
 				return (e);
 			}
 			break;
-		case GFARM_AUTH_ID_TYPE_USER: /* from client */
+		  case GFARM_AUTH_ID_TYPE_USER: /* from client */
 			break;
-		default:
+		  default:
 			break;
 		}
 
@@ -117,7 +116,7 @@ gfarm_auth_request_gsi(struct gfp_xdr *conn,
 		    &e_major, &e_minor, NULL) < 0) {
 			if (gflog_auth_get_verbose()) {
 				gflog_error(GFARM_MSG_1000699,
-				    "Can't acquire my credential "
+				    "Can't acquire my credentail "
 				    "because of:");
 				gfarmGssPrintMajorStatus(e_major);
 				gfarmGssPrintMinorStatus(e_minor);
@@ -382,7 +381,7 @@ gfarm_auth_request_gsi_multiplexed(struct gfarm_eventqueue *q,
 		    &e_major, &e_minor, NULL) < 0) {
 			if (gflog_auth_get_verbose()) {
 				gflog_error(GFARM_MSG_1000704,
-				    "Can't acquire my credential "
+				    "Can't acquire my credentail "
 				    "because of:");
 				gfarmGssPrintMajorStatus(e_major);
 				gfarmGssPrintMinorStatus(e_minor);

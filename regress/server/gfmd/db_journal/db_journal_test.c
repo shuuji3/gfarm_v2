@@ -12,10 +12,10 @@
 #include <sys/types.h>
 #include <pthread.h>
 
-#include "db_journal.c"
-
+#include "thrsubr.h"
 #include "thrbarrier.h"
-/* #include "thrsubr.h" */ /* already included in db_journal.c */
+
+#include "db_journal.c"
 
 #include "crc32.h"
 #include "user.h"
@@ -28,11 +28,8 @@
 
 /* XXX FIXME - dummy definitions to link successfully without gfmd.o */
 struct thread_pool *sync_protocol_get_thrpool(void) { return NULL; }
-int protocol_service(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep)
-{ return 0; }
 void resuming_enqueue(void *entry) {}
 void gfmd_terminate(void) {}
-int gfmd_port;
 
 static char *program_name = "db_journal_test";
 static const char *filepath;
@@ -3552,7 +3549,7 @@ t_apply(void)
 	struct journal_file_reader *reader;
 	struct journal_file_writer *writer;
 	off_t wpos1, wpos2;
-	char msg[BUFSIZ];
+	char msg[BUFSIZ], *config;
 	int i;
 
 	unlink_test_file(filepath);
@@ -3570,6 +3567,9 @@ t_apply(void)
 	db_journal_apply_init();
 	db_journal_init_status();
 	db_journal_set_sync_op(t_no_sync);
+	if ((config = getenv("GFARM_CONFIG_FILE")) != NULL)
+		gfarm_config_set_filename(config);
+	gfarm_server_config_read();
 	gfarm_set_metadb_replication_enabled(0);
 	db_use(&empty_ops);
 	gfarm_set_metadb_replication_enabled(1);
@@ -3579,6 +3579,7 @@ t_apply(void)
 	host_init();
 	user_init();
 	group_init();
+	inode_init_desired_number();
 	inode_init();
 	dir_entry_init();
 	file_copy_init();
@@ -3607,11 +3608,7 @@ main(int argc, char **argv)
 {
 	int c, op = 0;
 
-	/* XXX: settings in gfmd.conf doesn't work in this case */
-	char *config  = getenv("GFARM_CONFIG_FILE");
-
 	debug_mode = 1;
-	gfarm_server_initialize(config, &argc, &argv);
 	gflog_set_priority_level(LOG_DEBUG);
 	gflog_set_message_verbose(99);
 

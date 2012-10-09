@@ -17,7 +17,6 @@
 #include <gfarm/gfs.h>
 
 #include "gfutil.h"
-#include "hash.h"
 
 #include "gfm_client.h"
 
@@ -50,16 +49,16 @@ gfm_client_replica_add(gfarm_ino_t inum, gfarm_uint64_t gen, gfarm_off_t size)
 
 static gfarm_error_t
 gfm_client_replica_get_my_entries(gfarm_ino_t start_inum, int *np,
-	gfarm_ino_t **inumsp, gfarm_uint64_t **gensp, gfarm_off_t **sizesp)
+	gfarm_ino_t **inumsp, gfarm_uint64_t **gensp)
 {
 	gfarm_error_t e;
-	static const char diag[] = "replica_get_my_entries2";
+	static const char diag[] = "replica_get_my_entries";
 
 	if ((e = gfm_client_replica_get_my_entries_request(
 	    gfm_server, start_inum, *np)) != GFARM_ERR_NO_ERROR)
 		fatal_metadb_proto(GFARM_MSG_1003516, "request", diag, e);
 	else if ((e = gfm_client_replica_get_my_entries_result(
-	    gfm_server, np, inumsp, gensp, sizesp)) != GFARM_ERR_NO_ERROR) {
+	    gfm_server, np, inumsp, gensp)) != GFARM_ERR_NO_ERROR) {
 		if (debug_mode)
 			gflog_info(GFARM_MSG_1003517, "%s result: %s", diag,
 			    gfarm_error_string(e));
@@ -101,7 +100,11 @@ move_file_to_lost_found_main(const char *file, struct stat *stp,
 	gfarm_uint64_t gen_new;
 
 	mtime.tv_sec = stp->st_mtime;
-	mtime.tv_nsec = gfarm_stat_mtime_nsec(stp);
+#ifdef HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC
+	mtime.tv_nsec = stp->st_mtim.tv_nsec;
+#else
+	mtime.tv_nsec = 0;
+#endif
 	e = gfm_client_replica_create_file_in_lost_found(
 	    inum_old, gen_old, (gfarm_off_t)stp->st_size, &mtime,
 	    &inum_new, &gen_new);
@@ -150,20 +153,6 @@ move_file_to_lost_found_main(const char *file, struct stat *stp,
 	return (e);
 }
 
-static void
-replica_lost(gfarm_ino_t inum, gfarm_uint64_t gen)
-{
-	gfarm_error_t e = gfm_client_replica_lost(inum, gen);
-
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_error(GFARM_MSG_1003527,
-		    "replica_lost(%llu, %llu): %s",
-		    (unsigned long long)inum,
-		    (unsigned long long)gen,
-		    gfarm_error_string(e));
-	}
-}
-
 static gfarm_error_t
 move_file_to_lost_found(const char *file, struct stat *stp,
 	gfarm_ino_t inum_old, gfarm_uint64_t gen_old, int size_mismatch)
@@ -171,8 +160,6 @@ move_file_to_lost_found(const char *file, struct stat *stp,
 	gfarm_error_t e;
 
 	if (stp->st_size == 0) { /* unreferred empty file is unnecessary */
-		if (size_mismatch)
-			replica_lost(inum_old, gen_old);
 		if (unlink(file)) {
 			e = gfarm_errno_to_error(errno);
 			gflog_warning(GFARM_MSG_1003524,
@@ -195,7 +182,15 @@ move_file_to_lost_found(const char *file, struct stat *stp,
 		return (e);
 	}
 	if (size_mismatch) {
-		replica_lost(inum_old, gen_old);
+		e = gfm_client_replica_lost(inum_old, gen_old);
+		if (e != GFARM_ERR_NO_ERROR) {
+			gflog_error(GFARM_MSG_1003527,
+			    "replica_lost(%llu, %llu): %s",
+			    (unsigned long long)inum_old,
+			    (unsigned long long)gen_old,
+			    gfarm_error_string(e));
+			return (e);
+		}
 		gflog_notice(GFARM_MSG_1003528,
 		     "(%llu:%llu): size mismatch, "
 		     "moved to /lost+found/%016llX%016llX-%s",
@@ -356,11 +351,9 @@ static gfarm_error_t
 check_file(char *file, struct stat *stp, void *arg)
 {
 	gfarm_ino_t inum;
-	gfarm_uint64_t gen, *genp;
+	gfarm_uint64_t gen;
 	gfarm_off_t size;
 	gfarm_error_t e;
-	struct gfarm_hash_table *hash_ok = arg;
-	struct gfarm_hash_entry *hash_ent;
 
 	/* READONLY_CONFIG_FILE should be skipped */
 	if (strcmp(file, READONLY_CONFIG_FILE) == 0)
@@ -368,15 +361,6 @@ check_file(char *file, struct stat *stp, void *arg)
 
 	if (get_inum_gen(file, &inum, &gen))
 		return (deal_with_invalid_file(file, stp, 0, 0, 0, 0));
-	if (hash_ok) {
-		hash_ent = gfarm_hash_lookup(hash_ok, &inum, sizeof(inum));
-		if (hash_ent) {
-			genp = gfarm_hash_entry_data(hash_ent);
-			if (*genp == gen)  /* already checked, valid file */
-				return (GFARM_ERR_NO_ERROR);
-		}
-	}
-
 	size = stp->st_size;
 	e = gfm_client_replica_add(inum, gen, size);
 	switch (e) {
@@ -407,23 +391,20 @@ check_file(char *file, struct stat *stp, void *arg)
 }
 
 static gfarm_error_t
-check_spool(char *dir, struct gfarm_hash_table *hash_ok)
+check_spool(char *dir)
 {
-	return (dir_foreach(check_file, NULL, NULL, dir, hash_ok));
+	return (dir_foreach(check_file, NULL, NULL, dir, NULL));
 }
 
 static void
-check_existing(
-	struct gfarm_hash_table *hash_ok,
-	gfarm_ino_t inum, gfarm_uint64_t gen, gfarm_off_t size)
+check_existing(gfarm_ino_t inum, gfarm_uint64_t gen)
 {
 	gfarm_error_t e;
 	char *path, *file;
 	struct stat st;
 	int save_errno, lost = 0;
 	gfarm_ino_t inum2;
-	gfarm_uint64_t gen2, *genp;
-	struct gfarm_hash_entry *hash_ent;
+	gfarm_uint64_t gen2;
 
 	/*
 	 * If gfsd_local_path() or get_inum_gen() are broken,
@@ -457,21 +438,7 @@ check_existing(
 		    "delete the metadata entry for %llu:%llu", path,
 		    (unsigned long long)inum, (unsigned long long)gen);
 		lost = 1;
-	} else if (st.st_size == size && hash_ok) { /* valid file */
-		/* save inum:gen pair to skip this file in check_spool() */
-		hash_ent = gfarm_hash_enter(
-		    hash_ok, &inum, sizeof(inum), sizeof(gen), NULL);
-		if (hash_ent) {
-			genp = gfarm_hash_entry_data(hash_ent);
-			*genp = gen;
-		}
-		/*
-		 * If hash_ent == NULL, this file will be checked by
-		 * gfm_client_replica_add().
-		 */
 	}
-	/* else: This file will be checked by gfm_client_replica_add(). */
-
 	if (lost) { /* delete the replica-reference from metadata */
 		e = gfm_client_replica_lost(inum, gen);
 		if (e != GFARM_ERR_NO_ERROR)
@@ -483,21 +450,19 @@ check_existing(
 	free(path);
 }
 
-#define REQUEST_NUM 10000
+#define REQUEST_NUM 2048
 
 static gfarm_error_t
-check_metadata(struct gfarm_hash_table *hash_ok)
+check_metadata()
 {
 	gfarm_error_t e;
 	gfarm_ino_t inum, *inums;
 	gfarm_uint64_t *gens;
-	gfarm_off_t *sizes;
 	int i, n;
 
 	for (inum = 0;; inum++) {
 		n = REQUEST_NUM;
-		e = gfm_client_replica_get_my_entries(
-		    inum, &n, &inums, &gens, &sizes);
+		e = gfm_client_replica_get_my_entries(inum, &n, &inums, &gens);
 		if (e == GFARM_ERR_NO_SUCH_OBJECT)
 			return (GFARM_ERR_NO_ERROR); /* end */
 		else if (e != GFARM_ERR_NO_ERROR) {
@@ -508,53 +473,37 @@ check_metadata(struct gfarm_hash_table *hash_ok)
 			return (e);
 		}
 		for (i = 0; i < n && i < REQUEST_NUM; i++) {
-			check_existing(hash_ok, inums[i], gens[i], sizes[i]);
+			check_existing(inums[i], gens[i]);
 			inum = inums[i];
 		}
 		free(inums);
 		free(gens);
-		free(sizes);
 		if (n < REQUEST_NUM)
 			return (GFARM_ERR_NO_ERROR); /* end */
 	}
 }
 
-#define HASH_OK_SIZE 999983
-
 /*
  * check_level:
- *  0, 1      ... display invalid files (slow)
- *  2         ... delete invalid files  (slow)
+ *  0, 1      ... display invalid files
+ *  2         ... delete invalid files
  *  otherwise ... move invalid files to gfarm:///lost+found
  *                and delete invalid replica-references from metadata
  */
 gfarm_error_t
 gfsd_spool_check(int check_level)
 {
-	gfarm_error_t e;
-	struct gfarm_hash_table *hash_ok;
-
 	switch (check_level) {
 	case 0:
 	case 1:
 		invalid_file_mode = MODE_DISPLAY;
-		e = check_spool(".", NULL);
 		break;
 	case 2:
 		invalid_file_mode = MODE_DELETE;
-		e = check_spool(".", NULL);
 		break;
 	default:
-		hash_ok = gfarm_hash_table_alloc(
-			HASH_OK_SIZE,
-			gfarm_hash_default, gfarm_hash_key_equal_default);
-		if (hash_ok == NULL)
-			fatal(GFARM_MSG_UNFIXED, "no memory for spool_check");
-		check_metadata(hash_ok);
-
+		check_metadata();
 		invalid_file_mode = MODE_LOST_FOUND;
-		e = check_spool(".", hash_ok);
-		gfarm_hash_table_free(hash_ok);
 	}
-	return (e);
+	return (check_spool("."));
 }

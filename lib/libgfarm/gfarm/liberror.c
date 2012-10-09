@@ -140,7 +140,6 @@ static const char *errcode_string[GFARM_ERR_NUMBER] = {
 	"gfmd was failed over",
 	"bad inode number",
 	"bad cookie",
-	"invalid remote peer",
 };
 
 static const char *errmsg_string[GFARM_ERRMSG_END - GFARM_ERRMSG_BEGIN] = {
@@ -401,9 +400,9 @@ static struct gfarm_errno_error_map {
 	/*		GFARM_ERR_NO_SUCH_OBJECT */
 	/*		GFARM_ERR_CANT_OPEN */
 #ifdef EPROTO
-	{ EPROTO,	GFARM_ERR_UNEXPECTED_EOF },
+        { EPROTO,	GFARM_ERR_UNEXPECTED_EOF },
 #else
-	{ ECONNABORTED,	GFARM_ERR_UNEXPECTED_EOF },
+        { ECONNABORTED,	GFARM_ERR_UNEXPECTED_EOF },
 #endif
 	/*		GFARM_ERR_GFARM_URL_PREFIX_IS_MISSING */
 	{ EAGAIN,	GFARM_ERR_TOO_MANY_JOBS },
@@ -613,11 +612,8 @@ gfarm_error_string(gfarm_error_t error)
 {
 	struct gfarm_error_domain *domain;
 
-	if (error < 0) {
-		gflog_warning(GFARM_MSG_UNFIXED,
-		    "gfarm_error_string: invalid error: %d", error);
+	if (error < 0)
 		return (errcode_string[GFARM_ERR_UNKNOWN]);
-	}
 	if (error < GFARM_ERR_NUMBER) {
 		if (error >= GFARM_ARRAY_LENGTH(errcode_string)) {
 			gflog_warning(GFARM_MSG_1000852,
@@ -628,11 +624,8 @@ gfarm_error_string(gfarm_error_t error)
 		return (errcode_string[error]);
 	}
 
-	if (error < GFARM_ERRMSG_BEGIN) {
-		gflog_warning(GFARM_MSG_UNFIXED,
-		    "gfarm_error_string: unknown error: %d", error);
+	if (error < GFARM_ERRMSG_BEGIN)
 		return (errcode_string[GFARM_ERR_UNKNOWN]);
-	}
 	if (error < GFARM_ERRMSG_END)
 		return (errmsg_string[error - GFARM_ERRMSG_BEGIN]);
 
@@ -648,14 +641,8 @@ gfarm_error_string(gfarm_error_t error)
 		    domain->domerror_to_message_cookie,
 		    domain->domerror_min + error));
 	}
-	gflog_warning(GFARM_MSG_UNFIXED,
-	    "gfarm_error_string: unassigned error: %d", error);
 	return (errcode_string[GFARM_ERR_UNKNOWN]);
 }
-
-#ifdef __KERNEL__
-#undef HAVE_SYS_NERR
-#endif /* __KERNEL__ */
 
 #if defined(HAVE_SYS_NERR)
 # define ERRNO_NUMBER sys_nerr
@@ -711,19 +698,13 @@ gfarm_errno_to_error_initialize(void)
 gfarm_error_t
 gfarm_errno_to_error(int eno)
 {
-	gfarm_error_t e;
 	static pthread_once_t gfarm_errno_to_error_initialized =
 	    PTHREAD_ONCE_INIT;
 
 	pthread_once(&gfarm_errno_to_error_initialized,
 	    gfarm_errno_to_error_initialize);
 
-	e = gfarm_error_domain_map(gfarm_errno_domain, eno);
-	if (e == GFARM_ERR_UNKNOWN)
-		gflog_notice(GFARM_MSG_UNFIXED,
-		    "errno %d:\"%s\" is converted to \"%s\"",
-		    eno, strerror(eno), gfarm_error_string(GFARM_ERR_UNKNOWN));
-	return (e);
+	return (gfarm_error_domain_map(gfarm_errno_domain, eno));
 }
 
 static int gfarm_error_to_errno_map[GFARM_ERR_NUMBER];

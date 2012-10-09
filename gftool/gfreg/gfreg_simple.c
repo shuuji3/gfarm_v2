@@ -7,7 +7,6 @@
 #include <libgen.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 
@@ -17,11 +16,9 @@
 
 #include "gfutil.h"
 #include "timer.h"
-
-#include "context.h"
 #include "gfs_profile.h"
 #include "host.h"
-#include "gfarm_path.h"
+#include "config.h"
 
 /* XXX FIXME: INTERNAL FUNCTION SHOULD NOT BE USED */
 #include <openssl/evp.h>
@@ -30,20 +27,9 @@
 char *program_name = "gfreg";
 
 gfarm_error_t
-gfimport(FILE *ifp, GFS_File ogf, gfarm_off_t size)
+gfimport(FILE *ifp, GFS_File ogf)
 {
-	gfarm_error_t e;
 	int c;
-
-	if (size > 0) {
-		while (size > 0 && (c = getc(ifp)) != EOF) {
-			e = gfs_pio_putc(ogf, c);
-			if (e != GFARM_ERR_NO_ERROR)
-				break;
-			size--;
-		}
-		return (gfs_pio_error(ogf));
-	}
 
 	while ((c = getc(ifp)) != EOF)
 		gfs_pio_putc(ogf, c);
@@ -52,12 +38,11 @@ gfimport(FILE *ifp, GFS_File ogf, gfarm_off_t size)
 
 gfarm_error_t
 gfimport_to(FILE *ifp, char *gfarm_url, int mode,
-	char *host, gfarm_off_t off, gfarm_off_t size)
+	char *host)
 {
 	gfarm_error_t e, e2;
 	GFS_File gf;
 	gfarm_timerval_t t1, t2, t3, t4, t5;
-	int flags;
 
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t2);
@@ -66,11 +51,8 @@ gfimport_to(FILE *ifp, char *gfarm_url, int mode,
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t5);
 
 	gfs_profile(gfarm_gettimerval(&t1));
-	if (off > 0)
-		flags = GFARM_FILE_WRONLY;
-	else
-		flags = GFARM_FILE_WRONLY|GFARM_FILE_TRUNC;
-	e = gfs_pio_create(gfarm_url, flags, mode, &gf);
+	e = gfs_pio_create(
+		gfarm_url, GFARM_FILE_WRONLY|GFARM_FILE_TRUNC, mode, &gf);
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: %s\n", gfarm_url, gfarm_error_string(e));
 		return (e);
@@ -84,15 +66,7 @@ gfimport_to(FILE *ifp, char *gfarm_url, int mode,
 	}
 	gfs_profile(gfarm_gettimerval(&t3));
 
-	if (off > 0) {
-		e = gfs_pio_seek(gf, off, GFARM_SEEK_SET, NULL);
-		if (e != GFARM_ERR_NO_ERROR) {
-			fprintf(stderr, "seeking %s: %s\n",
-			    gfarm_url, gfarm_error_string(e));
-			goto close;
-		}
-	}
-	e = gfimport(ifp, gf, size);
+	e = gfimport(ifp, gf);
 	if (e != GFARM_ERR_NO_ERROR)
 		fprintf(stderr, "writing to %s: %s\n", gfarm_url,
 		    gfarm_error_string(e));
@@ -115,33 +89,24 @@ gfimport_to(FILE *ifp, char *gfarm_url, int mode,
 
 gfarm_error_t
 gfimport_from_to(const char *ifile, char *gfarm_url,
-	char *host, gfarm_off_t off, gfarm_off_t size)
+	char *host)
 {
 	gfarm_error_t e;
-	FILE *ifp;
+	FILE *ifp = fopen(ifile, "r");
 	struct stat st;
-	int rv, save_errno;
+	int rv;
 
-	if (strcmp(ifile, "-") == 0)
-		ifp = stdin;
-	else
-		ifp = fopen(ifile, "r");
 	if (ifp == NULL) {
 		perror(ifile);
 		return (GFARM_ERR_CANT_OPEN);
 	}
-	if (ifp != stdin) {
-		rv = stat(ifile, &st);
-		if (rv == -1) {
-			save_errno = errno;
-			fclose(ifp);
-			perror("stat");
-			return (gfarm_errno_to_error(save_errno));
-		}
+	rv = stat(ifile, &st);
+	if (rv == -1) {
+		perror("stat");
+		return (gfarm_errno_to_error(errno));
 	}
-	e = gfimport_to(ifp, gfarm_url, st.st_mode & 0777, host, off, size);
-	if (ifp != stdin)
-		fclose(ifp);
+	e = gfimport_to(ifp, gfarm_url, st.st_mode & 0777, host);
+	fclose(ifp);
 	return (e);
 }
 
@@ -152,11 +117,6 @@ usage(void)
 	    program_name);
 	fprintf(stderr, "option:\n");
 	fprintf(stderr, "\t%s\n", "-h <hostname>");
-#if 0
-	fprintf(stderr, "\t%s\t%s\n", "-o <offset>",
-	    "skip bytes at start of output, not truncate the file");
-	fprintf(stderr, "\t%s\t%s\n", "-s <size>", "output size");
-#endif
 	fprintf(stderr, "\t%s\t%s\n", "-p", "turn on profiling");
 	fprintf(stderr, "\t%s\t%s\n", "-v", "verbose output");
 	exit(1);
@@ -167,8 +127,8 @@ main(int argc, char **argv)
 {
 	gfarm_error_t e;
 	int c, status = 0;
-	char *host = NULL, *path = NULL;
-	gfarm_off_t off = -1, size = -1;
+	char *host = NULL;
+	extern int optind;
 
 	if (argc > 0)
 		program_name = basename(argv[0]);
@@ -179,19 +139,13 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
-	while ((c = getopt(argc, argv, "h:o:ps:v?")) != -1) {
+	while ((c = getopt(argc, argv, "h:pv?")) != -1) {
 		switch (c) {
 		case 'p':
 			gfs_profile_set();
 			break;
 		case 'h':
 			host = optarg;
-			break;
-		case 'o':
-			off = atoll(optarg);
-			break;
-		case 's':
-			size = atoll(optarg);
 			break;
 		case 'v':
 			gflog_auth_set_verbose(1);
@@ -206,13 +160,9 @@ main(int argc, char **argv)
 	if (argc != 2)
 		usage();
 
-	e = gfarm_realpath_by_gfarm2fs(argv[1], &path);
-	if (e == GFARM_ERR_NO_ERROR)
-		argv[1] = path;
-	e = gfimport_from_to(argv[0], argv[1], host, off, size);
+	e = gfimport_from_to(argv[0], argv[1], host);
 	if (e != GFARM_ERR_NO_ERROR)
 		status = 1;
-	free(path);
 
 	e = gfarm_terminate();
 	if (e != GFARM_ERR_NO_ERROR) {
