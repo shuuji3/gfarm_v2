@@ -14,8 +14,7 @@ struct abstract_host *mdhost_to_abstract_host(struct mdhost *);
 struct gfmdc_journal_send_closure;
 void mdhost_configure_journal_send_closure(
 	void (*wakeup)(void),
-	struct gfmdc_journal_send_closure *(*)(void),
-	void (*)(struct gfmdc_journal_send_closure *));
+	struct gfmdc_journal_send_closure *(*)(void));
 struct gfmdc_journal_send_closure *
 	mdhost_get_journal_send_closure(struct mdhost *);
 
@@ -31,16 +30,11 @@ int mdhost_self_is_readonly(void);
 int mdhost_self_is_readonly_unlocked(void);
 
 struct peer;
-gfarm_error_t gfm_server_metadb_server_get(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_metadb_server_get_all(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_metadb_server_set(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_metadb_server_modify(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_metadb_server_remove(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
+gfarm_error_t gfm_server_metadb_server_get(struct peer *, int, int);
+gfarm_error_t gfm_server_metadb_server_get_all(struct peer *, int, int);
+gfarm_error_t gfm_server_metadb_server_set(struct peer *, int, int);
+gfarm_error_t gfm_server_metadb_server_modify(struct peer *, int, int);
+gfarm_error_t gfm_server_metadb_server_remove(struct peer *, int, int);
 
 struct journal_file_reader;
 struct journal_file_reader *mdhost_get_journal_file_reader(struct mdhost *);

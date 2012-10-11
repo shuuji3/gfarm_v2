@@ -22,5 +22,4 @@ include $(top_srcdir)/makes/prog.mk
 $(OBJS): $(DEPGFARMINC) \
 	$(GFARMLIB_SRCDIR)/gfm_client.h \
 	$(GFARMLIB_SRCDIR)/gfm_schedule.h \
-	$(GFARMLIB_SRCDIR)/schedule.h \
-	$(GFARMLIB_SRCDIR)/gfarm_path.h
+	$(GFARMLIB_SRCDIR)/schedule.h

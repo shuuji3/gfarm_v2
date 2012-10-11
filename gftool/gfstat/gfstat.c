@@ -12,7 +12,6 @@
 
 #include "gfm_client.h"
 #include "lookup.h"
-#include "gfarm_path.h"
 
 /*
  * Display struct gfs_stat.
@@ -49,12 +48,10 @@ display_stat(char *fn, struct gfs_stat *st)
 	printf("  Mode: (%04o) Uid: (%8s) Gid: (%8s)\n",
 	       st->st_mode & GFARM_S_ALLPERM,
 	       st->st_user, st->st_group);
-	printf(" Inode: %-12" GFARM_PRId64 " Gen: %-12" GFARM_PRId64 "\n",
-	       st->st_ino, st->st_gen);
-	printf("       (%016llX%016llX)\n",
-	       (long long)st->st_ino, (long long)st->st_gen);
-	printf(" Links: %-12" GFARM_PRId64 " Ncopy: %-12" GFARM_PRId64 "\n",
-	       st->st_nlink, st->st_ncopy);
+	printf(" Inode: %-12" GFARM_PRId64 " Gen: %-12" GFARM_PRId64
+	       " Links: %-12" GFARM_PRId64 "\n",
+	       st->st_ino, st->st_gen, st->st_nlink);
+	printf(" Ncopy: %-12" GFARM_PRId64 "\n", st->st_ncopy);
 
 	clock = st->st_atimespec.tv_sec; printf("Access: %s", ctime(&clock));
 	clock = st->st_mtimespec.tv_sec; printf("Modify: %s", ctime(&clock));
@@ -88,6 +85,7 @@ main(int argc, char *argv[])
 {
 	char *prog_name = argc > 0 ? basename(argv[0]) : "gfstat";
 	gfarm_error_t e;
+	extern int optind;
 	int show_gfm_server = 0, show_ncopy_only = 0, show_symlink = 0;
 	int c, first_entry = 1, r = 0;
 
@@ -128,11 +126,7 @@ main(int argc, char *argv[])
 	for (; *argv; ++argv) {
 		struct gfs_stat st;
 		struct gfm_connection *gfm_server;
-		char *realpath = NULL;
 
-		e = gfarm_realpath_by_gfarm2fs(*argv, &realpath);
-		if (e == GFARM_ERR_NO_ERROR)
-			*argv = realpath;
 		if (show_symlink)
 			e = gfs_lstat(*argv, &st);
 		else
@@ -140,7 +134,6 @@ main(int argc, char *argv[])
 		if (e != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr, "%s: %s\n", *argv,
 				gfarm_error_string(e));
-			free(realpath);
 			r = 1;
 			continue;
 		}
@@ -150,10 +143,10 @@ main(int argc, char *argv[])
 		    (show_symlink
 		    ? gfm_client_connection_and_process_acquire_by_path
 		    : gfm_client_connection_and_process_acquire_by_path_follow)
+					
 		    )(*argv, &gfm_server)) != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr, "%s: showing metadata server: %s",
 			    *argv, gfarm_error_string(e));
-			free(realpath);
 			r = 1;
 			continue;
 		}
@@ -171,7 +164,6 @@ main(int argc, char *argv[])
 		}
 
 		gfs_stat_free(&st);
-		free(realpath);
 		first_entry = 0;
 	}
 

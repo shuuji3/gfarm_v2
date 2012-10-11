@@ -16,13 +16,11 @@
 
 #include <gfarm/gfarm.h>
 
-#include "nanosec.h"
-#include "thrsubr.h"
-
 #include "config.h"
 #include "queue.h" /* for gfs_pio.h */
 #include <openssl/evp.h> /* for gfs_pio.h */
 #include "gfs_pio.h"
+#include "thrsubr.h"
 
 #include "gfprep.h"
 #include "gfarm_parallel.h"
@@ -116,8 +114,8 @@ pfunc_simulate(const char *url, gfarm_uint64_t KBs)
 			gfs_stat_free(&st);
 		}
 	}
-	/* simulate: "size / (KBs * 1000)" seconds per a file */
-	gfarm_nanosleep((size * (GFARM_SECOND_BY_NANOSEC / 1000)) / KBs);
+	/* size / (KB/s * 1000) * 1000000 usec */
+	usleep(size / KBs * 1000);
 }
 
 static gfarm_error_t

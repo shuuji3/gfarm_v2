@@ -11,7 +11,6 @@
 #include "gfs_io.h"
 #include "gfs_dir.h" /* gfm_seekdir_{request,result}() */
 #include "gfs_dirplusxattr.h"
-#include "gfs_failover.h"
 
 /*
  * gfs_opendirplusxattr()/readdirplusxattr()/closedirplusxattr()
@@ -31,63 +30,11 @@ struct gfs_dirplusxattr {
 	size_t *attrsizebuf[DIRENTSPLUSXATTR_BUFCOUNT];
 	int n, index;
 	gfarm_off_t seek_pos;
-
-	/* remember opened url */
-	char *url;
-	/* remember opened inode num */
-	gfarm_ino_t ino;
-};
-
-static struct gfm_connection *
-dirplusxattr_metadb(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dirplusxattr *)super)->gfm_server);
-}
-
-static void
-dirplusxattr_set_metadb(struct gfs_failover_file *super,
-	struct gfm_connection *gfm_server)
-{
-	((struct gfs_dirplusxattr *)super)->gfm_server = gfm_server;
-}
-
-static gfarm_int32_t
-dirplusxattr_fileno(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dirplusxattr *)super)->fd);
-}
-
-static void
-dirplusxattr_set_fileno(struct gfs_failover_file *super, gfarm_int32_t fd)
-{
-	((struct gfs_dirplusxattr *)super)->fd = fd;
-}
-
-static const char *
-dirplusxattr_url(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dirplusxattr *)super)->url);
-}
-
-static gfarm_ino_t
-dirplusxattr_ino(struct gfs_failover_file *super)
-{
-	return (((struct gfs_dirplusxattr *)super)->ino);
-}
-
-static struct gfs_failover_file_ops failover_file_ops = {
-	GFS_DT_DIR,
-	dirplusxattr_metadb,
-	dirplusxattr_set_metadb,
-	dirplusxattr_fileno,
-	dirplusxattr_set_fileno,
-	dirplusxattr_url,
-	dirplusxattr_ino,
 };
 
 static gfarm_error_t
 gfs_dirplusxattr_alloc(struct gfm_connection *gfm_server, gfarm_int32_t fd,
-	char *url, gfarm_ino_t ino, GFS_DirPlusXAttr *dirp)
+	GFS_DirPlusXAttr *dirp)
 {
 	GFS_DirPlusXAttr dir;
 
@@ -100,14 +47,10 @@ gfs_dirplusxattr_alloc(struct gfm_connection *gfm_server, gfarm_int32_t fd,
 	}
 
 	dir->gfm_server = gfm_server;
-	gfm_client_connection_unlock(gfm_server);
 	dir->fd = fd;
 
 	dir->n = dir->index = 0;
 	dir->seek_pos = 0;
-
-	dir->url = url;
-	dir->ino = ino;
 
 	*dirp = dir;
 	return (GFARM_ERR_NO_ERROR);
@@ -144,11 +87,9 @@ gfs_opendirplusxattr(const char *path, GFS_DirPlusXAttr *dirp)
 	gfarm_error_t e;
 	struct gfm_connection *gfm_server;
 	int fd, type;
-	char *url;
-	gfarm_ino_t ino;
 
-	if ((e = gfm_open_fd_with_ino(path, GFARM_FILE_RDONLY, &gfm_server,
-	    &fd, &type, &url, &ino)) != GFARM_ERR_NO_ERROR) {
+	if ((e = gfm_open_fd(path, GFARM_FILE_RDONLY, &gfm_server, &fd, &type))
+	    != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002459,
 			"gfm_open_fd(%s) failed: %s",
 			path,
@@ -158,7 +99,7 @@ gfs_opendirplusxattr(const char *path, GFS_DirPlusXAttr *dirp)
 
 	if (type != GFS_DT_DIR)
 		e = GFARM_ERR_NOT_A_DIRECTORY;
-	else if ((e = gfs_dirplusxattr_alloc(gfm_server, fd, url, ino, dirp)) ==
+	else if ((e = gfs_dirplusxattr_alloc(gfm_server, fd, dirp)) ==
 	    GFARM_ERR_NO_ERROR)
 		return (GFARM_ERR_NO_ERROR);
 
@@ -179,8 +120,7 @@ gfs_opendirplusxattr(const char *path, GFS_DirPlusXAttr *dirp)
 }
 
 static gfarm_error_t
-gfm_getdirentsplusxattr_request(struct gfm_connection *gfm_server,
-	void *closure)
+gfm_getdirentsplusxattr_request(struct gfm_connection *gfm_server, void *closure)
 {
 	gfarm_error_t e = gfm_client_getdirentsplusxattr_request(
 	    gfm_server, DIRENTSPLUSXATTR_BUFCOUNT,
@@ -188,8 +128,7 @@ gfm_getdirentsplusxattr_request(struct gfm_connection *gfm_server,
 	    gfarm_xattr_caching_patterns_number());
 
 	if (e != GFARM_ERR_NO_ERROR)
-		gflog_warning(GFARM_MSG_1002462,
-		    "getdirentsplusxattr request: %s",
+		gflog_warning(GFARM_MSG_1002462, "getdirentsplusxattr request: %s",
 		    gfarm_error_string(e));
 	return (e);
 }
@@ -203,8 +142,7 @@ gfm_getdirentsplusxattr_result(struct gfm_connection *gfm_server, void *closure)
 	    dir->attrnamebuf, dir->attrvaluebuf, dir->attrsizebuf);
 
 	if (e != GFARM_ERR_NO_ERROR)
-		gflog_warning(GFARM_MSG_1002463,
-		    "getdirentsplusxattr result: %s",
+		gflog_warning(GFARM_MSG_1002463, "getdirentsplusxattr result: %s",
 		    gfarm_error_string(e));
 	return (e);
 }
@@ -223,17 +161,15 @@ gfs_readdirplusxattr(GFS_DirPlusXAttr dir,
 	if (dir->index >= dir->n) {
 		n = dir->n;
 		gfs_dirplusxattr_clear(dir);
-		e = gfm_client_compound_fd_op_readonly(
-		    (struct gfs_failover_file *)dir,
-		    &failover_file_ops,
+		e = gfm_client_compound_fd_op(dir->gfm_server, dir->fd,
 		    gfm_getdirentsplusxattr_request,
 		    gfm_getdirentsplusxattr_result,
-		    NULL,
+		    NULL, 
 		    dir);
 		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "gfm_client_compound_readonly_fd_op: %s",
-			    gfarm_error_string(e));
+			gflog_debug(GFARM_MSG_1002464,
+				"gfs_client_compound_fd_op() failed: %s",
+				gfarm_error_string(e));
 			return (e);
 		}
 
@@ -274,8 +210,7 @@ gfs_seekdirplusxattr(GFS_DirPlusXAttr dir, gfarm_off_t off)
 
 	closure.offset = off;
 	closure.whence = 0;
-	e = gfm_client_compound_fd_op_readonly(
-	    (struct gfs_failover_file *)dir, &failover_file_ops,
+	e = gfm_client_compound_fd_op(dir->gfm_server, dir->fd,
 	    gfm_seekdir_request, gfm_seekdir_result, NULL, &closure);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1003420,
@@ -297,17 +232,10 @@ gfs_telldirplusxattr(GFS_DirPlusXAttr dir, gfarm_off_t *offp)
 gfarm_error_t
 gfs_closedirplusxattr(GFS_DirPlusXAttr dir)
 {
-	gfarm_error_t e;
+	gfarm_error_t e = gfm_close_fd(dir->gfm_server, dir->fd);
 
-	gfm_client_connection_lock(dir->gfm_server);
-	if ((e = gfm_close_fd(dir->gfm_server, dir->fd)) != GFARM_ERR_NO_ERROR)
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfm_close_fd: %s",
-		    gfarm_error_string(e));
 	gfm_client_connection_free(dir->gfm_server);
 	gfs_dirplusxattr_clear(dir);
-	free(dir->url);
 	free(dir);
-	/* ignore result */
-	return (GFARM_ERR_NO_ERROR);
+	return (e);
 }

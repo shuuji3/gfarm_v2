@@ -8,7 +8,6 @@
 #include <unistd.h>
 
 #include <gfarm/gfarm.h>
-#include "gfarm_path.h"
 
 char *program_name = "gfrmdir";
 
@@ -24,7 +23,7 @@ main(int argc, char **argv)
 {
 	gfarm_error_t e;
 	int i, c, status = 0;
-	char *path = NULL;
+	extern int optind;
 
 	if (argc > 0)
 		program_name = basename(argv[0]);
@@ -49,16 +48,12 @@ main(int argc, char **argv)
 		usage();
 
 	for (i = 0; i < argc; i++) {
-		e = gfarm_realpath_by_gfarm2fs(argv[i], &path);
-		if (e == GFARM_ERR_NO_ERROR)
-			argv[i] = path;
 		e = gfs_rmdir(argv[i]);
 		if (e != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr, "%s: %s: %s\n",
 			    program_name, argv[i], gfarm_error_string(e));
 			status = 1;
 		}
-		free(path);
 	}
 	e = gfarm_terminate();
 	if (e != GFARM_ERR_NO_ERROR) {
