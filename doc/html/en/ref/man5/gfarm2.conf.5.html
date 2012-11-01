@@ -514,56 +514,6 @@ statement for details.</P
 ><DT
 ><SPAN
 CLASS="TOKEN"
->spool_check_level</SPAN
-> <TT
-CLASS="PARAMETER"
-><I
->level</I
-></TT
-></DT
-><DD
-><P
->The level <TT
-CLASS="PARAMETER"
-><I
->1</I
-></TT
-> is equivalent to the -c option for
-gfsd.</P
-><P
->The level <TT
-CLASS="PARAMETER"
-><I
->2</I
-></TT
-> is equivalent to the -cc option for
-gfsd.</P
-><P
->The level <TT
-CLASS="PARAMETER"
-><I
->3</I
-></TT
-> is equivalent to the -ccc option
-for gfsd.</P
-><P
->The default value is 0.  The level <TT
-CLASS="PARAMETER"
-><I
->0</I
-></TT
-> means that
-gfsd does not investigate all files stored in a spool directory when
-starting up.</P
-><P
->For example,</P
-><P
-CLASS="LITERALLAYOUT"
->	spool_check_level&nbsp;3</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
 >metadb_server_host</SPAN
 > <TT
 CLASS="PARAMETER"
@@ -1899,49 +1849,6 @@ CLASS="LITERALLAYOUT"
 ><DT
 ><SPAN
 CLASS="TOKEN"
->gfs_proto_fhremove_request_window</SPAN
-> <TT
-CLASS="PARAMETER"
-><I
->number</I
-></TT
-></DT
-><DD
-><P
->This directive specifies maximum number of
-outstanding replica removal requests from gfmd to gfsd.
-The default is 50.</P
-><P
->For example,</P
-><P
-CLASS="LITERALLAYOUT"
->	gfs_proto_fhremove_request_window&nbsp;50</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
->gfs_proto_replication_request_window</SPAN
-> <TT
-CLASS="PARAMETER"
-><I
->number</I
-></TT
-></DT
-><DD
-><P
->This directive specifies maximum number of
-outstanding gfmd-initiated replication requests
-from gfmd to destination-side gfsd.
-The default is 20.</P
-><P
->For example,</P
-><P
-CLASS="LITERALLAYOUT"
->	gfs_proto_replication_request_window&nbsp;20</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
 >simultaneous_replication_receivers</SPAN
 > <TT
 CLASS="PARAMETER"
@@ -1951,38 +1858,14 @@ CLASS="PARAMETER"
 ></DT
 ><DD
 ><P
->This directive is just an alias of
-the gfs_proto_replication_request_window directive since gfarm-2.6.
-Please use that directive instead.
-This directive remains for compatibility with older versions.
+>This directive specifies maximum number of simultaneous
+gfmd-initiated replications to same host.
 The default is 20.</P
 ><P
 >For example,</P
 ><P
 CLASS="LITERALLAYOUT"
->	simultaneous_replication_receivers&nbsp;20</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
->outstanding_file_replication_limit</SPAN
-> <TT
-CLASS="PARAMETER"
-><I
->number</I
-></TT
-></DT
-><DD
-><P
->This directive specifies maximum number of
-outstanding gfmd-initiated replication requests in whole system.
-This exists to prevent memory shortage of gfmd.
-The default is 4194304 and this value corresponds to approximately 512MB memory.</P
-><P
->For example,</P
-><P
-CLASS="LITERALLAYOUT"
->	outstanding_file_replication_limit&nbsp;4194304</P
+>	simultaneous_replication_receivers&nbsp;40</P
 ></DD
 ><DT
 ><SPAN
@@ -2548,32 +2431,6 @@ CLASS="LITERALLAYOUT"
 ><DT
 ><SPAN
 CLASS="TOKEN"
->metadb_server_slave_listen</SPAN
-> <TT
-CLASS="PARAMETER"
-><I
->validity</I
-></TT
-></DT
-><DD
-><P
->When "enable" is specified, even if the gfmd is set to slave,
-it receives requests from clients.
-The default is "disable".</P
-><P
->NOTE: Please do not set this directive for ordinary use,
-because this feature is only for development.</P
-><P
->This parameter is only available in gfmd.conf.</P
-><P
->Example:</P
-><P
-CLASS="LITERALLAYOUT"
->	metadb_server_slave_listen&nbsp;enable</P
-></DD
-><DT
-><SPAN
-CLASS="TOKEN"
 >metadb_server_slave_max_size</SPAN
 > <TT
 CLASS="PARAMETER"
@@ -2687,7 +2544,6 @@ CLASS="LITERALLAYOUT"
 		  &#60;spool_server_cred_type_statement&#62;&nbsp;|<br>
 		  &#60;spool_server_cred_service_statement&#62;&nbsp;|<br>
 		  &#60;spool_server_cred_name_statement&#62;&nbsp;|<br>
-		  &#60;spool_check_level_statement&#62;&nbsp;|<br>
 		  &#60;metadb_server_host_statement&#62;&nbsp;|<br>
 		  &#60;metadb_server_port_statement&#62;&nbsp;|<br>
 		  &#60;metadb_server_cred_type_statement&#62;&nbsp;|<br>
@@ -2728,10 +2584,8 @@ CLASS="LITERALLAYOUT"
 		  &#60;schedule_candidates_ratio_statement&#62;&nbsp;|<br>
 		  &#60;schedule_rtt_thresh_statement&#62;&nbsp;|<br>
 		  &#60;minimum_free_disk_space_statement&#62;&nbsp;|<br>
-		  &#60;gfs_proto_fhremove_request_window_statement&#62;&nbsp;|<br>
-		  &#60;gfs_proto_replication_request_statement&#62;&nbsp;|<br>
-		  &#60;simultaneous_replication_receivers_statement&#62;&nbsp;|<br>
-		  &#60;outstanding_file_replication_limit_statement&#62;&nbsp;|<br>
+		  &#60;simultaneous_replication_receivers&#62;&nbsp;|<br>
+		  &#60;gfsd_connection_cache_statement&#62;&nbsp;|<br>
 		  &#60;gfsd_connection_cache_statement&#62;&nbsp;|<br>
 		  &#60;xmlattr_size_limit_statement&#62;&nbsp;|<br>
 		  &#60;xattr_size_limit_statement&#62;&nbsp;|<br>
@@ -2750,7 +2604,6 @@ CLASS="LITERALLAYOUT"
 		  &#60;synchronous_replication_timeout_statement&#62;&nbsp;|<br>
 		  &#60;synchronous_journaling_statement&#62;&nbsp;|<br>
 		  &#60;metadb_server_force_slave_statement&#62;&nbsp;|<br>
-		  &#60;metadb_server_slave_listen_statement&#62;&nbsp;|<br>
 		  &#60;metadb_server_slave_max_size_statement&#62;&nbsp;|<br>
 		  &#60;metadb_journal_dir_statement&#62;&nbsp;|<br>
 		  &#60;metadb_journal_max_size_statement&#62;&nbsp;|<br>
@@ -2766,7 +2619,6 @@ CLASS="LITERALLAYOUT"
 		  "spool_server_cred_service"&nbsp;&#60;cred_service&#62;<br>
 	&#60;spool_server_cred_name_statement&#62;&nbsp;::=<br>
 		  "spool_server_cred_name"&nbsp;&#60;cred_name&#62;<br>
-	&#60;spool_check_level_statement&#62;&nbsp;::=&nbsp;"spool_check_level"&nbsp;&#60;number&#62;<br>
 	&#60;metadb_server_host_statement&#62;&nbsp;::=&nbsp;"metadb_server_host"&nbsp;&#60;hostname&#62;<br>
 	&#60;metadb_server_port_statement&#62;&nbsp;::=&nbsp;"metadb_server_port"&nbsp;&#60;portnumber&#62;<br>
 	&#60;metadb_server_cred_type_statement&#62;&nbsp;::=<br>
@@ -2828,10 +2680,7 @@ CLASS="LITERALLAYOUT"
 	&#60;schedule_rtt_thresh__statement&#62;&nbsp;::=&nbsp;"schedule_rtt_thresh"&nbsp;&#60;floating_point_number&#62;<br>
 	&#60;minimum_free_disk_space_statement&#62;&nbsp;::=<br>
 		  "minimum_free_disk_space"&nbsp;&#60;size&#62;<br>
-	&#60;gfs_proto_fhremove_request_window_statement&#62;&nbsp;::=&nbsp;"gfs_proto_fhremove_request_window"&nbsp;&#60;number&#62;<br>
-	&#60;gfs_proto_replication_request_window_statement&#62;&nbsp;::=&nbsp;"gfs_proto_replication_request_window"&nbsp;&#60;number&#62;<br>
-	&#60;simultaneous_replication_receivers_statement&#62;&nbsp;::=&nbsp;"simultaneous_replication_receivers"&nbsp;&#60;number&#62;<br>
-	&#60;outstanding_file_replication_limit_statement&#62;&nbsp;::=&nbsp;"outstanding_file_replication_limit"&nbsp;&#60;number&#62;<br>
+	&#60;simultaneous_replication_receivers&#62;&nbsp;::=&nbsp;"simultaneous_replication_receivers"&nbsp;&#60;number&#62;<br>
 	&#60;gfsd_connection_cache_statement&#62;&nbsp;::=&nbsp;"gfsd_connection_cache"&nbsp;&#60;number&#62;<br>
 	&#60;xmlattr_size_limit_statement&#62;&nbsp;::=&nbsp;"xmlattr_size_limit"&nbsp;&#60;size&#62;<br>
 	&#60;xattr_size_limit_statement&#62;&nbsp;::=&nbsp;"xattr_size_limit"&nbsp;&#60;size&#62;<br>
@@ -2855,7 +2704,6 @@ CLASS="LITERALLAYOUT"
 	&#60;synchronous_replication_timeout_statement&#62;&nbsp;::=&nbsp;"synchronous_replication_timeout"&nbsp;&#60;number&#62;<br>
 	&#60;synchronous_journaling_statement&#62;&nbsp;::=&nbsp;"synchronous_journaling"&nbsp;&#60;validity&#62;<br>
 	&#60;metadb_server_force_slave_statement&#62;&nbsp;::=&nbsp;"metadb_server_force_slave"&nbsp;&#60;validity&#62;<br>
-	&#60;metadb_server_slave_listen_statement&#62;&nbsp;::=&nbsp;"metadb_server_slave_listen"&nbsp;&#60;validity&#62;<br>
 	&#60;metadb_server_slave_max_size_statement&#62;&nbsp;::=&nbsp;"metadb_server_slave_max_size"&nbsp;&#60;number&#62;<br>
 	&#60;metadb_journal_dir_statement&#62;&nbsp;::=&nbsp;"metadb_journal_dir"&nbsp;&#60;pathname&#62;<br>
 	&#60;metadb_journal_max_size_statement&#62;&nbsp;::=&nbsp;"metadb_journal_max_size"&nbsp;&#60;number&#62;<br>

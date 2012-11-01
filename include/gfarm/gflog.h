@@ -16,7 +16,7 @@
 #define GFLOG_PRINTF_ARG(M, N)
 #endif
 
-#if (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 199901L) && !defined(__func__)
+#if __STDC_VERSION__ < 199901L && !defined(__func__)
 #if __GNUC__ >= 2
 #define __func__ __FUNCTION__
 #else
@@ -41,9 +41,6 @@ void gflog_fatal_message_errno(int, int, const char *, int, const char*,
 void gflog_assert_message(int, const char *, int, const char *,
 		const char *, ...) GFLOG_PRINTF_ARG(5, 6);
 
-#define gflog_fatal(msg_no, ...) \
-	gflog_fatal_message(msg_no, LOG_EMERG,\
-			__FILE__, __LINE__, __func__, __VA_ARGS__)
 #define gflog_error(msg_no, ...) \
 	gflog_message(msg_no, LOG_ERR,\
 			__FILE__, __LINE__, __func__, __VA_ARGS__)
@@ -60,8 +57,17 @@ void gflog_assert_message(int, const char *, int, const char *,
 	gflog_message(msg_no, LOG_DEBUG,\
 			__FILE__, __LINE__, __func__, __VA_ARGS__)
 
+#define gflog_fatal(msg_no, ...) \
+	gflog_fatal_message(msg_no, LOG_ERR,\
+			__FILE__, __LINE__, __func__, __VA_ARGS__)
+#define gflog_auth_error(msg_no, ...)\
+	gflog_message(msg_no, LOG_ERR,\
+			__FILE__, __LINE__, __func__, __VA_ARGS__)
+#define gflog_auth_warning(msg_no, ...)\
+	gflog_message(msg_no, LOG_WARNING,\
+			__FILE__, __LINE__, __func__, __VA_ARGS__)
 #define gflog_fatal_errno(msg_no, ...) \
-	gflog_fatal_message_errno(msg_no, LOG_EMERG,\
+	gflog_fatal_message_errno(msg_no, LOG_ERR,\
 			__FILE__, __LINE__, __func__, __VA_ARGS__)
 #define gflog_error_errno(msg_no, ...) \
 	gflog_message_errno(msg_no, LOG_ERR,\
@@ -78,14 +84,6 @@ void gflog_assert_message(int, const char *, int, const char *,
 #define gflog_debug_errno(msg_no, ...) \
 	gflog_message_errno(msg_no, LOG_DEBUG,\
 			__FILE__, __LINE__, __func__, __VA_ARGS__)
-
-#define gflog_auth_error(msg_no, ...)\
-	gflog_auth_message(msg_no, LOG_ERR,\
-			__FILE__, __LINE__, __func__, __VA_ARGS__)
-#define gflog_auth_warning(msg_no, ...)\
-	gflog_auth_message(msg_no, LOG_WARNING,\
-			__FILE__, __LINE__, __func__, __VA_ARGS__)
-
 #define gflog_trace(msg_no, ...) \
 	gflog_message(msg_no, LOG_INFO,\
 			__FILE__, __LINE__, __func__, __VA_ARGS__)
@@ -107,5 +105,3 @@ int gflog_syslog_name_to_priority(const char *);
 
 int gflog_auth_set_verbose(int);
 int gflog_auth_get_verbose(void);
-void gflog_auth_message(int, int, const char *, int, const char *,
-	const char *, ...) GFLOG_PRINTF_ARG(6, 7);

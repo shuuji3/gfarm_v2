@@ -33,13 +33,6 @@ giant_lock(void)
 	gfarm_mutex_lock(&giant_mutex, "giant_lock", "giant");
 }
 
-/* true: busy */
-int
-giant_trylock(void)
-{
-	return (gfarm_mutex_trylock(&giant_mutex, "giant_trylock", "giant"));
-}
-
 void
 giant_unlock(void)
 {

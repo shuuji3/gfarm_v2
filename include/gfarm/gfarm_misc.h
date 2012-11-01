@@ -62,6 +62,12 @@ gfarm_error_t gfarm_initialize(int *, char ***);
 gfarm_error_t gfarm_terminate(void);
 gfarm_error_t gfarm_config_read(void);
 
+/* the following function is for server. */
+gfarm_error_t gfarm_server_initialize(int *, char ***);
+gfarm_error_t gfarm_server_terminate(void);
+gfarm_error_t gfarm_server_config_read(void);
+void gfarm_config_set_filename(char *);
+
 /*
  * GFarm URL and pathname handling
  */
@@ -189,14 +195,3 @@ size_t gfarm_humanize_signed_number(char *, size_t, long long, int);
 #define gfarm_htob_32(x) gfarm_bswap_32(x)
 #define gfarm_btoh_32(x) gfarm_bswap_32(x)
 #endif /* WORDS_BIGENDIAN */
-
-/* support nanosecond */
-#if defined(HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
-#define gfarm_stat_mtime_nsec(st) ((st)->st_mtim.tv_nsec)
-#define gfarm_stat_atime_nsec(st) ((st)->st_atim.tv_nsec)
-#define gfarm_stat_ctime_nsec(st) ((st)->st_ctim.tv_nsec)
-#else
-#define gfarm_stat_mtime_nsec(st) 0
-#define gfarm_stat_atime_nsec(st) 0
-#define gfarm_stat_ctime_nsec(st) 0
-#endif

@@ -10,7 +10,6 @@
 
 #include <gfarm/gfarm.h>
 
-#include "context.h"
 #include "auth.h"
 
 char *program_name = "gfkey";
@@ -118,12 +117,6 @@ main(argc, argv)
 	if (log_level != -1)
 		gflog_set_priority_level(log_level);
 
-	e = gfarm_context_init();
-	if (e != GFARM_ERR_NO_ERROR) {
-		fprintf(stderr, "%s: %s\n", program_name,
-		    gfarm_error_string(e));
-		exit(1);
-	}
 	e = gfarm_set_local_user_for_this_local_account();
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: %s\n", program_name,

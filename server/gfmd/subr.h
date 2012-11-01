@@ -2,7 +2,6 @@ extern int debug_mode;
 
 void giant_init(void);
 void giant_lock(void);
-int giant_trylock(void);
 void giant_unlock(void);
 
 gfarm_error_t create_detached_thread(void *(*)(void *), void *);

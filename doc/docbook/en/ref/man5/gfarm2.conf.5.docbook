@@ -2,7 +2,7 @@
 
 <refentry id='gfarm2.conf.5'>
 
-<refentryinfo><date>31 October 2012</date></refentryinfo>
+<refentryinfo><date>16 August 2012</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfarm2.conf</refentrytitle>
@@ -313,25 +313,6 @@ authentication.
 Please read the description of the <token>spool_server_cred_type</token> 
 statement for details.
 </para>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>spool_check_level</token> <parameter>level</parameter></term>
-<listitem>
-<para>
-This statement enables the consistency check of files stored in the
-spool directory at start-up of gfsd.  The <parameter>level</parameter>
-name corresponds how many -c command-line options are specified to
-gfsd, i.e. the level "display" means the -c option, "delete" means the
--cc option, and "lost_found" means the -ccc option.  For detail about
-the -c option, refer to the manual page of gfsd(8).  The level
-"disable" disables the consistency check, which is the default.
-</para>
-<para>For example,</para>
-<literallayout>
-	spool_check_level lost_found
-</literallayout>
 </listitem>
 </varlistentry>
 
@@ -1235,61 +1216,15 @@ After restarting the gfmd and the Gfarm client, it is effective.
 </varlistentry>
 
 <varlistentry>
-<term><token>gfs_proto_fhremove_request_window</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding replica removal requests from gfmd to gfsd.
-The default is 50.
-</para>
-<para>For example,</para>
-<literallayout>
-	gfs_proto_fhremove_request_window 50
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>gfs_proto_replication_request_window</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding gfmd-initiated replication requests
-from gfmd to destination-side gfsd.
-The default is 20.
-</para>
-<para>For example,</para>
-<literallayout>
-	gfs_proto_replication_request_window 20
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>simultaneous_replication_receivers</token> <parameter>number</parameter></term>
 <listitem>
-<para>This directive is just an alias of
-the gfs_proto_replication_request_window directive since gfarm-2.6.
-Please use that directive instead.
-This directive remains for compatibility with older versions.
+<para>This directive specifies maximum number of simultaneous
+gfmd-initiated replications to same host.
 The default is 20.
 </para>
 <para>For example,</para>
 <literallayout>
-	simultaneous_replication_receivers 20
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>outstanding_file_replication_limit</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding gfmd-initiated replication requests in whole system.
-This exists to prevent memory shortage of gfmd.
-The default is 4194304 and this value corresponds to approximately 512MB memory.
-</para>
-<para>For example,</para>
-<literallayout>
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 </literallayout>
 </listitem>
 </varlistentry>
@@ -1709,27 +1644,6 @@ This parameter is only available in gfmd.conf.
 </varlistentry>
 
 <varlistentry>
-<term><token>metadb_server_slave_listen</token> <parameter>validity</parameter></term>
-<listitem>
-<para>When "enable" is specified, even if the gfmd is set to slave,
-it receives requests from clients.
-The default is "disable".
-</para>
-<para>
-NOTE: Please do not set this directive for ordinary use,
-because this feature is only for development.
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>Example:</para>
-<literallayout>
-	metadb_server_slave_listen enable
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>metadb_server_slave_max_size</token> <parameter>number</parameter></term>
 <listitem>
 <para>This parameter specifies the maximum number of slave gfmds.
@@ -1813,7 +1727,6 @@ notation.</para>
 		&nbsp;&nbsp;&lt;spool_server_cred_type_statement&gt; |
 		&nbsp;&nbsp;&lt;spool_server_cred_service_statement&gt; |
 		&nbsp;&nbsp;&lt;spool_server_cred_name_statement&gt; |
-		&nbsp;&nbsp;&lt;spool_check_level_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_host_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_port_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_cred_type_statement&gt; |
@@ -1860,10 +1773,8 @@ notation.</para>
 <!--		&nbsp;&nbsp;&lt;write_local_priority_statement&gt; | -->
 <!--		&nbsp;&nbsp;&lt;write_target_domain_statement&gt; | -->
 		&nbsp;&nbsp;&lt;minimum_free_disk_space_statement&gt; |
-		&nbsp;&nbsp;&lt;gfs_proto_fhremove_request_window_statement&gt; |
-		&nbsp;&nbsp;&lt;gfs_proto_replication_request_statement&gt; |
-		&nbsp;&nbsp;&lt;simultaneous_replication_receivers_statement&gt; |
-		&nbsp;&nbsp;&lt;outstanding_file_replication_limit_statement&gt; |
+		&nbsp;&nbsp;&lt;simultaneous_replication_receivers&gt; |
+		&nbsp;&nbsp;&lt;gfsd_connection_cache_statement&gt; |
 		&nbsp;&nbsp;&lt;gfsd_connection_cache_statement&gt; |
 		&nbsp;&nbsp;&lt;xmlattr_size_limit_statement&gt; |
 		&nbsp;&nbsp;&lt;xattr_size_limit_statement&gt; |
@@ -1883,7 +1794,6 @@ notation.</para>
 		&nbsp;&nbsp;&lt;synchronous_replication_timeout_statement&gt; |
 		&nbsp;&nbsp;&lt;synchronous_journaling_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_force_slave_statement&gt; |
-		&nbsp;&nbsp;&lt;metadb_server_slave_listen_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_slave_max_size_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_journal_dir_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_journal_max_size_statement&gt; |
@@ -1899,7 +1809,6 @@ notation.</para>
 		&nbsp;&nbsp;"spool_server_cred_service" &lt;cred_service&gt;
 	&lt;spool_server_cred_name_statement&gt; ::=
 		&nbsp;&nbsp;"spool_server_cred_name" &lt;cred_name&gt;
-	&lt;spool_check_level_statement&gt; ::= "spool_check_level" &lt;spck_level&gt;
 	&lt;metadb_server_host_statement&gt; ::= "metadb_server_host" &lt;hostname&gt;
 	&lt;metadb_server_port_statement&gt; ::= "metadb_server_port" &lt;portnumber&gt;
 	&lt;metadb_server_cred_type_statement&gt; ::=
@@ -1974,10 +1883,7 @@ notation.</para>
 <!--	&lt;write_target_domain_statement&gt; ::= "write_target_domain" &lt;string&gt; -->
 	&lt;minimum_free_disk_space_statement&gt; ::=
 		&nbsp;&nbsp;"minimum_free_disk_space" &lt;size&gt;
-	&lt;gfs_proto_fhremove_request_window_statement&gt; ::= "gfs_proto_fhremove_request_window" &lt;number&gt;
-	&lt;gfs_proto_replication_request_window_statement&gt; ::= "gfs_proto_replication_request_window" &lt;number&gt;
-	&lt;simultaneous_replication_receivers_statement&gt; ::= "simultaneous_replication_receivers" &lt;number&gt;
-	&lt;outstanding_file_replication_limit_statement&gt; ::= "outstanding_file_replication_limit" &lt;number&gt;
+	&lt;simultaneous_replication_receivers&gt; ::= "simultaneous_replication_receivers" &lt;number&gt;
 	&lt;gfsd_connection_cache_statement&gt; ::= "gfsd_connection_cache" &lt;number&gt;
 	&lt;xmlattr_size_limit_statement&gt; ::= "xmlattr_size_limit" &lt;size&gt;
 	&lt;xattr_size_limit_statement&gt; ::= "xattr_size_limit" &lt;size&gt;
@@ -2002,7 +1908,6 @@ notation.</para>
 	&lt;synchronous_replication_timeout_statement&gt; ::= "synchronous_replication_timeout" &lt;number&gt;
 	&lt;synchronous_journaling_statement&gt; ::= "synchronous_journaling" &lt;validity&gt;
 	&lt;metadb_server_force_slave_statement&gt; ::= "metadb_server_force_slave" &lt;validity&gt;
-	&lt;metadb_server_slave_listen_statement&gt; ::= "metadb_server_slave_listen" &lt;validity&gt;
 	&lt;metadb_server_slave_max_size_statement&gt; ::= "metadb_server_slave_max_size" &lt;number&gt;
 	&lt;metadb_journal_dir_statement&gt; ::= "metadb_journal_dir" &lt;pathname&gt;
 	&lt;metadb_journal_max_size_statement&gt; ::= "metadb_journal_max_size" &lt;number&gt;
@@ -2034,7 +1939,6 @@ notation.</para>
 		&nbsp;&nbsp;&lt;any_character_except_backslash_and_double_quotation&gt; |
 		&nbsp;&nbsp;"\\" | "\""
 	&lt;validity&gt; ::= "enable" | "disable"
-	&lt;spck_level&gt; ::= "disable" | "display" | "delete" | "lost_found"
 	&lt;log_priority&gt; ::= "emerg" | "alert" | "crit" | "err" | "warning" |
 		&nbsp;&nbsp;"notice" | "info" | "debug"
 	&lt;fatal_action_name&gt; ::= "backtrace_and_abort" | "backtrace_and_exit" |

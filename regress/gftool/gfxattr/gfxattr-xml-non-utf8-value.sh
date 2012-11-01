@@ -4,7 +4,7 @@
 
 dir=${gftmp}
 
-attr_src=${testbase}/gfxattr-xml-non-utf8-value.src
+attr_src=${testbin}/gfxattr-xml-non-utf8-value.src
 attr_log=${localtmp}.log
 
 attrname="user.attr"
@@ -21,10 +21,11 @@ cleanup() {
     gfrmdir ${dir}
 }
 
-if $regress/bin/is_xmlattr_supported; then
-	:
-else
-	exit $exit_unsupported
+# is XML attr supported?
+if gfxattr -x -g / test 2>&1 |
+        egrep "^gfxattr: (unknown|invalid) option -- ('x'|x)" >/dev/null
+then
+        exit $exit_unsupported
 fi
 
 trap 'cleanup; exit $exit_trap' $trap_sigs
