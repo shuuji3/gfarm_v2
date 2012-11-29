@@ -1277,61 +1277,15 @@ After restarting the gfmd and the Gfarm client, it is effective.
 </varlistentry>
 
 <varlistentry>
-<term><token>gfs_proto_fhremove_request_window</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding replica removal requests from gfmd to gfsd.
-The default is 50.
-</para>
-<para>For example,</para>
-<literallayout>
-	gfs_proto_fhremove_request_window 50
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>gfs_proto_replication_request_window</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding gfmd-initiated replication requests
-from gfmd to destination-side gfsd.
-The default is 20.
-</para>
-<para>For example,</para>
-<literallayout>
-	gfs_proto_replication_request_window 20
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>simultaneous_replication_receivers</token> <parameter>number</parameter></term>
 <listitem>
-<para>This directive is just an alias of
-the gfs_proto_replication_request_window directive since gfarm-2.6.
-Please use that directive instead.
-This directive remains for compatibility with older versions.
+<para>This directive specifies maximum number of simultaneous
+gfmd-initiated replications to same host.
 The default is 20.
 </para>
 <para>For example,</para>
 <literallayout>
-	simultaneous_replication_receivers 20
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>outstanding_file_replication_limit</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding gfmd-initiated replication requests in whole system.
-This exists to prevent memory shortage of gfmd.
-The default is 4194304 and this value corresponds to approximately 512MB memory.
-</para>
-<para>For example,</para>
-<literallayout>
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 </literallayout>
 </listitem>
 </varlistentry>
@@ -1772,27 +1726,6 @@ This parameter is only available in gfmd.conf.
 </varlistentry>
 
 <varlistentry>
-<term><token>metadb_server_slave_listen</token> <parameter>validity</parameter></term>
-<listitem>
-<para>When "enable" is specified, even if the gfmd is set to slave,
-it receives requests from clients.
-The default is "disable".
-</para>
-<para>
-NOTE: Please do not set this directive for ordinary use,
-because this feature is only for development.
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>Example:</para>
-<literallayout>
-	metadb_server_slave_listen enable
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>metadb_server_slave_max_size</token> <parameter>number</parameter></term>
 <listitem>
 <para>This parameter specifies the maximum number of slave gfmds.
@@ -2001,8 +1934,6 @@ notation.</para>
 		&nbsp;&nbsp;&lt;write_local_priority_statement&gt; |
 		&nbsp;&nbsp;&lt;write_target_domain_statement&gt; |
 		&nbsp;&nbsp;&lt;minimum_free_disk_space_statement&gt; |
-		&nbsp;&nbsp;&lt;gfs_proto_fhremove_request_window_statement&gt; |
-		&nbsp;&nbsp;&lt;gfs_proto_replication_request_statement&gt; |
 		&nbsp;&nbsp;&lt;simultaneous_replication_receivers_statement&gt; |
 		&nbsp;&nbsp;&lt;outstanding_file_replication_limit_statement&gt; |
 		&nbsp;&nbsp;&lt;gfsd_connection_cache_statement&gt; |
@@ -2026,7 +1957,6 @@ notation.</para>
 		&nbsp;&nbsp;&lt;synchronous_replication_timeout_statement&gt; |
 		&nbsp;&nbsp;&lt;synchronous_journaling_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_force_slave_statement&gt; |
-		&nbsp;&nbsp;&lt;metadb_server_slave_listen_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_slave_max_size_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_journal_dir_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_journal_max_size_statement&gt; |
@@ -2123,8 +2053,6 @@ notation.</para>
 	&lt;write_target_domain_statement&gt; ::= "write_target_domain" &lt;string&gt;
 	&lt;minimum_free_disk_space_statement&gt; ::=
 		&nbsp;&nbsp;"minimum_free_disk_space" &lt;size&gt;
-	&lt;gfs_proto_fhremove_request_window_statement&gt; ::= "gfs_proto_fhremove_request_window" &lt;number&gt;
-	&lt;gfs_proto_replication_request_window_statement&gt; ::= "gfs_proto_replication_request_window" &lt;number&gt;
 	&lt;simultaneous_replication_receivers_statement&gt; ::= "simultaneous_replication_receivers" &lt;number&gt;
 	&lt;outstanding_file_replication_limit_statement&gt; ::= "outstanding_file_replication_limit" &lt;number&gt;
 	&lt;gfsd_connection_cache_statement&gt; ::= "gfsd_connection_cache" &lt;number&gt;
@@ -2153,7 +2081,6 @@ notation.</para>
 	&lt;synchronous_replication_timeout_statement&gt; ::= "synchronous_replication_timeout" &lt;number&gt;
 	&lt;synchronous_journaling_statement&gt; ::= "synchronous_journaling" &lt;validity&gt;
 	&lt;metadb_server_force_slave_statement&gt; ::= "metadb_server_force_slave" &lt;validity&gt;
-	&lt;metadb_server_slave_listen_statement&gt; ::= "metadb_server_slave_listen" &lt;validity&gt;
 	&lt;metadb_server_slave_max_size_statement&gt; ::= "metadb_server_slave_max_size" &lt;number&gt;
 	&lt;metadb_journal_dir_statement&gt; ::= "metadb_journal_dir" &lt;pathname&gt;
 	&lt;metadb_journal_max_size_statement&gt; ::= "metadb_journal_max_size" &lt;number&gt;

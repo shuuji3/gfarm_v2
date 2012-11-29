@@ -13,7 +13,6 @@ lib/libgfarm/gfarm/gfs_pio_create/autoreplica0.sh
 lib/libgfarm/gfarm/gfs_pio_create/autoreplica.sh
 lib/libgfarm/gfarm/gfs_pio_create/autoreplica4.sh
 lib/libgfarm/gfarm/gfs_pio_create/autoreplica4_reader_last.sh
-lib/libgfarm/gfarm/gfs_pio_create/autoreplica-repattr0.sh
 lib/libgfarm/gfarm/gfs_pio_open/file_trunc.sh
 lib/libgfarm/gfarm/gfs_pio_open/file_trunc_read.sh
 lib/libgfarm/gfarm/gfs_pio_open/file_trunc_not_writable.sh
@@ -46,16 +45,6 @@ gftool/gfhost/gfhost-c.port.toobig.sh
 gftool/gfhost/gfhost-m.sh
 gftool/gfhost/gfhost-m.arch.toolong.sh
 gftool/gfhost/gfhost.not-exist.sh
-gftool/gfhostgroup/gfhostgroup-l.sh
-gftool/gfhostgroup/gfhostgroup-s.sh
-gftool/gfhostgroup/gfhostgroup-m.sh
-gftool/gfhostgroup/gfhostgroup-r.sh
-gftool/gfrepattr/gfrepattr-slm.sh
-gftool/gfrepattr/gfrepattr-c-slm.sh
-gftool/gfrepattr/gfrepattr-m-slm.sh
-gftool/gfrepattr/gfrepattr-syml-slm.sh
-gftool/gfrepattr/gfrepattr-syml2-slm.sh
-gftool/gfrepattr/gfrepattr-many-attrs.sh
 gftool/gfuser/gfuser-c.sh
 gftool/gfuser/gfuser-c.real.toolong.sh
 gftool/gfuser/gfuser-c.home.toolong.sh
@@ -63,14 +52,11 @@ gftool/gfuser/gfuser-m.sh
 gftool/gfuser/gfuser-m.gsi_dn.toolong.sh
 gftool/gfuser/gfuser-m.self.realname.sh
 gftool/gfuser/gfuser.not-exist.sh
-gftool/gfgroup/gfgroup.sh
 gftool/gfgroup/gfgroup.not-exist.sh
-gftool/gfgroup/gfgroup.0-nusers.sh
 gftool/gfln/gfln-s.sh
 gftool/gfln/gfln-s_toolong.sh
 gftool/gfls/root.sh
 gftool/gfls/notexist.sh
-gftool/gfls/unknownhost.sh
 gftool/gfmkdir/mkdir.sh
 gftool/gfmkdir/mkdir_toolong.sh
 gftool/gfmkdir/dir_nlink.sh
@@ -108,10 +94,14 @@ gftool/gfchown/gfchown-h.sh
 gftool/gfstatus/gfstatus_mds2.sh
 gftool/gfwhoami/gfwhoami.sh
 gftool/gfwhoami/gfwhoami_mds2.sh
+gftool/gfxattr/gfxattr-long-value.sh
 gftool/gfxattr/gfxattr-xml-long-value.sh
 gftool/gfxattr/gfxattr-xml-non-utf8-value.sh
 gftool/gfncopy/gfncopy-s.sh
 
+# gftool/gfchown
+# gftool/gfuser
+# gftool/gfhost
 # gftool/gfkey
 
 # server/gfmd

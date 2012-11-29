@@ -1,4 +1,4 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN""http://www.w3.org/TR/html4/loose.dtd">
 <HTML
 ><HEAD
 ><TITLE
@@ -37,7 +37,7 @@ NAME="SYNOPSIS"
 ><B
 CLASS="COMMAND"
 >gfprep</B
-> [-nqvdpPU] [-mx] [-S <TT
+>  [-nqvdpPU] [-mx] [-S <TT
 CLASS="REPLACEABLE"
 ><I
 >source-domainname</I
@@ -106,11 +106,9 @@ NAME="DESCRIPTION"
 CLASS="COMMAND"
 >gfprep</B
 > creates replicas of Gfarm files specified by
-the <TT
+the <CODE
 CLASS="PARAMETER"
-><I
->gfarm-url</I
-></TT
+>gfarm-url</CODE
 >(gfarm:///...) in parallel.</P
 ><P
 >When a set of source hosts are specified, only files stored on the set
@@ -118,11 +116,9 @@ of source hosts are replicated.  A set of hosts can be specified by a
 domain name and/or a host file.  When both a domain name and a host
 file are specified, a set of hosts is determined by both conditions.</P
 ><P
->If the <TT
+>If the <CODE
 CLASS="PARAMETER"
-><I
->gfarm-url</I
-></TT
+>gfarm-url</CODE
 > parameter is a directory,
 files under the directory will be replicated recursively.</P
 ><P
@@ -153,11 +149,9 @@ CLASS="VARIABLELIST"
 ><CODE
 CLASS="OPTION"
 >-N</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->num-of-replicas</I
-></TT
+>num-of-replicas</CODE
 ></DT
 ><DD
 ><P
@@ -217,11 +211,9 @@ CLASS="VARIABLELIST"
 ><CODE
 CLASS="OPTION"
 >-S</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->source-domainname</I
-></TT
+>source-domainname</CODE
 ></DT
 ><DD
 ><P
@@ -232,21 +224,17 @@ replicas will be copied.</P
 ><CODE
 CLASS="OPTION"
 >-h</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->source-hostfile</I
-></TT
+>source-hostfile</CODE
 ></DT
 ><DD
 ><P
 >Specifies a file which describes hostnames of
 source filesystem nodes from which the replica will be copied.
-The <TT
+The <CODE
 CLASS="PARAMETER"
-><I
->source-hostfile</I
-></TT
+>source-hostfile</CODE
 > consists of a filesystem
 node name on each line.</P
 ><P
@@ -267,11 +255,9 @@ CLASS="OPTION"
 ><CODE
 CLASS="OPTION"
 >-D</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->destination-domainname</I
-></TT
+>destination-domainname</CODE
 ></DT
 ><DD
 ><P
@@ -288,21 +274,17 @@ replicas may be copied to any available host.</P
 ><CODE
 CLASS="OPTION"
 >-H</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->destination-hostfile</I
-></TT
+>destination-hostfile</CODE
 ></DT
 ><DD
 ><P
 >Specifies a file which describes hostnames of
 destination filesystem nodes on which the replica will be copied.
-The <TT
+The <CODE
 CLASS="PARAMETER"
-><I
->destination-hostfile</I
-></TT
+>destination-hostfile</CODE
 > consists of a
 filesystem node name on each line.</P
 ><P
@@ -312,21 +294,17 @@ filesystem node name on each line.</P
 ><CODE
 CLASS="OPTION"
 >-j</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->num-of-processes</I
-></TT
+>num-of-processes</CODE
 ></DT
 ><DD
 ><P
 >Specifies the number of processes to create file replicas (or copy
 files) simultaneously and to read the directory in parallel.  Child
-processes are created of <TT
+processes are created of <CODE
 CLASS="PARAMETER"
-><I
->num-of-processes</I
-></TT
+>num-of-processes</CODE
 > * 2
 processes.</P
 ><P
@@ -344,11 +322,9 @@ CLASS="COMMAND"
 ><CODE
 CLASS="OPTION"
 >-w</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->way-of-scheduling</I
-></TT
+>way-of-scheduling</CODE
 ></DT
 ><DD
 ><P
@@ -364,11 +340,9 @@ CLASS="PARAMETER"
 ><CODE
 CLASS="OPTION"
 >-W</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->kibibytes</I
-></TT
+>kibibytes</CODE
 ></DT
 ><DD
 ><P
@@ -394,11 +368,9 @@ time.</P
 ><CODE
 CLASS="OPTION"
 >-F</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->num-of-dirents</I
-></TT
+>num-of-dirents</CODE
 ></DT
 ><DD
 ><P
@@ -410,11 +382,9 @@ CLASS="PARAMETER"
 ><CODE
 CLASS="OPTION"
 >-s</CODE
-> <TT
+> <CODE
 CLASS="PARAMETER"
-><I
->kilobytes-per-sec.</I
-></TT
+>kilobytes-per-sec.</CODE
 ></DT
 ><DD
 ><P
