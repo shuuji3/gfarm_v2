@@ -18,7 +18,6 @@
 
 #include <pthread.h>	/* db_access.h currently needs this */
 #include <assert.h>
-#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -28,18 +27,15 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 #include "metadb_common.h"
 #include "xattr_info.h"
 #include "quota_info.h"
 #include "metadb_server.h"
-
 #include "quota.h"
+
 #include "db_common.h"
 #include "db_access.h"
 #include "db_ops.h"
@@ -58,42 +54,6 @@
  */
 #define GFARM_PGSQL_ERRCODE_SHUTDOWN_PREFIX	"57P"
 
-/*
- * 42***:	syntax error or access rule violation
- *	e.g.)
- *		42703:	undefined column
- */
-#define GFARM_PGSQL_ERRCODE_SYNTAX_ERROR_PREFIX	"42"
-#define GFARM_PGSQL_ERRCODE_UNDEFINED_COLUMN	"42703"
-
-typedef enum {
-	/*
-	 * A value zero should represent "There is no clue that show
-	 * us any error(s) have been occurred yet or not": since in
-	 * many case we initialize any data by zero, and also the C
-	 * language system and the runtime initialize any static data
-	 * by zero implicitly.
-	 */
-	RDBMS_ERROR_UNKNOWN_STATE = 0,
-
-	RDBMS_ERROR_NO_ERROR,
-
-	/*
-	 * SQL related:
-	 */
-	RDBMS_ERROR_INVALID_SCHEME,
-	RDBMS_ERROR_SQL_SYNTAX_ERROR,
-
-	/*
-	 * Any others:
-	 */
-	RDBMS_ERROR_NO_MEMORY,
-
-	RDBMS_ERROR_ANY_OTHERS,
-
-	RDBMS_ERROR_MAX
-} gfarm_rdbms_error_t;
-
 typedef gfarm_error_t (*gfarm_pgsql_dml_sn_t)(gfarm_uint64_t,
 	const char *, int, const Oid *, const char *const *,
 	const int *, const int *, int, const char *);
@@ -109,26 +69,6 @@ static gfarm_error_t gfarm_pgsql_seqnum_modify(struct db_seqnum_arg *);
 static void
 free_arg(void *arg)
 {
-	/*
-	 * - When metadb_replication_enabled() is false, we store objects to
-	 *   PostgreSQL directly without journal file.
-	 *   'arg' is allocated in db_*_dup() and freed here.
-	 *
-	 * - When metadb_replication_enabled() is true, we store objects to
-	 *   the journal file via db_journal_ops before storing to PostgreSQL.
-	 *   'arg' is allocated in db_*_dup() and freed in db_journal_enter().
-	 *   Functions of db_pgsql_ops are called from
-	 *   db_journal_store_thread().
-	 *   In db_journal_store_thread(), each object to be passed to
-	 *   functions of db_pgsql_ops is allocated in db_journal_read_ops().
-	 *   db_journal_read_ops() allocates each object as multiple chunks
-	 *   different from db_*_dup() functions which allocate each object
-	 *   as single chunk.
-	 *   The objects are possibly reused for retrying to call functions
-	 *   of db_pgsql_ops and freed in db_journal_ops_free() called from
-	 *   db_journal_free_rec_list().
-	 *
-	 */
 	if (!gfarm_get_metadb_replication_enabled())
 		free(arg);
 }
@@ -137,6 +77,9 @@ static PGconn *conn = NULL;
 static int transaction_nesting = 0;
 static int transaction_ok;
 static int connection_recovered = 0;
+
+/* XXX FIXME - workaround for SourceForge #549 */
+static int invalid_XML_value = 0;
 
 static char *
 gfarm_pgsql_make_conninfo(const char **varnames, char **varvalues, int n,
@@ -621,6 +564,7 @@ gfarm_pgsql_start(const char *diag)
 		return (GFARM_ERR_NO_ERROR);
 
 	transaction_ok = 1;
+	invalid_XML_value = 0;
 	res = PQexec(conn, "START TRANSACTION");
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
@@ -647,6 +591,7 @@ gfarm_pgsql_start_with_retry(const char *diag)
 		return (GFARM_ERR_NO_ERROR);
 
 	transaction_ok = 1;
+	invalid_XML_value = 0;
 	do {
 		res = PQexec(conn, "START TRANSACTION");
 	} while (PQresultStatus(res) != PGRES_COMMAND_OK &&
@@ -672,7 +617,7 @@ gfarm_pgsql_commit_sn(gfarm_uint64_t seqnum, const char *diag)
 	assert(transaction_nesting == 0);
 
 	if (gfarm_get_metadb_replication_enabled() && seqnum > 0) {
-		gfarm_error_t e, e2;
+		gfarm_error_t e;
 		struct db_seqnum_arg a;
 
 		a.name = "";
@@ -680,10 +625,18 @@ gfarm_pgsql_commit_sn(gfarm_uint64_t seqnum, const char *diag)
 		if ((e = gfarm_pgsql_seqnum_modify(&a))
 		    != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1003245,
-			    "gfarm_pgsql_seqnum_modify : %s",
+			    "gfarm_pgsql_seqnum_modify: %s",
 			    gfarm_error_string(e));
-			e2 = gfarm_pgsql_exec_and_log("ROLLBACK", diag);
-			return (e);
+			/* XXX FIXME - workaround for SourceForge #549 */
+			if (invalid_XML_value) {
+				transaction_ok = 0;
+				invalid_XML_value = 0;
+				gflog_notice(GFARM_MSG_1003662,
+				    "transaction aborted by invalid XML value:"
+				    " seqnum %lld: %s", (long long)seqnum,
+				    gfarm_error_string(e));
+			} else
+				return (e);
 		}
 	}
 	return (gfarm_pgsql_exec_and_log(transaction_ok ?
@@ -1311,177 +1264,30 @@ gfarm_pgsql_end(gfarm_uint64_t seqnum, void *arg)
 
 /**********************************************************************/
 
-static char *
-gen_scheme_check_query(const char *tablename,
-	size_t ncolumns, const char * const columns[])
-{
-	int of = 0;
-	size_t sz = gfarm_size_add(&of, strlen(tablename), 2 + 32 + 1);
-		/* for "SELECT " + "FROM " + "LIMIT 1" + '\0' */
-	int i;
-	char *tmp = NULL;
-	int offset = 0;
-
-	assert((tablename != NULL && tablename[0] != '\0') &&
-		(ncolumns > 0) && (of == 0));
-
-	for (i = 0, of = 0; i < ncolumns && of == 0; i++) {
-		/* two for ", " */
-		sz = gfarm_size_add(&of, sz,
-			gfarm_size_add(&of, strlen(columns[i]), 2));
-	}
-	if (of == 0 && sz > 0)
-		tmp = (char *)malloc(sz);
-	if (tmp == NULL) {
-		gflog_error(GFARM_MSG_UNFIXED,
-			"Can't allocate an SQL query string "
-		"for table scheme check.");
-		return (NULL);
-	}
-
-	offset += snprintf(tmp + offset, sz - offset, "SELECT ");
-	for (i = 0; i < ncolumns; i++) {
-		offset += snprintf(tmp + offset, sz - offset, "%s, ",
-				columns[i]);
-	}
-	*(strrchr(tmp, ',')) = ' ';
-	offset--;
-
-	(void)snprintf(tmp + offset, sz - offset, "FROM %s LIMIT 1",
-		tablename);
-
-	return (tmp);
-}
-
-static gfarm_rdbms_error_t
-gfarm_pgsql_sql_error_to_gfarm_rdbms_error(const PGresult *res)
-{
-	gfarm_rdbms_error_t dbe = RDBMS_ERROR_ANY_OTHERS;
-	char *smsg = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-
-	if (strncasecmp(smsg,
-		GFARM_PGSQL_ERRCODE_SYNTAX_ERROR_PREFIX,
-		sizeof(GFARM_PGSQL_ERRCODE_SYNTAX_ERROR_PREFIX) - 1) == 0) {
-		if (strncasecmp(
-			smsg,
-			GFARM_PGSQL_ERRCODE_UNDEFINED_COLUMN,
-			sizeof(GFARM_PGSQL_ERRCODE_UNDEFINED_COLUMN) - 1) ==
-			0) {
-			dbe = RDBMS_ERROR_INVALID_SCHEME;
-		} else {
-			dbe = RDBMS_ERROR_SQL_SYNTAX_ERROR;
-		}
-	}
-
-	return (dbe);
-}
-
-static gfarm_rdbms_error_t
-gfarm_pgsql_check_scheme(const char *tablename,
-	size_t ncolumns, const char * const columns[])
-{
-	static const char diag[] = "check_scheme";
-	PGresult *res = NULL;
-	ExecStatusType st;
-	gfarm_rdbms_error_t dbe = RDBMS_ERROR_UNKNOWN_STATE;
-	char *emsg = NULL;
-	char *sql = gen_scheme_check_query(tablename, ncolumns, columns);
-
-	if (sql == NULL) {
-		dbe = RDBMS_ERROR_NO_MEMORY;
-		goto bailout;
-	}
-
-	if (gfarm_pgsql_start(diag) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED, "pgsql restart failed");
-		goto bailout;
-	}
-
-	res = PQexec(conn, sql);
-	if (res == NULL) {
-		gflog_error(GFARM_MSG_UNFIXED,
-			"A PostgreSQL qurey result is NULL: %s",
-			PQerrorMessage(conn));
-		goto bailout;
-	}
-	/*
-	 * Note:
-	 *	This is what I intended to. For now we don't have to
-	 *	be in an open transaction.
-	 *
-	 * XXX FIXME:
-	 *	Do we have to close the transaction EVEN IF the result is
-	 *	NULL ?
-	 */
-	(void)gfarm_pgsql_commit_sn(0, diag);
-
-	st = PQresultStatus(res);
-	switch (st) {
-	case PGRES_TUPLES_OK:
-		dbe = RDBMS_ERROR_NO_ERROR;
-		break;
-	case PGRES_BAD_RESPONSE:
-	case PGRES_NONFATAL_ERROR:
-	case PGRES_FATAL_ERROR:
-		emsg = PQresultErrorMessage(res);
-		dbe = gfarm_pgsql_sql_error_to_gfarm_rdbms_error(res);
-		if (dbe != RDBMS_ERROR_ANY_OTHERS)
-			gflog_error(GFARM_MSG_UNFIXED,
-				"SQL realated error: %s", emsg);
-		else
-			gflog_error(GFARM_MSG_UNFIXED,
-				"Unexpected PostgreSQL error: %s", emsg);
-		break;
-	default:
-		/* PGRES_EMPTY_QUERY
-		 * PGRES_COMMAND_OK
-		 * PGRES_COPY_OUT
-		 * PGRES_COPY_IN */
-		emsg = PQresultErrorMessage(res);
-		dbe = RDBMS_ERROR_ANY_OTHERS;
-		gflog_error(GFARM_MSG_UNFIXED,
-			"must not happen, unexpected query status: %s", emsg);
-		assert(0);
-		break;
-	}
-
-bailout:
-	free(sql);
-	if (res != NULL)
-		PQclear(res);
-
-	return (dbe);
-}
-
-/**********************************************************************/
-
 static gfarm_error_t
 host_info_set_fields_with_grouping(
 	PGresult *res, int startrow, int nhostaliases, void *vinfo)
 {
+	struct gfarm_host_info *info = vinfo;
 	int i;
-	struct gfarm_internal_host_info *info = vinfo;
 
-	info->hi.hostname = pgsql_get_string_ck(res, startrow, "hostname");
-	info->hi.port = pgsql_get_int32(res, startrow, "port");
-	info->hi.architecture =
-		pgsql_get_string_ck(res, startrow, "architecture");
-	info->hi.ncpu = pgsql_get_int32(res, startrow, "ncpu");
-	info->hi.flags = pgsql_get_int32(res, startrow, "flags");
-	info->fsngroupname =
-		pgsql_get_string_ck(res, startrow, "fsngroupname");
-	info->hi.nhostaliases = nhostaliases;
-	GFARM_MALLOC_ARRAY(info->hi.hostaliases, nhostaliases + 1);
-	if (info->hi.hostaliases == NULL) {
+	info->hostname = pgsql_get_string_ck(res, startrow, "hostname");
+	info->port = pgsql_get_int32(res, startrow, "port");
+	info->architecture = pgsql_get_string_ck(res, startrow, "architecture");
+	info->ncpu = pgsql_get_int32(res, startrow, "ncpu");
+	info->flags = pgsql_get_int32(res, startrow, "flags");
+	info->nhostaliases = nhostaliases;
+	GFARM_MALLOC_ARRAY(info->hostaliases, nhostaliases + 1);
+	if (info->hostaliases == NULL) {
 		gflog_fatal(GFARM_MSG_1002373,
 		    "host_info_set_fields_with_grouping(%s, %d): no memory",
-		    info->hi.hostname, nhostaliases + 1);
+		    info->hostname, nhostaliases + 1);
 	}
 	for (i = 0; i < nhostaliases; i++) {
-		info->hi.hostaliases[i] =
-			pgsql_get_string_ck(res, startrow + i, "hostalias");
+		info->hostaliases[i] = pgsql_get_string_ck(res, startrow + i,
+		    "hostalias");
 	}
-	info->hi.hostaliases[info->hi.nhostaliases] = NULL;
+	info->hostaliases[info->nhostaliases] = NULL;
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -1642,66 +1448,12 @@ gfarm_pgsql_host_remove(gfarm_uint64_t seqnum, char *hostname)
 }
 
 static gfarm_error_t
-gfarm_pgsql_host_check_scheme(void)
-{
-	const char *tablename = "Host";
-	const char * const columns[] = {
-		"hostname", "port", "architecture", "ncpu",
-		"flags", "fsngroupname"
-	};
-	gfarm_rdbms_error_t dbe;
-
-	if ((dbe = gfarm_pgsql_check_scheme(tablename,
-			sizeof(columns) / sizeof(char *), columns)) !=
-		RDBMS_ERROR_NO_ERROR) {
-		/*
-		 * The case like this, which got failed to check the
-		 * Host table, we can't live any longer. Just quit.
-		 * And before quit, we close the DB connection anyway.
-		 */
-		(void)gfarm_pgsql_terminate();
-
-		switch (dbe) {
-		case RDBMS_ERROR_INVALID_SCHEME:
-			gflog_fatal(GFARM_MSG_UNFIXED,
-				"The Host table scheme is not valid. "
-				"Running the config-gfarm-update might "
-				"solve this.");
-			break;
-		case RDBMS_ERROR_SQL_SYNTAX_ERROR:
-			gflog_error(GFARM_MSG_UNFIXED,
-				"Must not happen. "
-				"SQL syntax error(s) in query??");
-			assert(0);
-			break;
-		default:
-			gflog_fatal(GFARM_MSG_UNFIXED,
-				"Got an error while checking the Host "
-				"table scheme. Exit anyway to prevent "
-				"any filesystem metadata corruptions.");
-		}
-
-		/*
-		 * For failsafe.
-		 */
-		exit(2);
-	}
-
-	return ((dbe == RDBMS_ERROR_NO_ERROR) ?
-		GFARM_ERR_NO_ERROR : GFARM_ERR_UNKNOWN);
-}
-
-static gfarm_error_t
 gfarm_pgsql_host_load(void *closure,
-	void (*callback)(void *, struct gfarm_internal_host_info *))
+	void (*callback)(void *, struct gfarm_host_info *))
 {
 	gfarm_error_t e;
 	int i, n;
-	struct gfarm_internal_host_info *infos;
-
-	e = gfarm_pgsql_host_check_scheme();
-	if (e != GFARM_ERR_NO_ERROR)
-		return (e);
+	struct gfarm_host_info *infos;
 
 	e = gfarm_pgsql_generic_grouping_get_all_no_retry(
 		"SELECT Host.hostname, count(hostalias) "
@@ -1711,15 +1463,14 @@ gfarm_pgsql_host_load(void *closure,
 		    "ORDER BY Host.hostname",
 
 		"SELECT Host.hostname, port, architecture, ncpu, flags, "
-				"fsngroupname, hostalias "
+				"hostalias "
 		    "FROM Host LEFT OUTER JOIN HostAliases "
 			"ON Host.hostname = HostAliases.hostname "
 		    "ORDER BY Host.hostname, hostalias",
 
 		0, NULL,
 		&n, &infos,
-		&gfarm_base_internal_host_info_ops,
-		host_info_set_fields_with_grouping,
+		&gfarm_base_host_info_ops, host_info_set_fields_with_grouping,
 		"pgsql_host_load");
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002157,
@@ -1732,32 +1483,6 @@ gfarm_pgsql_host_load(void *closure,
 
 	free(infos);
 	return (GFARM_ERR_NO_ERROR);
-}
-
-/**********************************************************************/
-
-static gfarm_error_t
-gfarm_pgsql_fsngroup_modify(gfarm_uint64_t seqnum,
-	struct db_fsngroup_modify_arg *arg)
-{
-	gfarm_error_t e;
-	const char *paramValues[2];
-
-	paramValues[0] = arg->hostname;
-	paramValues[1] = arg->fsngroupname;
-	e = gfarm_pgsql_update_or_delete(seqnum,
-		"UPDATE Host SET fsngroupname = $2 "
-			 "WHERE hostname = $1",
-		2, /* number of params */
-		NULL, /* param types */
-		paramValues,
-		NULL, /* param lengths */
-		NULL, /* param formats */
-		0, /* ask for text results */
-		"pgsql_fsngroup_modify");
-
-	free_arg((void *)arg);
-	return (e);
 }
 
 /**********************************************************************/
@@ -2566,7 +2291,22 @@ gfarm_pgsql_filecopy_add(gfarm_uint64_t seqnum,
 	struct db_filecopy_arg *arg)
 {
 	return (pgsql_filecopy_call(seqnum, arg,
-		"INSERT INTO FileCopy (inumber, hostname) VALUES ($1, $2)",
+		"INSERT INTO FileCopy (inumber, hostname) "
+#if 0
+		"VALUES ($1, $2)",
+#else /* XXX FIXME: workaround for SourceForge #431 */
+		/*
+		 * without "::varchar" just after $2,
+		 * the following error occurrs with PostgreSQL-8.4.4:
+		 * ERROR:  inconsistent types deduced for parameter $2
+		 * DETAIL:  text versus character varying
+		 *
+		 * "::int8" was not necessary, but added for
+		 * style consistency.
+		 */
+		"SELECT $1::int8, $2::varchar WHERE NOT EXISTS "
+		"(SELECT * FROM FileCopy WHERE inumber=$1 AND hostname=$2)",
+#endif
 		gfarm_pgsql_insert,
 		"pgsql_filecopy_add"));
 }
@@ -2655,7 +2395,23 @@ gfarm_pgsql_deadfilecopy_add(gfarm_uint64_t seqnum,
 {
 	return (pgsql_deadfilecopy_call(seqnum, arg,
 		"INSERT INTO DeadFileCopy (inumber, igen, hostname) "
+#if 0
 			"VALUES ($1, $2, $3)",
+#else /* XXX FIXME: workaround for SourceForge #407 */
+			/*
+			 * without "::varchar" just after $3,
+			 * the following error occurrs with PostgreSQL-8.4.4:
+			 * ERROR:  inconsistent types deduced for parameter $3
+			 * DETAIL:  text versus character varying
+			 *
+			 * "::int8" was not necessary, but added for
+			 * style consistency.
+			 */
+			"SELECT $1::int8, $2::int8, $3::varchar "
+			"WHERE NOT EXISTS (SELECT * FROM DeadFileCopy "
+			"WHERE inumber=$1 AND igen=$2 "
+			"AND hostname=$3)",
+#endif
 		gfarm_pgsql_insert,
 		"pgsql_deadfilecopy_add"));
 }
@@ -2936,6 +2692,16 @@ gfarm_pgsql_xattr_add(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1003663, "%s: inum %lld attr %s value "
+		    "\'%*s\': %s", diag, (long long)arg->inum,
+		    (char *)arg->attrname, (int)arg->size, (char *)arg->value,
+		    gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -2983,6 +2749,16 @@ gfarm_pgsql_xattr_modify(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1003664, "%s: inum %lld attr %s value "
+		    "\'%*s\': %s", diag, (long long)arg->inum,
+		    (char *)arg->attrname, (int)arg->size, (char *)arg->value,
+		    gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -3021,6 +2797,14 @@ gfarm_pgsql_xattr_remove(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1003665, "%s: attr %s: %s", diag,
+		    (char *)arg->attrname, gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -3056,6 +2840,14 @@ gfarm_pgsql_xattr_removeall(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1003666, "%s: inum %lld: %s", diag,
+		    (long long)arg->inum, gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -3114,12 +2906,12 @@ gfarm_pgsql_xattr_get(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 	if (arg->xmlMode) {
 		command = "SELECT attrvalue FROM XmlAttr "
 			"WHERE inumber = $1 AND attrname = $2";
-		diag = "pgsql_xmlattr_load";
+		diag = "pgsql_xmlattr_get";
 		set_fields = pgsql_xattr_set_attrvalue_string;
 	} else {
 		command = "SELECT attrvalue FROM XAttr "
 			"WHERE inumber = $1 AND attrname = $2";
-		diag = "pgsql_xattr_load";
+		diag = "pgsql_xattr_get";
 		set_fields = pgsql_xattr_set_attrvalue_binary;
 	}
 
@@ -3843,6 +3635,4 @@ const struct db_ops db_pgsql_ops = {
 	gfarm_pgsql_mdhost_modify,
 	gfarm_pgsql_mdhost_remove,
 	gfarm_pgsql_mdhost_load,
-
-	gfarm_pgsql_fsngroup_modify,
 };

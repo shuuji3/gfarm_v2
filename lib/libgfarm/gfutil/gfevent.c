@@ -15,10 +15,6 @@
 #include <gfarm/gflog.h>
 
 #include <gfarm/gfarm_config.h>
-#ifdef __KERNEL__
-#undef HAVE_EPOLL
-#endif /* __KERNEL__ */
-
 #ifdef HAVE_EPOLL
 
 #include <sys/epoll.h>

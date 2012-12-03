@@ -1,5 +1,5 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT
+AC_INIT([gfarm], [2.5.8-rc1])
 AC_CONFIG_SRCDIR(RELNOTES)
 AC_CONFIG_AUX_DIR(makes)
 AC_CONFIG_HEADER(include/gfarm/gfarm_config.h)
@@ -1174,20 +1174,6 @@ AS_HELP_STRING([--enable-xmlattr],[support XML extended attributes and XPath sea
 [if test "${enable_xmlattr}" = "yes"; then
 	AC_DEFINE(ENABLE_XMLATTR, 1, [support XML extended attributes and XPath search])
 fi],[])
-
-###
-###  --enable-linuxkernel		support Linux kernel module utils
-###
-
-AC_ARG_ENABLE(linuxkernel,
-AS_HELP_STRING([--enable-linuxkernel],[support Linux kernel module utils.[[default=no]]]),
-[if test "${enable_linuxkernel}" = "yes"; then
-	# ug_idmapd uses libevent
-	AC_CHECK_LIB(event, event_init)
-	AC_CHECK_HEADERS(event.h)
-	linuxkernel_targets='linux'
-fi],[linuxkernel_targets=''])
-AC_SUBST(linuxkernel_targets)
 
 ###
 ### --with-private-srcdir

@@ -13,9 +13,3 @@ int gfarm_cond_timedwait(pthread_cond_t *, pthread_mutex_t *,
 void gfarm_cond_signal(pthread_cond_t *, const char *, const char *);
 void gfarm_cond_broadcast(pthread_cond_t *, const char *, const char *);
 void gfarm_cond_destroy(pthread_cond_t *, const char *, const char *);
-
-#ifdef __KERNEL__
-#define GFARM_MUTEX_INITIALIZER(name)   __MUTEX_INITIALIZER(name)
-#else /* __KERNEL__ */
-#define GFARM_MUTEX_INITIALIZER(name)   PTHREAD_MUTEX_INITIALIZER
-#endif /* __KERNEL__ */

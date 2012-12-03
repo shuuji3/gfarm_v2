@@ -62,6 +62,14 @@ gfarm_error_t gfarm_initialize(int *, char ***);
 gfarm_error_t gfarm_terminate(void);
 gfarm_error_t gfarm_config_read(void);
 
+/* the following function is for server. */
+gfarm_error_t gfarm_server_initialize(int *, char ***);
+gfarm_error_t gfarm_server_terminate(void);
+gfarm_error_t gfarm_server_config_read(void);
+void gfarm_config_set_filename(char *);
+
+const char *gfarm_version(void);
+
 /*
  * GFarm URL and pathname handling
  */

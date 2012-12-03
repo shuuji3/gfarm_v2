@@ -16,8 +16,7 @@ SUBDIRS = \
 	util/gfservice \
 	nls \
 	bench/gfperf \
-	bench/gfiops \
-	@linuxkernel_targets@
+	bench/gfiops
 
 #	`[ -d $(srcdir)/ns ] && echo ns` \
 #	gfptool \
@@ -33,6 +32,7 @@ post-distclean-hook:
 	rm -f config.log config.status config.cache libtool \
 		$(INC_BUILDDIR)/gfarm_config.h \
 		Makefile makes/config.mk makes/install-doc \
+		makes/build-script \
 		gftool/config-gfarm/config-gfarm \
 		gftool/config-gfarm/config-gfarm-update \
 		gftool/config-gfarm/config-gfsd \

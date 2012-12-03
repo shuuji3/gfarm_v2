@@ -8,6 +8,7 @@ enum gfarm_auth_error {
 };
 
 enum gfarm_auth_id_type {
+	GFARM_AUTH_ID_TYPE_UNKNOWN,
 	GFARM_AUTH_ID_TYPE_USER,
 	GFARM_AUTH_ID_TYPE_SPOOL_HOST,
 	GFARM_AUTH_ID_TYPE_METADATA_HOST,
@@ -133,8 +134,7 @@ enum gfarm_auth_cred_type gfarm_auth_server_cred_type_get(const char *);
 char *gfarm_auth_server_cred_service_get(const char *);
 char *gfarm_auth_server_cred_name_get(const char *);
 gfarm_error_t gfarm_auth_server_cred_type_set_by_string(char *, char *);
-gfarm_error_t gfarm_auth_server_cred_type_set(char *,
-	enum gfarm_auth_cred_type);
+gfarm_error_t gfarm_auth_server_cred_type_set(char *, enum gfarm_auth_cred_type);
 gfarm_error_t gfarm_auth_server_cred_service_set(char *, char *);
 gfarm_error_t gfarm_auth_server_cred_name_set(char *, char *);
 

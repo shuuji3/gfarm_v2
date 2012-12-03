@@ -2,7 +2,6 @@
  * $Id$
  */
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
@@ -23,13 +22,12 @@
 #include "nanosec.h"
 #include "thrsubr.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 
 #include "gfmd.h"
 #include "inode.h"
+#include "dead_file_copy.h"
 #include "dir.h"
-#include "file_replication.h"
 #include "host.h"
 #include "subr.h"
 #include "user.h"
@@ -106,7 +104,7 @@ replica_check_replicate(
 	gfarm_error_t e;
 	struct host **dsts, *src, *dst;
 	int n_dsts, i, j, n_success = 0;
-	struct file_replication *fr;
+	struct file_replicating *fr;
 	gfarm_off_t necessary_space;
 	int n_shortage, busy;
 
@@ -119,7 +117,7 @@ replica_check_replicate(
 	    &necessary_space, n_shortage, &n_dsts, &dsts);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_error(GFARM_MSG_1003617,
-		    "host_schedule_n_from_all_except, n_srcs=%d: %s",
+		    "host_schedule_except, n_srcs=%d: %s",
 		    *n_srcsp, gfarm_error_string(e));
 		goto end; /* retry in next interval */
 	}
@@ -132,33 +130,32 @@ replica_check_replicate(
 		src = srcs[j];
 		dst = dsts[i];
 
-		if (file_replication_is_busy(dst)) {
-			busy = 1;
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "file_replication_is_busy: host %s",
-			    host_name(dst));
-			continue;
-		}
-
 		/* GFARM_ERR_RESOURCE_TEMPORARILY_UNAVAILABLE may occurs */
-		e = inode_replication_new(inode, src, dst, 0, NULL, &fr);
+		e = file_replicating_new(inode, dst, 0, NULL, &fr);
 		if (e == GFARM_ERR_RESOURCE_TEMPORARILY_UNAVAILABLE) {
 			busy = 1;
 			if (!log_is_suppressed(&log_unavail))
 				gflog_debug(GFARM_MSG_1003618,
-				    "inode_replication_new, host=%s: %s",
+				    "file_replicating_new, host=%s: %s",
 				    host_name(dst), gfarm_error_string(e));
 			/* next dst */
 		} else if (e != GFARM_ERR_NO_ERROR) {
 			gflog_error(GFARM_MSG_1003619,
-			    "inode_replicating_new, host=%s: %s",
+			    "file_replicating_new, host=%s: %s",
 			    host_name(dst), gfarm_error_string(e));
+			break;
+		} else if ((e = async_back_channel_replication_request(
+		    host_name(src), host_port(src), dst,
+		    inode_get_number(inode), inode_get_gen(inode), fr))
+			   != GFARM_ERR_NO_ERROR) {
+			file_replicating_free_by_error_before_request(fr);
+			gflog_error(GFARM_MSG_1003620,
+			    "async_back_channel_replication_request: %s",
+			    gfarm_error_string(e));
 			break;
 		} else
 			n_success++;
 	}
-	if (n_success > 0)
-		inode_replication_start(inode);
 	free(dsts);
 	if (busy) /* retry immediately */
 		return (GFARM_ERR_RESOURCE_TEMPORARILY_UNAVAILABLE);
@@ -275,21 +272,14 @@ replica_check_fix(struct replication_info *info)
 	return (e);
 }
 
-/* XXX gfarm.replicainfo is not supported yet */
 static int
 replica_check_desired_number(struct inode *dir_ino, struct inode *file_ino)
 {
 	int desired_number;
-	char *repattr;
 
-	if (inode_get_replica_spec(file_ino, &repattr, &desired_number) ||
-	    inode_search_replica_spec(dir_ino, &repattr, &desired_number)) {
-		if (repattr != NULL) {
-			free(repattr); /* XXX not implement yet */
-			return (0);
-		} else
-			return (desired_number);
-	}
+	if (inode_has_desired_number(file_ino, &desired_number) ||
+	    inode_traverse_desired_replica_number(dir_ino, &desired_number))
+		return (desired_number);
 	return (0);
 }
 
@@ -721,10 +711,14 @@ replica_check_signal_rename()
 	replica_check_signal_general(diag, 0);
 }
 
+/* workaround for #406 - obsolete replicas remain existing */
+#define DFC_SCAN_INTERVAL 21600 /* 6 hours */
+
 static void *
 replica_check_thread(void *arg)
 {
 	int wait_time;
+	time_t dfc_scan_time;
 
 	if (!replica_check_stack_init())
 		return (NULL);
@@ -742,6 +736,9 @@ replica_check_thread(void *arg)
 	wait_time = gfarm_metadb_heartbeat_interval;
 	replica_check_targets_add(wait_time);
 
+	dfc_scan_time = time(NULL) + DFC_SCAN_INTERVAL;
+	replica_check_targets_add(DFC_SCAN_INTERVAL);
+
 	for (;;) {
 		time_t t = time(NULL) + gfarm_replica_check_minimum_interval;
 
@@ -750,6 +747,18 @@ replica_check_thread(void *arg)
 
 		if (replica_check_main()) /* error occured, retry */
 			replica_check_targets_add(wait_time);
+
+		if (time(NULL) >= dfc_scan_time) {
+			replica_check_giant_lock();
+			dead_file_copy_scan_deferred_all();
+			replica_check_giant_unlock();
+
+			dfc_scan_time = time(NULL) + DFC_SCAN_INTERVAL;
+			replica_check_targets_add(DFC_SCAN_INTERVAL);
+			RC_LOG_DEBUG(GFARM_MSG_1003641,
+			    "replica_check: dead_file_copy_scan_deferred_all,"
+			    " next=%ld", (long)dfc_scan_time);
+		}
 
 		t = t - time(NULL);
 		if (t > 0)
