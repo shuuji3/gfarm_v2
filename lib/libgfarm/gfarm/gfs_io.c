@@ -9,6 +9,7 @@
 #include "gfutil.h"
 
 #include "gfm_client.h"
+#include "config.h"
 #include "lookup.h"
 #include "gfs_io.h"
 
@@ -131,11 +132,11 @@ gfm_create_fd(const char *path, int flags, gfarm_mode_t mode,
 	closure.igenp = igenp;
 	closure.urlp = urlp;
 
-	return (gfm_name_op_modifiable(path, GFARM_ERR_IS_A_DIRECTORY,
+	return (gfm_name_op(path, GFARM_ERR_IS_A_DIRECTORY,
 	    gfm_create_fd_request,
 	    gfm_create_fd_result,
 	    gfm_create_fd_success,
-	    NULL, &closure));
+	    &closure));
 }
 
 /*
@@ -219,11 +220,11 @@ gfm_open_fd_with_ino(const char *path, int flags,
 	closure.typep = typep;
 	closure.inump = inump;
 	closure.urlp = urlp;
-	return (gfm_inode_op_modifiable(path, flags,
+	return (gfm_inode_op(path, flags,
 	    gfm_open_fd_request,
 	    gfm_open_fd_result,
 	    gfm_open_fd_success,
-	    NULL, NULL,
+	    NULL,
 	    &closure));
 }
 
@@ -269,12 +270,6 @@ gfm_close_result(struct gfm_connection *gfm_server, void *closure)
 gfarm_error_t
 gfm_close_fd(struct gfm_connection *gfm_server, int fd)
 {
-	gfarm_error_t e;
-
-	if ((e = gfm_client_compound_fd_op(gfm_server, fd,
-	    gfm_close_request, gfm_close_result, NULL, NULL))
-	    != GFARM_ERR_NO_ERROR)
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfm_close_fd fd=%d: %s", fd, gfarm_error_string(e));
-	return (e);
+	return (gfm_client_compound_fd_op(gfm_server, fd,
+	    gfm_close_request, gfm_close_result, NULL, NULL));
 }

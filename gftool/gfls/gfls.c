@@ -15,7 +15,6 @@
 #include <gfarm/gfarm.h>
 
 #include "timespec.h" /* XXX should export this interface */
-#include "gfarm_path.h"
 
 char *program_name = "gfls";
 
@@ -305,7 +304,9 @@ list_files(char *prefix, int n, char **files, int *need_newline)
 		columns = screen_width / (column_width + 1);
 		if (columns <= 0) /* a pathname is wider than screen_width */
 			columns = 1;
-		lines = (n + columns - 1) / columns;
+		lines = n / columns;
+		if (lines * columns < n)
+			lines++;
 		for (i = 0; i < lines; i++) {
 			for (j = 0; j < columns; j++) {
 				int len_suffix = 0;
@@ -317,12 +318,11 @@ list_files(char *prefix, int n, char **files, int *need_newline)
 				fputs(ls[k].path, stdout);
 				if (option_type_suffix)
 					len_suffix = put_suffix(&ls[k]);
-				if (i + (j + 1) * lines < n)
-					printf("%*s",
-					    (int)(column_width
-					    - (option_inumber ? INUM_LEN : 0)
-					    - strlen(ls[k].path))
-					    - len_suffix + 1, "");
+				printf("%*s",
+				       (int)(column_width
+				       - (option_inumber ? INUM_LEN : 0)
+				       - strlen(ls[k].path))
+				       - len_suffix + 1, "");
 			}
 			putchar('\n');
 		}				
@@ -559,9 +559,7 @@ main(int argc, char **argv)
 	gfarm_stringlist paths;
 	gfs_glob_t types;
 	int i, c, exit_code = EXIT_SUCCESS;
-	char *ep, *realpath = NULL;
-	const char *cwd;
-	static const char dot[] = ".";
+	char *ep;
 
 	if (argc > 0)
 		program_name = basename(argv[0]);
@@ -643,24 +641,14 @@ main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	if (argc < 1) {
-		if (gfarm_realpath_by_gfarm2fs(dot, &realpath)
-		    == GFARM_ERR_NO_ERROR)
-			cwd = realpath;
-		else
-			cwd = dot;
-		gfarm_stringlist_add(&paths, strdup(cwd));
-		free(realpath);
+		gfarm_stringlist_add(&paths, strdup("."));
 		gfs_glob_add(&types, GFS_DT_DIR);
 	} else {
 		for (i = 0; i < argc; i++) {
 			int last;
 
-			e = gfarm_realpath_by_gfarm2fs(argv[i], &realpath);
-			if (e == GFARM_ERR_NO_ERROR)
-				argv[i] = realpath;
 			/* do not treat glob error as an error */
 			gfs_glob(argv[i], &paths, &types);
-			free(realpath);
 
 			last = gfs_glob_length(&types) - 1;
 			if (last >= 0 && gfs_glob_elem(&types, last) ==

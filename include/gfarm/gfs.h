@@ -77,7 +77,6 @@ int gfs_desc_fileno(GFS_Desc);
 #define GFARM_FILE_EXCLUSIVE		0x00001000
 #endif
 #ifdef GFARM_INTERNAL_USE /* internal use only */
-#define GFARM_FILE_REPLICA_SPEC		0x00010000
 #define GFARM_FILE_SYMLINK_NO_FOLLOW	0x00400000 /* used by libgfarm only */
 #define GFARM_FILE_TRUNC_PENDING	0x00800000 /* used by gfmd only */
 #define GFARM_FILE_OPEN_LAST_COMPONENT	0x00800000 /* used by libgfarm only */
@@ -102,8 +101,7 @@ int gfs_desc_fileno(GFS_Desc);
 		GFARM_FILE_UNBUFFERED)
 #else
 #define GFARM_FILE_USER_MODE	(GFARM_FILE_ACCMODE|GFARM_FILE_TRUNC| \
-	GFARM_FILE_UNBUFFERED|GFARM_FILE_CREATE_REPLICA| \
-	GFARM_FILE_REPLICA_SPEC)
+	GFARM_FILE_UNBUFFERED|GFARM_FILE_CREATE_REPLICA)
 #endif /* not yet on Gfarm v2 */
 #define GFARM_FILE_PROTOCOL_MASK	(GFARM_FILE_USER_MODE|\
 	GFARM_FILE_BEQUEATHED|GFARM_FILE_CKSUM_INVALIDATED)
@@ -346,9 +344,6 @@ gfarm_error_t gfs_replicate_to_local(GFS_File, char *, int);
 gfarm_error_t gfs_execve(const char *, char *const *, char *const *);
 #endif
 gfarm_error_t gfs_statfs(gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);
-gfarm_error_t gfs_statfsnode_by_path(const char *, char *, int,
-	gfarm_int32_t *, gfarm_off_t *, gfarm_off_t *,
-	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);
 gfarm_error_t gfs_statfsnode(char *, int,
 	gfarm_int32_t *, gfarm_off_t *, gfarm_off_t *,
 	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);

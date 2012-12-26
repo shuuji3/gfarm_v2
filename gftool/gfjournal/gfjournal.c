@@ -3,7 +3,6 @@
  */
 
 #include <libgen.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,21 +17,16 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"	/* for struct gfarm_internal_host_info
-				 * in db_ops.h */
-
-#include "nanosec.h"
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 #include "metadb_common.h"
 #include "metadb_server.h"
 #include "xattr_info.h"
 #include "quota_info.h"
 #include "gfm_proto.h"
-
 #include "quota.h"
+
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_ops.h"
@@ -196,8 +190,7 @@ print_timespec(const char *name, struct gfarm_timespec *t)
 	tsec = t->tv_sec;
 	tm = gmtime(&tsec);
 	strftime(buf, BUFSIZ, "%Y%m%d-%H%M%S", tm);
-	printf(";%s=%s.%06dGMT",
-	    name, buf, (t->tv_nsec / GFARM_MICROSEC_BY_NANOSEC));
+	printf(";%s=%s.%06dGMT", name, buf, (t->tv_nsec / 1000));
 }
 
 static void
@@ -258,12 +251,6 @@ print_bin_value(const char *name, const char *s, size_t sz)
 	if (sz > ABBREV_LEN)
 		printf("...");
 	printf("\"");
-}
-
-static void
-print_fsngroup_modify(const char *hostname, const char *fsngroupname)
-{
-	printf("hostname=%s;fsngroupname=%s", hostname, fsngroupname);
 }
 
 static void
@@ -441,11 +428,6 @@ print_obj(enum journal_operation ope, void *obj)
 	case GFM_JOURNAL_MDHOST_MODIFY: {
 		struct db_mdhost_modify_arg *m = obj;
 		print_mdhost(&m->ms);
-		break;
-	}
-	case GFM_JOURNAL_FSNGROUP_MODIFY: {
-		struct db_fsngroup_modify_arg *m = obj;
-		print_fsngroup_modify(m->hostname, m->fsngroupname);
 		break;
 	}
 	default:

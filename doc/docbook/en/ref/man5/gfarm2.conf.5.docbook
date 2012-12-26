@@ -2,7 +2,7 @@
 
 <refentry id='gfarm2.conf.5'>
 
-<refentryinfo><date>20 Nov 2012</date></refentryinfo>
+<refentryinfo><date>16 August 2012</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfarm2.conf</refentrytitle>
@@ -313,25 +313,6 @@ authentication.
 Please read the description of the <token>spool_server_cred_type</token> 
 statement for details.
 </para>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>spool_check_level</token> <parameter>level</parameter></term>
-<listitem>
-<para>
-This statement enables the consistency check of files stored in the
-spool directory at start-up of gfsd.  The <parameter>level</parameter>
-name corresponds how many -c command-line options are specified to
-gfsd, i.e. the level "display" means the -c option, "delete" means the
--cc option, and "lost_found" means the -ccc option, which is the
-default.  For detail about the -c option, refer to the manual page of
-gfsd(8).  The level "disable" disables the consistency check.
-</para>
-<para>For example,</para>
-<literallayout>
-	spool_check_level disable
-</literallayout>
 </listitem>
 </varlistentry>
 
@@ -1152,53 +1133,13 @@ The default ratio is 4.0.
 </varlistentry>
 
 <varlistentry>
-<term><token>schedule_rtt_thresh_diff</token> <parameter>microseconds</parameter></term>
-<listitem>
-<para>
-This parameter specifies the threshold time of network latency
-which divides the domains of scheduling priority.
-If a network latency difference from nearer network is larger than this value,
-the network's scheduling priority is lowered.
-There is a similar parameter schedule_rtt_thresh_ratio,
-and the scheduling priority is lowered if the network latency exceeds
-one of the parameters.
-The default is 1000 microseconds. i.e. 1 millisecond.
-</para>
-<para>For example,</para>
-<literallayout>
-	schedule_rtt_thresh_diff 1000
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>schedule_rtt_thresh_ratio</token> <parameter>ratio</parameter></term>
+<term><token>schedule_rtt_thresh</token> <parameter>ratio</parameter></term>
 <listitem>
 <para>
 This parameter specifies the threshold ratio of network latency
 which divides the domains of scheduling priority.
 If a network latency is larger than this ratio from nearer network,
 the network's scheduling priority is lowered.
-There is a similar parameter schedule_rtt_thresh_diff,
-and the scheduling priority is lowered if the network latency exceeds
-one of the parameters.
-The default ratio is 4.0.
-</para>
-<para>For example,</para>
-<literallayout>
-	schedule_rtt_thresh_ratio 4.0
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>schedule_rtt_thresh</token> <parameter>ratio</parameter></term>
-<listitem>
-<para>
-This directive is just an alias of
-the schedule_rtt_thresh_ratio directive since gfarm-2.5.8.
-Please use that directive instead.
-This directive remains for compatibility with older versions.
 The default ratio is 4.0.
 </para>
 <para>For example,</para>
@@ -1208,6 +1149,7 @@ The default ratio is 4.0.
 </listitem>
 </varlistentry>
 
+<!--
 <varlistentry>
 <term><token>write_local_priority</token> <parameter>validity</parameter></term>
 <listitem>
@@ -1215,12 +1157,10 @@ The default ratio is 4.0.
 node to write a file. By specifing the <token>disable</token> keyword in
 this directive, Gfarm handles localhost the same as other
 filesystem nodes.
-<!--
 The same thing can be achieved by specifying <token>disable</token>
 as the value of the GFARM_WRITE_LOCAL_PRIORITY environment variable.
 When both this directive and the environment variable are specified,
 the value specified by the environment variable will be used.
- -->
 The default is <token>enable</token>.
 </para>
 <para>For example,</para>
@@ -1238,12 +1178,10 @@ this directive, when it selects a node to write a file.
 If there is no suitable node for writing in this domain, or if this
 directive is not specified, the filesystem node will be chosen from
 among all nodes.
-<!--
 You can specify this domain with the GFARM_WRITE_TARGET_DOMAIN environment
 variable too.
 When both this directive and the environment variable are specified,
 the value specified by the environment variable will be used.
- -->
 Note that if you specify this directive more than once, only the first one
 will be used and the others are ignored.
 </para>
@@ -1253,6 +1191,7 @@ will be used and the others are ignored.
 </literallayout>
 </listitem>
 </varlistentry>
+ -->
 
 <varlistentry>
 <term><token>minimum_free_disk_space</token> <parameter>bytes</parameter></term>
@@ -1277,61 +1216,15 @@ After restarting the gfmd and the Gfarm client, it is effective.
 </varlistentry>
 
 <varlistentry>
-<term><token>gfs_proto_fhremove_request_window</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding replica removal requests from gfmd to gfsd.
-The default is 50.
-</para>
-<para>For example,</para>
-<literallayout>
-	gfs_proto_fhremove_request_window 50
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>gfs_proto_replication_request_window</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding gfmd-initiated replication requests
-from gfmd to destination-side gfsd.
-The default is 20.
-</para>
-<para>For example,</para>
-<literallayout>
-	gfs_proto_replication_request_window 20
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>simultaneous_replication_receivers</token> <parameter>number</parameter></term>
 <listitem>
-<para>This directive is just an alias of
-the gfs_proto_replication_request_window directive since gfarm-2.6.
-Please use that directive instead.
-This directive remains for compatibility with older versions.
+<para>This directive specifies maximum number of simultaneous
+gfmd-initiated replications to same host.
 The default is 20.
 </para>
 <para>For example,</para>
 <literallayout>
-	simultaneous_replication_receivers 20
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>outstanding_file_replication_limit</token> <parameter>number</parameter></term>
-<listitem>
-<para>This directive specifies maximum number of
-outstanding gfmd-initiated replication requests in whole system.
-This exists to prevent memory shortage of gfmd.
-The default is 4194304 and this value corresponds to approximately 512MB memory.
-</para>
-<para>For example,</para>
-<literallayout>
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 </literallayout>
 </listitem>
 </varlistentry>
@@ -1617,27 +1510,6 @@ The "disable" setting corresponds to "noatime" setting in usual filesystem.
  -->
 
 <varlistentry>
-<term><token>atime</token> <parameter>type</parameter></term>
-<listitem>
-<para>
-When "disable" is specified, atime (access time) is not updated.  When
-"relative" is specified, atime is only updated if the previous atime
-is earlier than the current mtime (modify time) or ctime (change
-time), or if the previous atime is more than 1 day old.  When "strict"
-is specified, atime is always updated.  The default setting is
-"relative".
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>For example,</para>
-<literallayout>
-	atime disable
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>client_file_bufsize</token> <parameter>bytes</parameter></term>
 <listitem>
 <para>This directive specifies the file buffer size in bytes used in
@@ -1772,27 +1644,6 @@ This parameter is only available in gfmd.conf.
 </varlistentry>
 
 <varlistentry>
-<term><token>metadb_server_slave_listen</token> <parameter>validity</parameter></term>
-<listitem>
-<para>When "enable" is specified, even if the gfmd is set to slave,
-it receives requests from clients.
-The default is "disable".
-</para>
-<para>
-NOTE: Please do not set this directive for ordinary use,
-because this feature is only for development.
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>Example:</para>
-<literallayout>
-	metadb_server_slave_listen enable
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><token>metadb_server_slave_max_size</token> <parameter>number</parameter></term>
 <listitem>
 <para>This parameter specifies the maximum number of slave gfmds.
@@ -1862,82 +1713,6 @@ This parameter is only available in gfmd.conf.
 </listitem>
 </varlistentry>
 
-<varlistentry>
-<term><token>replica_check</token> <parameter>validity</parameter></term>
-<listitem>
-<para>
-When "enable" is specified, the replica_check system in gfmd can check
-and fix the number and placement of file replicas automatically.  The
-replica_check works only when necessary.  The default value is
-"enable".
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>Example:</para>
-<literallayout>
-	replica_check disable
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>replica_check_host_down_thresh</token> <parameter>seconds</parameter></term>
-<listitem>
-<para>
-If a gfsd is down, the replica_check assumes that the gfsd is not down
-until the specified seconds.  This is useful to maintain a gfsd.  The
-default value is 10800 seconds (3 hours).
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>Example:</para>
-<literallayout>
-	replica_check_host_down_thresh 3600
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>replica_check_sleep_time</token> <parameter>nanoseconds</parameter></term>
-<listitem>
-<para>
-If this value is increased, the replica_check works more slowly only
-when the gfmd is busy.  When the gfmd is not busy, the replica_check
-works at full speed.  This directive specifies the nanoseconds to
-sleep in the replica_check.  The default value is 100000 nanoseconds
-(0.1 millisecond).  The maximum value is 1000000000 nanoseconds (1
-second).
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>Example:</para>
-<literallayout>
-	replica_check_sleep_time 0
-</literallayout>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><token>replica_check_minimum_interval</token> <parameter>seconds</parameter></term>
-<listitem>
-<para>
-This directive specifies the minimum interval in seconds, for the
-replica_check to work.  The default value is 10 seconds, i.e. the
-replica_check can work up to one time every 10 seconds.
-</para>
-<para>
-This parameter is only available in gfmd.conf.
-</para>
-<para>Example:</para>
-<literallayout>
-	replica_check_minimum_interval 5
-</literallayout>
-</listitem>
-</varlistentry>
-
 </variablelist>
 </refsect1>
 
@@ -1952,7 +1727,6 @@ notation.</para>
 		&nbsp;&nbsp;&lt;spool_server_cred_type_statement&gt; |
 		&nbsp;&nbsp;&lt;spool_server_cred_service_statement&gt; |
 		&nbsp;&nbsp;&lt;spool_server_cred_name_statement&gt; |
-		&nbsp;&nbsp;&lt;spool_check_level_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_host_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_port_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_cred_type_statement&gt; |
@@ -1995,16 +1769,12 @@ notation.</para>
 		&nbsp;&nbsp;&lt;schedule_busy_load_thresh_statement&gt; |
 		&nbsp;&nbsp;&lt;schedule_virtual_load_statement&gt; |
 		&nbsp;&nbsp;&lt;schedule_candidates_ratio_statement&gt; |
-		&nbsp;&nbsp;&lt;schedule_rtt_thresh_diff_statement&gt; |
-		&nbsp;&nbsp;&lt;schedule_rtt_thresh_ratio_statement&gt; |
 		&nbsp;&nbsp;&lt;schedule_rtt_thresh_statement&gt; |
-		&nbsp;&nbsp;&lt;write_local_priority_statement&gt; |
-		&nbsp;&nbsp;&lt;write_target_domain_statement&gt; |
+<!--		&nbsp;&nbsp;&lt;write_local_priority_statement&gt; | -->
+<!--		&nbsp;&nbsp;&lt;write_target_domain_statement&gt; | -->
 		&nbsp;&nbsp;&lt;minimum_free_disk_space_statement&gt; |
-		&nbsp;&nbsp;&lt;gfs_proto_fhremove_request_window_statement&gt; |
-		&nbsp;&nbsp;&lt;gfs_proto_replication_request_statement&gt; |
-		&nbsp;&nbsp;&lt;simultaneous_replication_receivers_statement&gt; |
-		&nbsp;&nbsp;&lt;outstanding_file_replication_limit_statement&gt; |
+		&nbsp;&nbsp;&lt;simultaneous_replication_receivers&gt; |
+		&nbsp;&nbsp;&lt;gfsd_connection_cache_statement&gt; |
 		&nbsp;&nbsp;&lt;gfsd_connection_cache_statement&gt; |
 		&nbsp;&nbsp;&lt;xmlattr_size_limit_statement&gt; |
 		&nbsp;&nbsp;&lt;xattr_size_limit_statement&gt; |
@@ -2017,24 +1787,17 @@ notation.</para>
 		&nbsp;&nbsp;&lt;fatal_action_statement&gt; |
 		&nbsp;&nbsp;&lt;debug_command_statement&gt; |
 <!--		&nbsp;&nbsp;&lt;record_atime_statement&gt; | -->
-		&nbsp;&nbsp;&lt;atime_statement&gt; |
 		&nbsp;&nbsp;&lt;client_file_bufsize_statement&gt; |
-		&nbsp;&nbsp;&lt;client_parallel_copy_statement&gt; |
 		&nbsp;&nbsp;&lt;profile_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_list_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_replication_statement&gt; |
 		&nbsp;&nbsp;&lt;synchronous_replication_timeout_statement&gt; |
 		&nbsp;&nbsp;&lt;synchronous_journaling_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_force_slave_statement&gt; |
-		&nbsp;&nbsp;&lt;metadb_server_slave_listen_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_server_slave_max_size_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_journal_dir_statement&gt; |
 		&nbsp;&nbsp;&lt;metadb_journal_max_size_statement&gt; |
-		&nbsp;&nbsp;&lt;metadb_journal_recvq_size_statement&gt; |
-		&nbsp;&nbsp;&lt;replica_check_statement&gt; |
-		&nbsp;&nbsp;&lt;replica_check_host_down_thresh_statement&gt; |
-		&nbsp;&nbsp;&lt;replica_check_sleep_time_statement&gt; |
-		&nbsp;&nbsp;&lt;replica_check_minimum_interval_statement&gt;
+		&nbsp;&nbsp;&lt;metadb_journal_recvq_size_statement&gt;
 	&lt;spool_statement&gt; ::= "spool" &lt;pathname&gt;
 	&lt;spool_server_listen_address_statement&gt; ::=
 		&nbsp;&nbsp;"spool_server_listen_address" &lt;ipv4_address&gt;
@@ -2046,7 +1809,6 @@ notation.</para>
 		&nbsp;&nbsp;"spool_server_cred_service" &lt;cred_service&gt;
 	&lt;spool_server_cred_name_statement&gt; ::=
 		&nbsp;&nbsp;"spool_server_cred_name" &lt;cred_name&gt;
-	&lt;spool_check_level_statement&gt; ::= "spool_check_level" &lt;spck_level&gt;
 	&lt;metadb_server_host_statement&gt; ::= "metadb_server_host" &lt;hostname&gt;
 	&lt;metadb_server_port_statement&gt; ::= "metadb_server_port" &lt;portnumber&gt;
 	&lt;metadb_server_cred_type_statement&gt; ::=
@@ -2116,17 +1878,12 @@ notation.</para>
 	&lt;schedule_busy_load_thresh_statement&gt; ::= "schedule_busy_load_thresh" &lt;load&gt;
 	&lt;schedule_virtual_load_statement&gt; ::= "schedule_virtual_load" &lt;load&gt;
 	&lt;schedule_candidates_ratio_statement&gt; ::= "schedule_candidates_ratio" &lt;floating_point_number&gt;
-	&lt;schedule_rtt_thresh_diff_statement&gt; ::= "schedule_rtt_thresh_diff" &lt;number&gt;
-	&lt;schedule_rtt_thresh_ratio_statement&gt; ::= "schedule_rtt_thresh_ratio" &lt;floating_point_number&gt;
-	&lt;schedule_rtt_thresh_statement&gt; ::= "schedule_rtt_thresh" &lt;floating_point_number&gt;
-	&lt;write_local_priority_statement&gt; ::= "write_local_priority" &lt;validity&gt;
-	&lt;write_target_domain_statement&gt; ::= "write_target_domain" &lt;string&gt;
+	&lt;schedule_rtt_thresh__statement&gt; ::= "schedule_rtt_thresh" &lt;floating_point_number&gt;
+<!--	&lt;write_local_priority_statement&gt; ::= "write_local_priority" &lt;validity&gt; -->
+<!--	&lt;write_target_domain_statement&gt; ::= "write_target_domain" &lt;string&gt; -->
 	&lt;minimum_free_disk_space_statement&gt; ::=
 		&nbsp;&nbsp;"minimum_free_disk_space" &lt;size&gt;
-	&lt;gfs_proto_fhremove_request_window_statement&gt; ::= "gfs_proto_fhremove_request_window" &lt;number&gt;
-	&lt;gfs_proto_replication_request_window_statement&gt; ::= "gfs_proto_replication_request_window" &lt;number&gt;
-	&lt;simultaneous_replication_receivers_statement&gt; ::= "simultaneous_replication_receivers" &lt;number&gt;
-	&lt;outstanding_file_replication_limit_statement&gt; ::= "outstanding_file_replication_limit" &lt;number&gt;
+	&lt;simultaneous_replication_receivers&gt; ::= "simultaneous_replication_receivers" &lt;number&gt;
 	&lt;gfsd_connection_cache_statement&gt; ::= "gfsd_connection_cache" &lt;number&gt;
 	&lt;xmlattr_size_limit_statement&gt; ::= "xmlattr_size_limit" &lt;size&gt;
 	&lt;xattr_size_limit_statement&gt; ::= "xattr_size_limit" &lt;size&gt;
@@ -2141,9 +1898,7 @@ notation.</para>
 	&lt;no_file_system_node_timeout_statement&gt; ::= "no_file_system_node_timeout" &lt;number&gt;
 	&lt;gfmd_reconnection_timeout_statement&gt; ::= "gfmd_reconnection_timeout" &lt;number&gt;
 <!--	&lt;record_atime_statement&gt; ::= "record_atime" &lt;validity&gt; -->
-	&lt;atime_statement&gt; ::= "atime" &lt;atime_type&gt;
 	&lt;client_file_bufsize_statement&gt; ::= "client_file_bufsize" &lt;size&gt;
-	&lt;client_parallel_copy_statement&gt; ::= "client_parallel_copy" &lt;number&gt;
 	&lt;profile_statement&gt; ::= "profile" &lt;validity&gt;
 	&lt;metadb_server_list_statement&gt; ::= "metadb_server_list" &lt;metadb_server_list_spec&gt;
 	&lt;metadb_server_list_spec&gt; ::=
@@ -2153,15 +1908,10 @@ notation.</para>
 	&lt;synchronous_replication_timeout_statement&gt; ::= "synchronous_replication_timeout" &lt;number&gt;
 	&lt;synchronous_journaling_statement&gt; ::= "synchronous_journaling" &lt;validity&gt;
 	&lt;metadb_server_force_slave_statement&gt; ::= "metadb_server_force_slave" &lt;validity&gt;
-	&lt;metadb_server_slave_listen_statement&gt; ::= "metadb_server_slave_listen" &lt;validity&gt;
 	&lt;metadb_server_slave_max_size_statement&gt; ::= "metadb_server_slave_max_size" &lt;number&gt;
 	&lt;metadb_journal_dir_statement&gt; ::= "metadb_journal_dir" &lt;pathname&gt;
 	&lt;metadb_journal_max_size_statement&gt; ::= "metadb_journal_max_size" &lt;number&gt;
 	&lt;metadb_journal_recvq_size_statement&gt; ::= "metadb_journal_recvq_size" &lt;number&gt;
-	&lt;replica_check_statement&gt; ::= "replica_check" &lt;validity&gt;
-	&lt;replica_check_host_down_thresh_statement&gt; ::= "replica_check_host_down_thresh" &lt;number&gt;
-	&lt;replica_check_sleep_time_statement&gt; ::= "replica_check_sleep_time" &lt;number&gt;
-	&lt;replica_check_minimum_interval_statement&gt; ::= "replica_check_minimum_interval" &lt;number&gt;
 	&lt;string_list&gt; ::= 
 		&nbsp;&nbsp;&lt;string&gt; |
 		&nbsp;&nbsp;&lt;string&gt; &lt;string_list&gt;
@@ -2189,8 +1939,6 @@ notation.</para>
 		&nbsp;&nbsp;&lt;any_character_except_backslash_and_double_quotation&gt; |
 		&nbsp;&nbsp;"\\" | "\""
 	&lt;validity&gt; ::= "enable" | "disable"
-	&lt;spck_level&gt; ::= "disable" | "display" | "delete" | "lost_found"
-	&lt;atime_type&gt; ::= "disable" | "relative" | "strict"
 	&lt;log_priority&gt; ::= "emerg" | "alert" | "crit" | "err" | "warning" |
 		&nbsp;&nbsp;"notice" | "info" | "debug"
 	&lt;fatal_action_name&gt; ::= "backtrace_and_abort" | "backtrace_and_exit" |

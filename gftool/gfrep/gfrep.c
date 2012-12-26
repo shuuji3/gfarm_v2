@@ -27,7 +27,6 @@ static int omp_get_thread_num(void){ return (0); }
 #include "gfarm_foreach.h"
 #include "gfarm_list.h"
 #include "lookup.h"
-#include "gfarm_path.h"
 
 #define HOSTHASH_SIZE	101
 
@@ -348,7 +347,7 @@ print_file_list(struct gfarm_list *list)
 	int i;
 
 	for (i = 0; i < gfarm_list_length(list); ++i)
-		print_file_info(gfarm_list_elem(list, i));
+		print_file_info(gfarm_stringlist_elem(list, i));
 }
 
 static int
@@ -365,13 +364,13 @@ filesizecmp_inv(const void *a, const void *b)
 }
 
 static int
-is_enough_space(const char *path, char *host, int port, gfarm_off_t size)
+is_enough_space(char *host, int port, gfarm_off_t size)
 {
 	gfarm_int32_t bsize;
 	gfarm_off_t blocks, bfree, bavail, files, ffree, favail;
 	gfarm_error_t e;
 
-	e = gfs_statfsnode_by_path(path, host, port, &bsize,
+	e = gfs_statfsnode(host, port, &bsize,
 	    &blocks, &bfree, &bavail, &files, &ffree, &favail);
 	if (e != GFARM_ERR_NO_ERROR)
 		fprintf(stderr, "%s: %s\n", host, gfarm_error_string(e));
@@ -411,10 +410,7 @@ remove_replicas(struct file_info *fi, int ncopy, int nhost, char **host)
 					fi->pathname, host[k]);
 				if (e == GFARM_ERR_NO_ERROR)
 					++i;
-				else if (e == GFARM_ERR_INSUFFICIENT_NUMBER_OF_FILE_REPLICAS) {
-					e_save = e;
-					break;
-				} else {
+				else {
 					/* error is always overwritten */
 					e_save = e;
 					fprintf(stderr, "%s: %s\n",
@@ -451,7 +447,7 @@ action(struct action *act, int tnum, int nth, int pi, struct file_info *fi,
 	while (1) {
 		while (fi->surplus_ncopy == 0
 		       && (file_copy_does_exist(fi, dst[di])
-			   || !is_enough_space(fi->pathname,
+			   || !is_enough_space(
 				   dst[di], dst_port[di], fi->filesize))
 		       && max_niter > 0) {
 			if (opt_verbose)
@@ -692,15 +688,17 @@ compare_available_capacity_r(const void *s1, const void *s2)
  * - maybe(?) should use gfm_client_schedule_file instead.
  */
 gfarm_error_t
-schedule_host_domain(const char *path, const char *domain,
+schedule_host_domain(const char *domain,
 	int *nhostsp, struct gfarm_host_sched_info **hostsp)
 {
 	gfarm_error_t e;
 	struct gfm_connection *gfm_server;
+	const char *path = GFARM_PATH_ROOT;
 
-	if ((e = gfm_client_connection_and_process_acquire_by_path(
-	    path, &gfm_server)) != GFARM_ERR_NO_ERROR)
+	if ((e = gfarm_url_parse_metadb(&path, &gfm_server))
+	    != GFARM_ERR_NO_ERROR)
 		return (e);
+
 	e = gfm_client_schedule_host_domain(gfm_server, domain,
 	    nhostsp, hostsp);
 	gfm_client_connection_free(gfm_server);
@@ -708,7 +706,7 @@ schedule_host_domain(const char *path, const char *domain,
 }
 
 static gfarm_error_t
-create_hostlist_by_domain_and_hash(struct file_info *finfo, char *domain,
+create_hostlist_by_domain_and_hash(char *domain,
 	struct gfarm_hash_table *hosthash,
 	int *nhostsp, char ***hostsp, int **portsp)
 {
@@ -717,7 +715,7 @@ create_hostlist_by_domain_and_hash(struct file_info *finfo, char *domain,
 	char **hosts;
 	gfarm_error_t e;
 
-	e = schedule_host_domain(finfo->pathname, domain, &ninfo, &infos);
+	e = schedule_host_domain(domain, &ninfo, &infos);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 	/* sort 'infos' in descending order wrt available capacity */
@@ -896,14 +894,10 @@ main(int argc, char *argv[])
 	error_check(e);
 
 	for (i = 0; i < gfarm_stringlist_length(&paths); i++) {
-		char *file = gfarm_stringlist_elem(&paths, i), *realpath = NULL;
+		char *file = gfarm_stringlist_elem(&paths, i);
 
-		e = gfarm_realpath_by_gfarm2fs(file, &realpath);
-		if (e == GFARM_ERR_NO_ERROR)
-			file = realpath;
 		e = gfarm_foreach_directory_hierarchy(
 			create_filelist, NULL, NULL, file, &flist);
-		free(realpath);
 		if (e != GFARM_ERR_NO_ERROR)
 			break;
 	}
@@ -935,9 +929,6 @@ main(int argc, char *argv[])
 		fflush(stdout);
 	}
 	e = create_hostlist_by_domain_and_hash(
-		gfarm_list_length(&flist.slist) > 0 ?
-		gfarm_list_elem(&flist.slist, 0) :
-		gfarm_list_elem(&flist.dlist, 0),
 		flist.dst_domain, flist.dst_hosthash,
 		&gfrep_arg.ndst, &gfrep_arg.dst, &gfrep_arg.dst_port);
 	error_check(e);

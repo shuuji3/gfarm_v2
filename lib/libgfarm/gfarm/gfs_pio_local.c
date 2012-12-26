@@ -23,7 +23,6 @@
 #include "gfs_client.h"
 #include "gfs_io.h"
 #include "gfs_pio.h"
-#include "schedule.h"
 
 #if 0 /* not yet in gfarm v2 */
 
@@ -121,12 +120,6 @@ gfs_pio_local_storage_close(GFS_File gf)
 		return (e);
 	}
 	e2 = gfs_client_close(gfs_server, gf->fd);
-	gfarm_schedule_host_unused(
-	    gfs_client_hostname(gfs_server),
-	    gfs_client_port(gfs_server),
-	    gfs_client_username(gfs_server),
-	    gf->scheduled_age);
-
 	gfs_client_connection_free(gfs_server);
 
 	if (e != GFARM_ERR_NO_ERROR || e2 != GFARM_ERR_NO_ERROR) {
@@ -265,9 +258,17 @@ gfs_pio_local_storage_fstat(GFS_File gf, struct gfs_stat *st)
 	if (fstat(vc->fd, &sb) == 0) {
 		st->st_size = sb.st_size;
 		st->st_atimespec.tv_sec = sb.st_atime;
-		st->st_atimespec.tv_nsec = gfarm_stat_atime_nsec(&sb);
+#ifdef HAVE_STRUCT_STAT_ST_ATIM_TV_NSEC
+		st->st_atimespec.tv_nsec = sb.st_atim.tv_nsec;
+#else
+		st->st_atimespec.tv_nsec = 0;
+#endif
 		st->st_mtimespec.tv_sec = sb.st_mtime;
-		st->st_mtimespec.tv_nsec = gfarm_stat_mtime_nsec(&sb);
+#ifdef HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC
+		st->st_mtimespec.tv_nsec = sb.st_mtim.tv_nsec;
+#else
+		st->st_mtimespec.tv_nsec = 0;
+#endif
 	} else {
 		int save_errno = errno;
 		gflog_debug(GFARM_MSG_1001371,

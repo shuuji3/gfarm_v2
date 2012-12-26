@@ -28,19 +28,6 @@ gfarm_mutex_lock(pthread_mutex_t *mutex, const char *where, const char *what)
 		    where, what, strerror(err));
 }
 
-/* false: EBUSY */
-int
-gfarm_mutex_trylock(pthread_mutex_t *mutex, const char *where,
-	const char *what)
-{
-	int err = pthread_mutex_trylock(mutex);
-
-	if (err != 0 && err != EBUSY)
-		gflog_fatal(GFARM_MSG_1003565, "%s: %s mutex trylock: %s",
-		    where, what, strerror(err));
-	return (err == 0);
-}
-
 void
 gfarm_mutex_unlock(pthread_mutex_t *mutex, const char *where, const char *what)
 {
@@ -60,8 +47,6 @@ gfarm_mutex_destroy(pthread_mutex_t *mutex, const char *where, const char *what)
 		gflog_fatal(GFARM_MSG_1001488, "%s: %s mutex destroy: %s",
 		    where, what, strerror(err));
 }
-
-#ifndef __KERNEL__
 
 void
 gfarm_cond_init(pthread_cond_t *cond, const char *where, const char *what)
@@ -136,4 +121,3 @@ gfarm_cond_destroy(pthread_cond_t *cond, const char *where, const char *what)
 		gflog_fatal(GFARM_MSG_1001489, "%s: %s cond destroy: %s",
 		    where, what, strerror(err));
 }
-#endif /* __KERNEL__ */

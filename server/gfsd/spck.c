@@ -19,12 +19,15 @@
 #include "gfutil.h"
 #include "hash.h"
 
-#include "config.h"
 #include "gfm_client.h"
 
 #include "gfsd_subr.h"
 
-static enum gfarm_spool_check_level spool_check_level;
+static enum {
+	MODE_DISPLAY,
+	MODE_DELETE,
+	MODE_LOST_FOUND
+} invalid_file_mode = MODE_DISPLAY;
 
 static gfarm_error_t
 gfm_client_replica_add(gfarm_ino_t inum, gfarm_uint64_t gen, gfarm_off_t size)
@@ -98,7 +101,11 @@ move_file_to_lost_found_main(const char *file, struct stat *stp,
 	gfarm_uint64_t gen_new;
 
 	mtime.tv_sec = stp->st_mtime;
-	mtime.tv_nsec = gfarm_stat_mtime_nsec(stp);
+#ifdef HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC
+	mtime.tv_nsec = stp->st_mtim.tv_nsec;
+#else
+	mtime.tv_nsec = 0;
+#endif
 	e = gfm_client_replica_create_file_in_lost_found(
 	    inum_old, gen_old, (gfarm_off_t)stp->st_size, &mtime,
 	    &inum_new, &gen_new);
@@ -321,12 +328,12 @@ deal_with_invalid_file(const char *file, struct stat *stp, int valid_inum_gen,
 {
 	gfarm_error_t e;
 
-	switch (spool_check_level) {
-	case GFARM_SPOOL_CHECK_LEVEL_DISPLAY:
+	switch (invalid_file_mode) {
+	case MODE_DISPLAY:
 		gflog_notice(GFARM_MSG_1000603, "%s: invalid file", file);
 		e = GFARM_ERR_NO_ERROR;
 		break;
-	case GFARM_SPOOL_CHECK_LEVEL_DELETE:
+	case MODE_DELETE:
 		e = unlink_file(file);
 		if (e != GFARM_ERR_NO_ERROR)
 			gflog_warning(GFARM_MSG_1000604,
@@ -335,7 +342,7 @@ deal_with_invalid_file(const char *file, struct stat *stp, int valid_inum_gen,
 			gflog_notice(GFARM_MSG_1000605,
 			    "%s: deleted", file);
 		break;
-	case GFARM_SPOOL_CHECK_LEVEL_LOST_FOUND:
+	case MODE_LOST_FOUND:
 	default:
 		if (valid_inum_gen)
 			e = move_file_to_lost_found(file, stp, inum, gen,
@@ -345,7 +352,6 @@ deal_with_invalid_file(const char *file, struct stat *stp, int valid_inum_gen,
 			    "%s: unsupported file (ignored)", file);
 			e = GFARM_ERR_INVALID_ARGUMENT;
 		}
-		break;
 	}
 	return (e);
 }
@@ -520,37 +526,39 @@ check_metadata(struct gfarm_hash_table *hash_ok)
 #define HASH_OK_SIZE 999983
 
 /*
- *  gfarm_spool_check_level == GFARM_SPOOL_CHECK_LEVEL_... :
- *  DISPLAY    ... display invalid files (slow)
- *  DELETE     ... delete invalid files  (slow)
- *  LOST_FOUND ... move invalid files to gfarm:///lost+found
- *                 and delete invalid replica-references from metadata
+ * check_level:
+ *  0, 1      ... display invalid files (slow)
+ *  2         ... delete invalid files  (slow)
+ *  otherwise ... move invalid files to gfarm:///lost+found
+ *                and delete invalid replica-references from metadata
  */
-void
-gfsd_spool_check()
+gfarm_error_t
+gfsd_spool_check(int check_level)
 {
-	struct gfarm_hash_table *hash_ok; /* valid files */
+	gfarm_error_t e;
+	struct gfarm_hash_table *hash_ok;
 
-	gflog_debug(GFARM_MSG_1003680, "spool_check_level=%s",
-	    gfarm_spool_check_level_get_by_name());
-
-	spool_check_level = gfarm_spool_check_level_get();
-	switch (spool_check_level) {
-	case GFARM_SPOOL_CHECK_LEVEL_LOST_FOUND:
-		hash_ok = gfarm_hash_table_alloc(HASH_OK_SIZE,
-		    gfarm_hash_default, gfarm_hash_key_equal_default);
+	switch (check_level) {
+	case 0:
+	case 1:
+		invalid_file_mode = MODE_DISPLAY;
+		e = check_spool(".", NULL);
+		break;
+	case 2:
+		invalid_file_mode = MODE_DELETE;
+		e = check_spool(".", NULL);
+		break;
+	default:
+		hash_ok = gfarm_hash_table_alloc(
+			HASH_OK_SIZE,
+			gfarm_hash_default, gfarm_hash_key_equal_default);
 		if (hash_ok == NULL)
 			fatal(GFARM_MSG_1003560, "no memory for spool_check");
 		check_metadata(hash_ok);
-		break;
-	case GFARM_SPOOL_CHECK_LEVEL_DISPLAY:
-	case GFARM_SPOOL_CHECK_LEVEL_DELETE:
-		hash_ok = NULL;
-		break;
-	default:
-		return;
-	}
-	(void)check_spool(".", hash_ok);
-	if (hash_ok)
+
+		invalid_file_mode = MODE_LOST_FOUND;
+		e = check_spool(".", hash_ok);
 		gfarm_hash_table_free(hash_ok);
+	}
+	return (e);
 }

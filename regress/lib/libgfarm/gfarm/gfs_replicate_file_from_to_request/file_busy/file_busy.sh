@@ -16,7 +16,7 @@ srchost=`sed -n 1p $localtmp`
 dsthost=`sed -n 2p $localtmp`
 
 # remove the effect of gfarm.ncopy in the root directory
-gfncopy -s 1 $gftop
+echo -n 1 | gfxattr -s $gftop gfarm.ncopy
 
 if gfreg -h $srchost $data/1byte $gftmp &&
    $testbin/file_busy $gftmp $GFARM_FILE_RDWR $dsthost 0 2>&1 |

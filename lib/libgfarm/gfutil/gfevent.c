@@ -15,10 +15,6 @@
 #include <gfarm/gflog.h>
 
 #include <gfarm/gfarm_config.h>
-#ifdef __KERNEL__
-#undef HAVE_EPOLL
-#endif /* __KERNEL__ */
-
 #ifdef HAVE_EPOLL
 
 #include <sys/epoll.h>
@@ -557,16 +553,13 @@ gfarm_eventqueue_turn(struct gfarm_eventqueue *q,
 #endif
 	if (nfound == -1) {
 		int save_errno = errno;
-
-		if (save_errno != EINTR) {
 #ifdef HAVE_EPOLL
-			gflog_debug(GFARM_MSG_1000781,
-			    "epoll_wait() failed: %s", strerror(save_errno));
+		gflog_debug(GFARM_MSG_1000781, "epoll_wait() failed: %s",
+		    strerror(save_errno));
 #else
-			gflog_debug(GFARM_MSG_1003564,
-			    "select() failed: %s", strerror(save_errno));
+		gflog_debug(GFARM_MSG_1003564,
+		    "select() failed: %s", strerror(save_errno));
 #endif
-		}
 		return (save_errno);
 	}
 	gettimeofday(&end_time, NULL);

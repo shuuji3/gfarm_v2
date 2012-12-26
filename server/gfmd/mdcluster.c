@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -137,7 +136,7 @@ mdcluster_enter(const char *name, struct mdcluster **cpp)
 	struct mdcluster *c;
 	gfarm_error_t e;
 	char *name2;
-	static const char diag[] = "mdcluster_enter";
+	static const char *diag = "mdcluster_enter";
 
 	c = mdcluster_lookup_internal(name);
 	if (c) {
