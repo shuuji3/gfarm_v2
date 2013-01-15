@@ -1,0 +1,22 @@
+#
+# Check gfmd on given host is connected to master gfmd
+#
+check_gfmd_connected()
+{
+	TARGET_HOSTNAME=`$GFSERVICE $DEBUG get-config-gfarm-param $1 \
+		BACKEND_HOSTNAME`
+	[ "X$TARGET_HOSTNAME" = X ] && return 1
+
+	I=0
+	while [ $I -lt $3 ]; do
+		STATE=`$GFSERVICE $DEBUG gfcmd $2 gfmdhost -l | \
+			awk "/${TARGET_HOSTNAME}/{ print \\\$1 }"`
+		if [ X$STATE = X+ ]; then
+			return 0
+		fi
+		sleep 1
+		I=`expr $I + 1`
+	done
+
+	return 1
+}
