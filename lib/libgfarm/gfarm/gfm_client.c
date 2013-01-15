@@ -30,9 +30,7 @@
 #include "gfnetdb.h"
 #include "lru_cache.h"
 #include "queue.h"
-#include "thrsubr.h"
 
-#include "context.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
 #include "sockopt.h"
@@ -45,11 +43,11 @@
 #include "gfj_client.h"
 #include "xattr_info.h"
 #include "gfm_client.h"
-#include "fsngroup_info.h"
 #include "quota_info.h"
 #include "metadb_server.h"
 #include "filesystem.h"
-#include "liberror.h"
+#include "gfs_misc.h"
+#include "gfs_file_list.h"
 
 struct gfm_connection {
 	struct gfp_cached_connection *cache_entry;
@@ -62,53 +60,21 @@ struct gfm_connection {
 	char pid_key[GFM_PROTO_PROCESS_KEY_LEN_SHAREDSECRET];
 
 	struct gfarm_metadb_server *real_server;
+	struct gfs_file_list *file_list;
 
 	int failover_count;
 };
 
-#define staticp	(gfarm_ctxp->gfm_client_static)
-
-struct gfm_client_static {
-	struct gfp_conn_cache server_cache;
-};
-
 #define SERVER_HASHTAB_SIZE	31	/* prime number */
-
-/* retry count for auth/process_alloc */
-#define CONNERR_RETRY_COUNT 3
 
 static gfarm_error_t gfm_client_connection_dispose(void *);
 
-gfarm_error_t
-gfm_client_static_init(struct gfarm_context *ctxp)
-{
-	struct gfm_client_static *s;
-
-	GFARM_MALLOC(s);
-	if (s == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	gfp_conn_cache_init(&s->server_cache,
+static struct gfp_conn_cache gfm_server_cache =
+	GFP_CONN_CACHE_INITIALIZER(gfm_server_cache,
 		gfm_client_connection_dispose,
 		"gfm_connection",
 		SERVER_HASHTAB_SIZE,
-		&ctxp->gfmd_connection_cache);
-
-	ctxp->gfm_client_static = s;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-void
-gfm_client_static_term(struct gfarm_context *ctxp)
-{
-	struct gfm_client_static *s = ctxp->gfm_client_static;
-
-	if (s == NULL)
-		return;
-
-	gfp_conn_cache_term(&s->server_cache);
-	free(s);
-}
+		&gfarm_gfmd_connection_cache);
 
 int
 gfm_client_is_connection_error(gfarm_error_t e)
@@ -138,6 +104,12 @@ int
 gfm_client_is_connection_valid(struct gfm_connection *gfm_server)
 {
 	return (gfp_is_cached_connection(gfm_server->cache_entry));
+}
+
+int
+gfm_client_refcount(struct gfm_connection *gfm_server)
+{
+	return (gfp_cached_connection_refcount(gfm_server->cache_entry));
 }
 
 const char *
@@ -188,11 +160,6 @@ gfm_client_connection_get_real_server(struct gfm_connection *gfm_server)
 	return (gfm_server->real_server);
 }
 
-int
-gfm_client_connection_failover_count(struct gfm_connection *gfm_server)
-{
-	return (gfm_server->failover_count);
-}
 
 gfarm_error_t
 gfm_client_process_get(struct gfm_connection *gfm_server,
@@ -223,12 +190,12 @@ gfm_client_process_is_set(struct gfm_connection *gfm_server)
 void
 gfm_client_purge_from_cache(struct gfm_connection *gfm_server)
 {
-	gfp_cached_connection_purge_from_cache(&staticp->server_cache,
+	gfp_cached_connection_purge_from_cache(&gfm_server_cache,
 	    gfm_server->cache_entry);
 }
 
 #define gfm_client_connection_used(gfm_server) \
-	gfp_cached_connection_used(&staticp->server_cache, \
+	gfp_cached_connection_used(&gfm_server_cache, \
 	    (gfm_server)->cache_entry)
 
 int
@@ -241,10 +208,8 @@ gfm_cached_connection_had_connection_error(struct gfm_connection *gfm_server)
 void
 gfm_client_connection_gc(void)
 {
-	gfp_cached_connection_gc_all(&staticp->server_cache);
+	gfp_cached_connection_gc_all(&gfm_server_cache);
 }
-
-#ifndef __KERNEL__
 
 static gfarm_error_t
 gfm_client_nonblock_sock_connect(const char *hostname, int port,
@@ -316,7 +281,6 @@ gfm_client_nonblock_sock_connect(const char *hostname, int port,
 	*aip = res;
 	return (GFARM_ERR_NO_ERROR);
 }
-#endif /* !__KERNEL__ */
 
 struct gfm_client_connect_info {
 	int ms_idx;
@@ -325,7 +289,6 @@ struct gfm_client_connect_info {
 	struct gfarm_metadb_server *ms;
 };
 
-#ifndef __KERNEL__
 static gfarm_error_t
 gfm_alloc_connect_info(int n, struct gfm_client_connect_info **cisp,
 	struct pollfd **pfdsp)
@@ -350,19 +313,16 @@ gfm_alloc_connect_info(int n, struct gfm_client_connect_info **cisp,
 	return (GFARM_ERR_NO_ERROR);
 }
 
-
 static gfarm_error_t
 gfm_client_connect_single(const char *hostname, int port,
 	const char *source_ip, struct gfm_client_connect_info **cisp,
 	struct pollfd **pfdsp, int *nfdp)
 {
 	gfarm_error_t e;
-	int sock, i, nmsl;
+	int sock;
 	struct addrinfo *res;
 	struct pollfd *pfd, *pfds;
 	struct gfm_client_connect_info *ci, *cis;
-	struct gfarm_filesystem *fs;
-	struct gfarm_metadb_server *ms, **msl;
 
 	if ((e = gfm_alloc_connect_info(1, &cis, &pfds))
 	    != GFARM_ERR_NO_ERROR)
@@ -375,28 +335,9 @@ gfm_client_connect_single(const char *hostname, int port,
 		free(cis);
 		return (e);
 	}
-	fs = gfarm_filesystem_get(hostname, port);
-	if (fs == NULL) {
-		free(pfds);
-		free(cis);
-		return (GFARM_ERR_UNKNOWN_HOST);
-	}
-
 	ci = &cis[0];
 	ci->res_ai = res;
 	ci->ms = NULL;
-	msl = gfarm_filesystem_get_metadb_server_list(fs, &nmsl);
-	assert(msl);
-	for (i = 0; i < nmsl; ++i) {
-		ms = msl[i];
-		if (strcmp(gfarm_metadb_server_get_name(ms), hostname) == 0 &&
-		    gfarm_metadb_server_get_port(ms) == port) {
-			assert(!gfarm_metadb_server_is_self(ms));
-			ci->ms = ms;
-			break;
-		}
-	}
-
 	pfd = &pfds[0];
 	ci->pfd = pfd;
 	pfd->fd = sock;
@@ -457,9 +398,14 @@ gfm_client_connect_multiple(const char *hostname, int port,
 	*nfdp = nfd;
 	return (GFARM_ERR_NO_ERROR);
 }
-#else /* __KERNEL__ */
-#define gfm_client_connect_multiple	NULL
-#endif /* __KERNEL__ */
+
+static void
+gfm_client_connection_dispose_data(void *data)
+{
+	struct gfm_connection *gfm_server = data;
+
+	gfs_pio_file_list_free(gfm_server->file_list);
+}
 
 #ifdef HAVE_GSI
 static gfarm_error_t
@@ -504,15 +450,16 @@ gfm_client_connection0(struct gfp_cached_connection *cache_entry,
 	const char *hostname, *user;
 	struct gfarm_metadb_server *ms = NULL;
 	struct pollfd *pfd, *pfds = NULL;
-	struct addrinfo *res = NULL;
+	struct addrinfo *res;
 	struct gfm_client_connect_info *ci, *cis = NULL;
 	struct timeval timeout;
-	struct gfarm_filesystem *fs;
+	struct gfs_file_list *gfl = NULL;
 
 	hostname = gfp_cached_connection_hostname(cache_entry);
 	port = gfp_cached_connection_port(cache_entry);
 	user = gfp_cached_connection_username(cache_entry);
-#ifndef __KERNEL__
+	gfp_cached_connection_set_dispose_data(cache_entry,
+	    gfm_client_connection_dispose_data);
 	/* connect_op is
 	 *   gfm_client_connect_single or
 	 *   gfm_client_connect_multiple
@@ -523,22 +470,17 @@ gfm_client_connection0(struct gfp_cached_connection *cache_entry,
 	gettimeofday(&timeout, NULL);
 	timeout.tv_sec += GFM_CLIENT_CONNECT_TIMEOUT;
 	sock = -1;
+	res = NULL;
 	e = GFARM_ERR_NO_ERROR;
 	do {
 		errno = 0;
 		r = poll(pfds, nfd, 1000);
 		if (r == -1) {
 			e = gfarm_errno_to_error(errno);
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "poll: %s",
-			    gfarm_error_string(e));
 			break;
 		}
 		if (r == 0) {
 			e = GFARM_ERR_CONNECTION_REFUSED;
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "poll: %s",
-			    gfarm_error_string(e));
 			break;
 		}
 		for (i = 0; i < nfd; ++i) {
@@ -574,15 +516,16 @@ gfm_client_connection0(struct gfp_cached_connection *cache_entry,
 	}
 	if (e != GFARM_ERR_NO_ERROR)
 		goto end;
-#else
-	{
-		int err;
-		if ((err = gfsk_client_connect(hostname, port, source_ip, user,
-			 &sock)) != 0){
-			return (gfarm_errno_to_error(err > 0 ? err : -err));
-		}
+
+	gfl = gfs_pio_file_list_alloc();
+	if (gfl == NULL) {
+		close(sock);
+		e = GFARM_ERR_NO_MEMORY;
+		gflog_debug(GFARM_MSG_1003370,
+			"allocation of 'gfs_file_list' failed: %s",
+			gfarm_error_string(e));
+		goto end;
 	}
-#endif
 	GFARM_MALLOC(gfm_server);
 	if (gfm_server == NULL) {
 		close(sock);
@@ -590,16 +533,6 @@ gfm_client_connection0(struct gfp_cached_connection *cache_entry,
 		gflog_debug(GFARM_MSG_1001097,
 			"allocation of 'gfm_server' failed: %s",
 			gfarm_error_string(e));
-		goto end;
-	}
-	/* add filesystem dynamically for Distributed MDS */
-	fs = gfarm_filesystem_get(hostname, port);
-	if (fs == NULL && (e = gfarm_filesystem_add(hostname, port, &fs))
-	    != GFARM_ERR_NO_ERROR) {
-		close(sock);
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "add filesystem failed: %s",
-		    gfarm_error_string(e));
 		goto end;
 	}
 	e = gfp_xdr_new_socket(sock, &gfm_server->conn);
@@ -611,7 +544,6 @@ gfm_client_connection0(struct gfp_cached_connection *cache_entry,
 			gfarm_error_string(e));
 		goto end;
 	}
-#ifndef __KERNEL__
 	/* XXX We should explicitly pass the original global username too. */
 	e = gfarm_auth_request(gfm_server->conn,
 	    GFM_SERVICE_TAG, res->ai_canonname,
@@ -642,21 +574,23 @@ gfm_client_connection0(struct gfp_cached_connection *cache_entry,
 			    "specified, but fails: %s", gfarm_error_string(e1));
 	}
 #endif
-#endif /* __KERNEL__ */
 	gfm_server->cache_entry = cache_entry;
 	gfp_cached_connection_set_data(cache_entry, gfm_server);
 	gfm_server->pid = 0;
-	gfm_server->real_server = ms != NULL ? ms :
-		gfarm_filesystem_get_metadb_server_first(fs);
-	gfm_server->failover_count = gfarm_filesystem_failover_count(fs);
+	gfm_server->real_server = ms;
+	gfm_server->file_list = gfl;
+	gfl = NULL;
+	gfm_server->failover_count = 0;
 	*gfm_serverp = gfm_server;
 end:
 	if (res)
 		gfarm_freeaddrinfo(res);
 	free(cis);
 	free(pfds);
+	free(gfl);
 	return (e);
 }
+
 /*
  * gfm_client_connection_acquire - create or lookup a cached connection
  */
@@ -671,7 +605,7 @@ gfm_client_connection_acquire(const char *hostname, int port,
 	unsigned int sleep_max_interval = 512;	/* about 8.5 min */
 	struct timeval expiration_time;
 
-	e = gfp_cached_connection_acquire(&staticp->server_cache,
+	e = gfp_cached_connection_acquire(&gfm_server_cache,
 	    hostname, port, user, &cache_entry, &created);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001100,
@@ -686,7 +620,7 @@ gfm_client_connection_acquire(const char *hostname, int port,
 	e = gfm_client_connection0(cache_entry, gfm_serverp, NULL, NULL,
 	    gfm_client_connect_multiple);
 	gettimeofday(&expiration_time, NULL);
-	expiration_time.tv_sec += gfarm_ctxp->gfmd_reconnection_timeout;
+	expiration_time.tv_sec += gfarm_gfmd_reconnection_timeout;
 	while (IS_CONNECTION_ERROR(e) &&
 	       !gfarm_timeval_is_expired(&expiration_time)) {
 		gflog_warning(GFARM_MSG_1000058,
@@ -703,7 +637,7 @@ gfm_client_connection_acquire(const char *hostname, int port,
 		gflog_error(GFARM_MSG_1000059,
 		    "cannot connect to gfmd at %s:%d, give up: %s",
 		    hostname, port, gfarm_error_string(e));
-		gfp_cached_connection_purge_from_cache(&staticp->server_cache,
+		gfp_cached_connection_purge_from_cache(&gfm_server_cache,
 		    cache_entry);
 		gfp_uncached_connection_dispose(cache_entry);
 	}
@@ -717,7 +651,7 @@ gfm_client_connection_addref(struct gfm_connection *gfm_server)
 	struct gfp_cached_connection *cache_entry;
 	int created;
 
-	e = gfp_cached_connection_acquire(&staticp->server_cache,
+	e = gfp_cached_connection_acquire(&gfm_server_cache,
 	    gfm_client_hostname(gfm_server),
 	    gfm_client_port(gfm_server),
 	    gfm_client_username(gfm_server),
@@ -742,72 +676,53 @@ gfarm_error_t
 gfm_client_connection_and_process_acquire(const char *hostname, int port,
 	const char *user, struct gfm_connection **gfm_serverp)
 {
-	gfarm_error_t e;
 	struct gfm_connection *gfm_server;
-	int i, sleep_interval = 1;
+	gfarm_error_t e = gfm_client_connection_acquire(hostname, port,
+	    user, &gfm_server);
 
-	for (i = 0; i < CONNERR_RETRY_COUNT; ++i) {
-		e = gfm_client_connection_acquire(hostname, port,
-		    user, &gfm_server);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001101,
+			"acquirement of client connection failed: %s",
+			gfarm_error_string(e));
+		return (e);
+	}
 
-		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001101,
-			    "acquirement of client connection failed: %s",
-			    gfarm_error_string(e));
-			break;
-		}
-
-		if (gfm_server->pid != 0)
-			break;
+	/*
+	 * XXX FIXME
+	 * should use COMPOUND request to reduce number of roundtrip
+	 */
+	if (gfm_server->pid == 0) {
 		gfarm_auth_random(gfm_server->pid_key,
 		    GFM_PROTO_PROCESS_KEY_LEN_SHAREDSECRET);
-		/*
-		 * XXX FIXME
-		 * should use COMPOUND request to reduce number of roundtrip
-		 */
 		e = gfm_client_process_alloc(gfm_server,
 		    GFM_PROTO_PROCESS_KEY_TYPE_SHAREDSECRET,
 		    gfm_server->pid_key,
 		    GFM_PROTO_PROCESS_KEY_LEN_SHAREDSECRET,
 		    &gfm_server->pid);
-		if (e == GFARM_ERR_NO_ERROR)
-			break;
-
-		gflog_error(GFARM_MSG_1000060,
-		    "failed to allocate gfarm PID: %s",
-		    gfarm_error_string(e));
-
-		gfm_client_connection_free(gfm_server);
-		if (IS_CONNECTION_ERROR(e) == 0)
-			break;
-
-		/* possibly gfmd failover or temporary error */
-		sleep(sleep_interval);
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "retry to connect");
-		sleep_interval *= 2;
-	}
-
-	if (e == GFARM_ERR_NO_ERROR) {
-#ifdef HAVE_GSI
-		/* obtain global username */
-		if (GFARM_IS_AUTH_GSI(gfm_server->auth_method)) {
-			e = gfarm_set_global_user_by_gsi(gfm_server);
-			if (e != GFARM_ERR_NO_ERROR) {
-				gflog_error(GFARM_MSG_1003450,
-				    "cannot set global username: %s",
-				    gfarm_error_string(e));
-				gfm_client_connection_free(gfm_server);
-				return (e);
-			}
+		if (e != GFARM_ERR_NO_ERROR) {
+			gflog_error(GFARM_MSG_1000060,
+			    "failed to allocate gfarm PID: %s",
+			    gfarm_error_string(e));
+			gfm_client_connection_free(gfm_server);
+			return (e);
 		}
-#endif
-		*gfm_serverp = gfm_server;
 	}
+#ifdef HAVE_GSI
+	/* obtain global username */
+	if (GFARM_IS_AUTH_GSI(gfm_server->auth_method)) {
+		e = gfarm_set_global_user_by_gsi(gfm_server);
+		if (e != GFARM_ERR_NO_ERROR) {
+			gflog_error(GFARM_MSG_1003450,
+			    "cannot set global username: %s",
+			    gfarm_error_string(e));
+			gfm_client_connection_free(gfm_server);
+			return (e);
+		}
+	}
+#endif
+	*gfm_serverp = gfm_server;
 	return (e);
 }
-
-#ifndef __KERNEL__	/* server only */
 
 /*
  * gfm_client_connect - create an uncached connection
@@ -851,7 +766,6 @@ gfm_client_connect_with_seteuid(const char *hostname, int port,
 	}
 	return (e);
 }
-#endif /* __KERNEL__ */
 
 static gfarm_error_t
 gfm_client_connection_dispose(void *connection_data)
@@ -871,17 +785,53 @@ gfm_client_connection_dispose(void *connection_data)
 	return (e);
 }
 
+struct gfs_file_list *
+gfm_client_connection_file_list(struct gfm_connection *gfm_server)
+{
+	return (gfm_server->file_list);
+}
+
+struct gfs_file_list *
+gfm_client_connection_detach_file_list(struct gfm_connection *gfm_server)
+{
+	struct gfs_file_list *gfl = gfm_server->file_list;
+
+	gfm_server->file_list = NULL;
+	return (gfl);
+}
+
+void
+gfm_client_connection_set_file_list(struct gfm_connection *gfm_server,
+	struct gfs_file_list *gfl)
+{
+	free(gfm_server->file_list);
+	gfm_server->file_list = gfl;
+}
+
+int
+gfm_client_connection_failover_count(struct gfm_connection *gfm_server)
+{
+	return (gfm_server->failover_count);
+}
+
+void
+gfm_client_connection_set_failover_count(
+	struct gfm_connection *gfm_server, int count)
+{
+	gfm_server->failover_count = count;
+}
+
 /*
- * gfm_client_connection_free() can be used for both
+ * gfm_client_connection_free() can be used for both 
  * an uncached connection which was created by gfm_client_connect(), and
  * a cached connection which was created by gfm_client_connection_acquire().
  * The connection will be immediately closed in the former uncached case.
- *
+ * 
  */
 void
 gfm_client_connection_free(struct gfm_connection *gfm_server)
 {
-	gfp_cached_or_uncached_connection_free(&staticp->server_cache,
+	gfp_cached_or_uncached_connection_free(&gfm_server_cache,
 	    gfm_server->cache_entry);
 }
 
@@ -901,85 +851,7 @@ gfm_client_connection_convert_to_xdr(struct gfm_connection *gfm_server)
 void
 gfm_client_terminate(void)
 {
-	gfp_cached_connection_terminate(&staticp->server_cache);
-}
-void
-gfm_client_connection_unlock(struct gfm_connection *gfm_server)
-{
-	gfp_connection_unlock(gfm_server->cache_entry);
-}
-void
-gfm_client_connection_lock(struct gfm_connection *gfm_server)
-{
-	gfp_connection_lock(gfm_server->cache_entry);
-}
-
-static void
-check_connection_or_purge(struct gfm_connection *gfm_server,
-	gfarm_error_t e)
-{
-	if (IS_CONNECTION_ERROR(e)) {
-		gfm_client_purge_from_cache(gfm_server);
-		/*
-		 * failover-detected flag must always be incremented
-		 * at purging gfm_connection to replace gfm_connection
-		 * in gfarm_url_parse_metadb(),
-		 * gfs_client_connection_and_process_acquire().
-		 */
-		gfarm_filesystem_set_failover_detected(
-		    gfarm_filesystem_get_by_connection(gfm_server), 1);
-	}
-}
-
-static gfarm_error_t
-gfm_client_xdr_send(struct gfm_connection *gfm_server, const char *format, ...)
-{
-	va_list ap;
-	gfarm_error_t e;
-
-	va_start(ap, format);
-	e = gfp_xdr_vsend(gfm_server->conn, &format, &ap);
-	va_end(ap);
-
-	check_connection_or_purge(gfm_server, e);
-
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfp_xdr_send: %s",
-		    gfarm_error_string(e));
-	} else if (*format != '\0') {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "invalid format character: %c(%x)",
-		    *format, *format);
-		e = GFARM_ERRMSG_GFP_XDR_SEND_INVALID_FORMAT_CHARACTER;
-	}
-	return (e);
-}
-
-static gfarm_error_t
-gfm_client_xdr_recv(struct gfm_connection *gfm_server, int just, int *eofp,
-	const char *format, ...)
-{
-	va_list ap;
-	gfarm_error_t e;
-
-	va_start(ap, format);
-	e = gfp_xdr_vrecv_sized_x(gfm_server->conn, just, 1, NULL, eofp,
-		&format, &ap);
-	va_end(ap);
-
-	check_connection_or_purge(gfm_server, e);
-
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfp_xdr_vrecv_sized_x: %s",
-		    gfarm_error_string(e));
-	} else if (!*eofp && *format != '\0') {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "invalid format character: %c(%x)", *format, *format);
-		e = GFARM_ERRMSG_GFP_XDR_RECV_INVALID_FORMAT_CHARACTER;
-	}
-	return (GFARM_ERR_NO_ERROR);
+	gfp_cached_connection_terminate(&gfm_server_cache);
 }
 
 gfarm_error_t
@@ -992,9 +864,8 @@ gfm_client_rpc_request(struct gfm_connection *gfm_server, int command,
 	va_start(ap, format);
 	e = gfp_xdr_vrpc_request(gfm_server->conn, command, &format, &ap);
 	va_end(ap);
-
-	check_connection_or_purge(gfm_server, e);
-
+	if (IS_CONNECTION_ERROR(e))
+		gfm_client_purge_from_cache(gfm_server);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001104,
 			"gfp_xdr_vrpc_request(%d) failed: %s",
@@ -1015,9 +886,8 @@ gfm_client_rpc_result(struct gfm_connection *gfm_server, int just,
 	gfm_client_connection_used(gfm_server);
 
 	e = gfp_xdr_flush(gfm_server->conn);
-
-	check_connection_or_purge(gfm_server, e);
-
+	if (IS_CONNECTION_ERROR(e))
+		gfm_client_purge_from_cache(gfm_server);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001105,
 			"gfp_xdr_flush() failed: %s",
@@ -1030,8 +900,8 @@ gfm_client_rpc_result(struct gfm_connection *gfm_server, int just,
 	    &errcode, &format, &ap);
 	va_end(ap);
 
-	check_connection_or_purge(gfm_server, e);
-
+	if (IS_CONNECTION_ERROR(e))
+		gfm_client_purge_from_cache(gfm_server);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001106,
 			"gfp_xdr_vrpc_result() failed: %s",
@@ -1068,8 +938,8 @@ gfm_client_rpc(struct gfm_connection *gfm_server, int just, int command,
 	    command, &errcode, &format, &ap);
 	va_end(ap);
 
-	check_connection_or_purge(gfm_server, e);
-
+	if (IS_CONNECTION_ERROR(e))
+		gfm_client_purge_from_cache(gfm_server);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001108,
 			"gfp_xdr_vrpc(%d) failed: %s",
@@ -1104,13 +974,15 @@ gfm_client_get_nhosts(struct gfm_connection *gfm_server,
 	gfarm_int32_t naliases;
 
 	for (i = 0; i < nhosts; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "ssiiii",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "ssiiii",
 		    &hosts[i].hostname, &hosts[i].architecture,
 		    &hosts[i].ncpu, &hosts[i].port, &hosts[i].flags,
 		    &naliases);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-				"gfm_client_xdr_recv() failed: %s",
+			gflog_debug(GFARM_MSG_1001110,
+				"gfp_xdr_recv() failed: %s",
 				gfarm_error_string(e));
 			return (e); /* XXX */
 		}
@@ -1218,7 +1090,9 @@ gfm_client_host_info_get_by_names_common(struct gfm_connection *gfm_server,
 		return (e);
 	}
 	for (i = 0; i < nhosts; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", names[i]);
+		e = gfp_xdr_send(gfm_server->conn, "s", names[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001117,
 				"sending hostname (%s) failed: %s",
@@ -1286,118 +1160,6 @@ gfm_client_host_info_remove(struct gfm_connection *gfm_server,
 	    GFM_PROTO_HOST_INFO_REMOVE, "s/", hostname));
 }
 
-/* fsngroup */
-gfarm_error_t
-gfm_client_fsngroup_get_all(struct gfm_connection *gfm_server,
-	size_t *np, struct gfarm_fsngroup_info **infos)
-{
-	gfarm_error_t e = GFARM_ERR_UNKNOWN;
-	gfarm_int32_t nhosts;
-	size_t n = 0;
-	size_t i;
-	struct gfarm_fsngroup_info *ret = NULL;
-	static const char diag[] = "gfm_client_fsngroup_get_all";
-
-	if ((e = gfm_client_rpc(gfm_server, 0, GFM_PROTO_FSNGROUP_GET_ALL,
-	    "/i", &nhosts)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-			"%s: gfm_client_rpc() failed: %s",
-			diag, gfarm_error_string(e));
-		goto bailout;
-	}
-
-	n = (size_t)nhosts;
-	if (nhosts > 0) {
-		int eof;
-		GFARM_MALLOC_ARRAY(ret, (size_t)nhosts);
-		if (ret == NULL) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-				"%s: can't allocate fsngroup_info(s).", diag);
-			e = GFARM_ERR_NO_MEMORY;
-			goto bailout;
-		}
-
-		for (i = 0; i < n; i++) {
-			eof = 0;
-			e = gfm_client_xdr_recv(gfm_server, 0, &eof, "ss",
-				&(ret[i].hostname), &(ret[i].fsngroupname));
-			if (eof || e != GFARM_ERR_NO_ERROR) {
-				if (eof) {
-					e = GFARM_ERR_PROTOCOL;
-					gflog_debug(GFARM_MSG_UNFIXED,
-						"%s: Unexpected EOF while "
-						"receiving replies: %s",
-						diag, gfarm_error_string(e));
-				}
-				if (e != GFARM_ERR_NO_ERROR)
-					gflog_debug(GFARM_MSG_UNFIXED,
-						"%s: gfm_client_xdr_recv() "
-						"failed: %s",
-						diag, gfarm_error_string(e));
-				n = i;
-				break;
-			}
-		}
-	}
-
-bailout:
-	if (np != NULL)
-		*np = n;
-	if (infos != NULL) {
-		*infos = ret;
-	} else {
-		for (i = 0; i < n; i++) {
-			free(ret[i].hostname);
-			free(ret[i].fsngroupname);
-		}
-		free(ret);
-	}
-	return (e);
-}
-
-gfarm_error_t
-gfm_client_fsngroup_get_by_hostname(struct gfm_connection *gfm_server,
-	const char *hostname, char **fsngroupnamep)
-{
-	gfarm_error_t e = GFARM_ERR_UNKNOWN;
-	static const char diag[] = "gfm_client_fsngroup_get_by_hostname";
-	char *ret = NULL;
-
-	if ((e = gfm_client_rpc(gfm_server, 0,
-			GFM_PROTO_FSNGROUP_GET_BY_HOSTNAME, "s/s",
-			hostname, &ret)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-			"%s: gfm_client_rpc() failed: %s",
-			diag, gfarm_error_string(e));
-	}
-
-	if (fsngroupnamep != NULL)
-		*fsngroupnamep = ret;
-	else
-		free(ret);
-
-	return (e);
-}
-
-gfarm_error_t
-gfm_client_fsngroup_modify(struct gfm_connection *gfm_server,
-	struct gfarm_fsngroup_info *info)
-{
-	gfarm_error_t e = GFARM_ERR_UNKNOWN;
-	static const char diag[] = "gfm_client_fsngroup_modify";
-
-	if ((e = gfm_client_rpc(gfm_server, 0,
-			GFM_PROTO_FSNGROUP_MODIFY, "ss/",
-			info->hostname,
-			info->fsngroupname)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-			"%s: gfm_client_rpc() failed: %s",
-			diag, gfarm_error_string(e));
-	}
-
-	return (e);
-}
-
 static gfarm_error_t
 get_nusers(struct gfm_connection *gfm_server,
 	int nusers, struct gfarm_user_info *users)
@@ -1406,9 +1168,11 @@ get_nusers(struct gfm_connection *gfm_server,
 	int i, eof;
 
 	for (i = 0; i < nusers; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "ssss",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "ssss",
 		    &users[i].username, &users[i].realname,
 		    &users[i].homedir, &users[i].gsi_dn);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001119,
 				"receiving users failed: %s",
@@ -1485,7 +1249,9 @@ gfm_client_user_info_get_by_names(struct gfm_connection *gfm_server,
 		return (e);
 	}
 	for (i = 0; i < nusers; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", names[i]);
+		e = gfp_xdr_send(gfm_server->conn, "s", names[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001125,
 				"sending username (%s) failed: %s",
@@ -1550,8 +1316,10 @@ get_ngroups(struct gfm_connection *gfm_server,
 	int i, j, eof;
 
 	for (i = 0; i < ngroups; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "si",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "si",
 		    &groups[i].groupname, &groups[i].nusers);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001127,
 				"receiving groups response failed: %s",
@@ -1573,8 +1341,10 @@ get_ngroups(struct gfm_connection *gfm_server,
 			return (GFARM_ERR_NO_MEMORY); /* XXX */
 		}
 		for (j = 0; j < groups[i].nusers; j++) {
-			e = gfm_client_xdr_recv(gfm_server, 0, &eof, "s",
+			e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "s",
 			    &groups[i].usernames[j]);
+			if (IS_CONNECTION_ERROR(e))
+				gfm_client_purge_from_cache(gfm_server);
 			if (e != GFARM_ERR_NO_ERROR) {
 				gflog_debug(GFARM_MSG_1001130,
 					"receiving group response failed: %s",
@@ -1609,7 +1379,10 @@ gfm_client_group_info_send_common(struct gfm_connection *gfm_server,
 		return (e);
 	}
 	for (i = 0; i < group->nusers; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", group->usernames[i]);
+		e = gfp_xdr_send(gfm_server->conn,
+		    "s", group->usernames[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001133,
 				"sending username (%s) failed: %s",
@@ -1672,7 +1445,9 @@ gfm_client_group_info_get_by_names(struct gfm_connection *gfm_server,
 		return (e);
 	}
 	for (i = 0; i < ngroups; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", group_names[i]);
+		e = gfp_xdr_send(gfm_server->conn, "s", group_names[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001138,
 				"sending groupname (%s) failed: %s",
@@ -1736,7 +1511,9 @@ gfm_client_group_info_users_op_common(struct gfm_connection *gfm_server,
 		return (e);
 	}
 	for (i = 0; i < nusers; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", usernames[i]);
+		e = gfp_xdr_send(gfm_server->conn, "s", usernames[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001141,
 				"sending username (%s) failed: %s",
@@ -1752,9 +1529,9 @@ gfm_client_group_info_users_op_common(struct gfm_connection *gfm_server,
 			gfarm_error_string(e));
 		return (e);
 	}
-	for (i = 0; i < nusers; i++)
+	for (i = 0; i < nusers; i++) {
 		errors[i] = gfm_client_rpc_result(gfm_server, 0, "");
-
+	}
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -1795,7 +1572,9 @@ gfm_client_group_names_get_by_users(struct gfm_connection *gfm_server,
 		return (e);
 	}
 	for (i = 0; i < nusers; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", usernames[i]);
+		e = gfp_xdr_send(gfm_server->conn, "s", usernames[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001144,
 				"sending username (%s) failed: %s",
@@ -1823,9 +1602,12 @@ gfm_client_group_names_get_by_users(struct gfm_connection *gfm_server,
 				for (j = 0; j < assignments->ngroups; j++) {
 					int eof;
 
-					errors[i] = gfm_client_xdr_recv(
-					    gfm_server, 0, &eof, "s",
+					errors[i] = gfp_xdr_recv(
+					    gfm_server->conn, 0, &eof, "s",
 					    &assignments->groupnames[j]);
+					if (IS_CONNECTION_ERROR(errors[i]))
+						gfm_client_purge_from_cache(
+						    gfm_server);
 					if (errors[i] != GFARM_ERR_NO_ERROR)
 						break;
 					if (eof)
@@ -2103,7 +1885,9 @@ gfm_client_fgetattrplus_request(struct gfm_connection *gfm_server,
 		return (e);
 
 	for (i = 0; i < npatterns; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", patterns[i]);
+		e = gfp_xdr_send(gfm_server->conn, "s", patterns[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
 	}
@@ -2149,8 +1933,10 @@ gfm_client_fgetattrplus_result(struct gfm_connection *gfm_server,
 		sizes = NULL;
 	}
 	for (j = 0; j < nattrs; j++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "sB",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "sB",
 		    &attrs[j], &sizes[j], &values[j]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -2275,19 +2061,20 @@ gfm_client_get_schedule_result(struct gfm_connection *gfm_server,
 	GFARM_MALLOC_ARRAY(infos, nhosts);
 	if (infos == NULL) { /* XXX this breaks gfm protocol */
 		gflog_debug(GFARM_MSG_1001147,
-			"allocation of array 'gfarm_host_sched_info' failed: "
-			"%s",
+			"allocation of array 'gfarm_host_sched_info' failed: %s",
 			gfarm_error_string(GFARM_ERR_NO_MEMORY));
 		return (GFARM_ERR_NO_MEMORY);
 	}
 
 	for (i = 0; i < nhosts; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "siiillllii",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "siiillllii",
 		    &infos[i].host, &infos[i].port, &infos[i].ncpu,
 		    &loadavg, &infos[i].cache_time,
 		    &infos[i].disk_used, &infos[i].disk_avail,
 		    &infos[i].rtt_cache_time,
 		    &infos[i].rtt_usec, &infos[i].flags);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001148,
 				"receiving host schedule response failed: %s",
@@ -2301,8 +2088,7 @@ gfm_client_get_schedule_result(struct gfm_connection *gfm_server,
 				gfarm_error_string(GFARM_ERR_PROTOCOL));
 			return (GFARM_ERR_PROTOCOL); /* XXX */
 		}
-		/* loadavg_1min * GFM_PROTO_LOADAVG_FSCALE */
-		infos[i].loadavg = loadavg;
+		infos[i].loadavg = (float)loadavg / GFM_PROTO_LOADAVG_FSCALE;
 	}
 
 	*nhostsp = nhosts;
@@ -2484,10 +2270,12 @@ gfm_client_getdirents_result(struct gfm_connection *gfm_server,
 		return (e);
 	}
 	for (i = 0; i < n; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "bil",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "bil",
 		    sizeof(dirents[i].d_name) - 1, &sz, dirents[i].d_name,
 		    &type,
 		    &dirents[i].d_fileno);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -2537,7 +2325,7 @@ gfm_client_getdirentsplus_result(struct gfm_connection *gfm_server,
 	for (i = 0; i < n; i++) {
 		struct gfs_stat *st = &stv[i];
 
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "bllilsslllilili",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "bllilsslllilili",
 		    sizeof(dirents[i].d_name) - 1, &sz, dirents[i].d_name,
 		    &st->st_ino, &st->st_gen, &st->st_mode, &st->st_nlink,
 		    &st->st_user, &st->st_group, &st->st_size,
@@ -2546,6 +2334,8 @@ gfm_client_getdirentsplus_result(struct gfm_connection *gfm_server,
 		    &st->st_mtimespec.tv_sec, &st->st_mtimespec.tv_nsec,
 		    &st->st_ctimespec.tv_sec, &st->st_ctimespec.tv_nsec);
 		/* XXX st_user or st_group may be NULL */
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -2582,7 +2372,9 @@ gfm_client_getdirentsplusxattr_request(struct gfm_connection *gfm_server,
 		return (e);
 
 	for (i = 0; i < npatterns; i++) {
-		e = gfm_client_xdr_send(gfm_server, "s", patterns[i]);
+		e = gfp_xdr_send(gfm_server->conn, "s", patterns[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
 	}
@@ -2611,7 +2403,7 @@ gfm_client_getdirentsplusxattr_result(struct gfm_connection *gfm_server,
 	for (i = 0; i < n; i++) {
 		struct gfs_stat *st = &stv[i];
 
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "bllilsslllililii",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "bllilsslllililii",
 		    sizeof(dirents[i].d_name) - 1, &sz, dirents[i].d_name,
 		    &st->st_ino, &st->st_gen, &st->st_mode, &st->st_nlink,
 		    &st->st_user, &st->st_group, &st->st_size,
@@ -2621,6 +2413,8 @@ gfm_client_getdirentsplusxattr_result(struct gfm_connection *gfm_server,
 		    &st->st_ctimespec.tv_sec, &st->st_ctimespec.tv_nsec,
 		    &nattrsv[i]);
 		/* XXX st_user or st_group may be NULL */
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -2654,8 +2448,10 @@ gfm_client_getdirentsplusxattr_result(struct gfm_connection *gfm_server,
 			sizes = NULL;
 		}
 		for (j = 0; j < nattrs; j++) {
-			e = gfm_client_xdr_recv(gfm_server, 0, &eof, "sB",
+			e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "sB",
 			    &attrs[j], &sizes[j], &values[j]);
+			if (IS_CONNECTION_ERROR(e))
+				gfm_client_purge_from_cache(gfm_server);
 			if (e != GFARM_ERR_NO_ERROR || eof) {
 				if (e == GFARM_ERR_NO_ERROR)
 					e = GFARM_ERR_PROTOCOL;
@@ -2811,10 +2607,10 @@ gfm_client_getxattr_result(struct gfm_connection *gfm_server,
 
 	e = gfm_client_rpc_result(gfm_server, 0, "B", size, valuep);
 	if ((e == GFARM_ERR_NO_ERROR) && xmlMode) {
-		/* value is text with '\0', drop it */
+		// value is text with '\0', drop it
 		(*size)--;
 	}
-	return (e);
+	return e;
 }
 
 gfarm_error_t
@@ -2835,8 +2631,7 @@ gfarm_error_t
 gfm_client_removexattr_request(struct gfm_connection *gfm_server,
 		int xmlMode, const char *name)
 {
-	int command = xmlMode ? GFM_PROTO_XMLATTR_REMOVE :
-		GFM_PROTO_XATTR_REMOVE;
+	int command = xmlMode ? GFM_PROTO_XMLATTR_REMOVE : GFM_PROTO_XATTR_REMOVE;
 	return (gfm_client_rpc_request(gfm_server, command, "s", name));
 }
 
@@ -2883,11 +2678,13 @@ gfm_client_findxmlattr_result(struct gfm_connection *gfm_server,
 		gflog_debug(GFARM_MSG_1001156,
 			"ctx.nvalid > ctx.nalloc: %s",
 			gfarm_error_string(GFARM_ERR_UNKNOWN));
-		return (GFARM_ERR_UNKNOWN);
+		return GFARM_ERR_UNKNOWN;
 	}
 	for (i = 0; i < ctxp->nvalid; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "ss",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "ss",
 			&ctxp->entries[i].path, &ctxp->entries[i].attrname);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -2904,13 +2701,12 @@ gfm_client_findxmlattr_result(struct gfm_connection *gfm_server,
 		ctxp->cookie_path = strdup(ctxp->entries[ctxp->nvalid-1].path);
 		ctxp->cookie_attrname =
 			strdup(ctxp->entries[ctxp->nvalid-1].attrname);
-		if ((ctxp->cookie_path == NULL) ||
-		    (ctxp->cookie_attrname == NULL)) {
+		if ((ctxp->cookie_path == NULL) || (ctxp->cookie_attrname == NULL)) {
 			gflog_debug(GFARM_MSG_1001158,
 				"allocation of 'ctx.cookie_path' or "
 				"'cookie_attrname' failed: %s",
 				gfarm_error_string(GFARM_ERR_NO_MEMORY));
-			return (GFARM_ERR_NO_MEMORY);
+			return GFARM_ERR_NO_MEMORY;
 		}
 	}
 
@@ -2989,7 +2785,7 @@ gfm_client_close_write_v2_4_result(struct gfm_connection *gfm_server,
 
 gfarm_error_t
 gfm_client_fhclose_read_request(struct gfm_connection *gfm_server,
-	gfarm_ino_t inode, gfarm_uint64_t gen,
+	gfarm_ino_t inode, gfarm_uint64_t gen, 
 	gfarm_int64_t atime_sec, gfarm_int32_t atime_nsec)
 {
 	return (gfm_client_rpc_request(gfm_server, GFM_PROTO_FHCLOSE_READ,
@@ -3004,7 +2800,7 @@ gfm_client_fhclose_read_result(struct gfm_connection *gfm_server)
 
 gfarm_error_t
 gfm_client_fhclose_write_request(struct gfm_connection *gfm_server,
-	gfarm_ino_t inode, gfarm_uint64_t gen, gfarm_off_t size,
+	gfarm_ino_t inode, gfarm_uint64_t gen, gfarm_off_t size, 
 	gfarm_int64_t atime_sec, gfarm_int32_t atime_nsec,
 	gfarm_int64_t mtime_sec, gfarm_int32_t mtime_nsec)
 {
@@ -3280,7 +3076,9 @@ gfm_client_replica_list_by_name_result(struct gfm_connection *gfm_server,
 	}
 
 	for (i = 0; i < n; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "s", &hosts[i]);
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "s", &hosts[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -3333,7 +3131,9 @@ gfm_client_replica_list_by_host_result(struct gfm_connection *gfm_server,
 		return (GFARM_ERR_NO_MEMORY); /* XXX not graceful */
 	}
 	for (i = 0; i < n; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "l", &inodes[i]);
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "l", &inodes[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -3416,8 +3216,10 @@ gfm_client_replica_info_get_result(struct gfm_connection *gfm_server,
 	}
 
 	for (i = 0; i < n; i++) {
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "sli",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "sli",
 		    &hosts[i], &gens[i], &flags[i]);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR || eof) {
 			if (e == GFARM_ERR_NO_ERROR)
 				e = GFARM_ERR_PROTOCOL;
@@ -3650,10 +3452,8 @@ gfm_client_process_alloc_child(struct gfm_connection *gfm_server,
 gfarm_error_t
 gfm_client_process_free(struct gfm_connection *gfm_server)
 {
-	return (gfm_client_rpc(gfm_server, 0, GFM_PROTO_PROCESS_FREE, "/"));
+	return (gfm_client_rpc(gfm_server, 0, GFM_PROTO_PROCESS_FREE, ""));
 }
-
-#ifndef __KERNEL__	/* gfsd only */
 
 gfarm_error_t
 gfm_client_process_set(struct gfm_connection *gfm_server,
@@ -3682,7 +3482,6 @@ gfm_client_process_set(struct gfm_connection *gfm_server,
 	}
 	return (e);
 }
-#endif /* __KERNEL__ */
 
 /*
  * compound request - convenience function
@@ -3749,12 +3548,14 @@ gfm_client_metadb_server_get_n(struct gfm_connection *gfm_server,
 
 	for (i = 0; i < n; ++i) {
 		ms = &mss[i];
-		e = gfm_client_xdr_recv(gfm_server, 0, &eof, "sisii",
+		e = gfp_xdr_recv(gfm_server->conn, 0, &eof, "sisii",
 		    &ms->name, &ms->port, &ms->clustername, &ms->flags,
 		    &ms->tflags);
+		if (IS_CONNECTION_ERROR(e))
+			gfm_client_purge_from_cache(gfm_server);
 		if (e != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "gfm_client_xdr_recv() failed: %s",
+			gflog_debug(GFARM_MSG_1002575,
+			    "gfp_xdr_recv() failed: %s",
 			    gfarm_error_string(e));
 			return (e);
 		}

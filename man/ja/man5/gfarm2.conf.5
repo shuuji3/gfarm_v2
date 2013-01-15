@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "GFARM2.CONF" "5" "21 November 2012" "Gfarm" ""
+.TH "GFARM2.CONF" "5" "18 November 2012" "Gfarm" ""
 
 .SH NAME
 gfarm2.conf \- Gfarm設定ファイル
@@ -827,6 +827,32 @@ CPU負荷のクライアントキャッシュにここで指定されるCPU負荷が加えられます。
 	schedule_rtt_thresh 4.0
 .fi
 .TP
+\fBwrite_local_priority \fI有効性\fB\fR
+gfarmは、ファイルを書き込むノードを決める際、できる限りローカル
+ホストを優先するように動作します。この文でdisableと指定することによって、
+ローカルホストを他のホストと同様に扱うように変更することができます。
+デフォルトはenableです。
+
+例:
+
+.nf
+	write_local_priority disable
+.fi
+.TP
+\fBwrite_target_domain \fIドメイン名\fB\fR
+gfarmがファイルを書き込むノードを決める際、できる限りここで
+指定したドメインを優先するように動作します。
+ここで指定したドメインにファイル作成可能なホストが存在しない場合や、
+特にこの指定を行なわなかった場合には、全ノードが対象となります。
+この指定を複数回行なっても、最初の指定のみが利用され、二番目以降は
+単に無視されるので注意してください。
+
+例:
+
+.nf
+	write_target_domain example.org
+.fi
+.TP
 \fBminimum_free_disk_space \fIバイト数\fB\fR
 ファイルシステムノードで必要な最小限度のディスク空き容量を指定
 します。このサイズ以下の空き容量しかないファイルシステムノードは、
@@ -845,51 +871,15 @@ CPU負荷のクライアントキャッシュにここで指定されるCPU負荷が加えられます。
 	minimum_free_disk_space 1G
 .fi
 .TP
-\fBgfs_proto_fhremove_request_window \fI同時処理数\fB\fR
-gfmd から gfsd に対する複製ファイル削除を、
-同時にいくつまで並行して要求できるかを設定します。
-デフォルトは 50 です。
-
-例:
-
-.nf
-	gfs_proto_fhremove_request_window 50
-.fi
-.TP
-\fBgfs_proto_replication_request_window \fI同時処理数\fB\fR
-gfmd 主導の複製処理を、gfmd から複製作成側の gfsd に対して、
-同時にいくつまで並行して要求できるかを設定します。
-デフォルトは 20 です。
-
-例:
-
-.nf
-	gfs_proto_replication_request_window 20
-.fi
-.TP
 \fBsimultaneous_replication_receivers \fI同時処理数\fB\fR
-gfarm-2.6 以降では、
-このパラメータは gfs_proto_replication_request_window と同じ意味となりますので、
-そちらを利用してください。
-このパラメータは以前のバージョンとの互換性のために残されています。
+gfmd 主導の複製処理を、単一複製作成ホストに対して、
+同時にいくつまで並行して行なうことを許すかを設定します。
 デフォルトは 20です。
 
 例:
 
 .nf
-	simultaneous_replication_receivers 20
-.fi
-.TP
-\fBoutstanding_file_replication_limit \fI同時処理数\fB\fR
-gfmd 主導の複製処理要求を、システム全体で、
-同時にいくつまで未了のまま保持しておけるかを設定します。
-このパラメータは、大量の複製要求によるメモリ不足を防ぐために存在します。
-デフォルトは 4194304 であり、これはおよそ 512MB のメモリに対応します。
-
-例:
-
-.nf
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 .fi
 .TP
 \fBgfsd_connection_cache \fIコネクション数\fB\fR
@@ -1180,20 +1170,6 @@ enable のとき、デフォルトのマスターgfmdとして設定されている場合でも、スレーブgfm
 	metadb_server_force_slave enable
 .fi
 .TP
-\fBmetadb_server_slave_listen \fI有効性\fB\fR
-enable のとき、スレーブgfmdとして設定されている場合でも、クライアントからの要求を受け付けます。
-デフォルトはdisableです。
-
-注意: この機能は開発用に用意されていますので、通常の用途では設定しないでください。
-
-この文はgfmd.confのみで有効です。
-
-例:
-
-.nf
-	metadb_server_slave_listen enable
-.fi
-.TP
 \fBmetadb_server_slave_max_size \fIノード数\fB\fR
 スレーブgfmdの最大ノード数を指定します。デフォルトは16です。
 
@@ -1354,11 +1330,10 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 		\~\~<schedule_rtt_thresh_diff_statement> |
 		\~\~<schedule_rtt_thresh_ratio_statement> |
 		\~\~<schedule_rtt_thresh_statement> |
+		\~\~<write_local_priority_statement> |
+		\~\~<write_target_domain_statement> |
 		\~\~<minimum_free_disk_space_statement> |
-		\~\~<gfs_proto_fhremove_request_window_statement> |
-		\~\~<gfs_proto_replication_request_statement> |
 		\~\~<simultaneous_replication_receivers_statement> |
-		\~\~<outstanding_file_replication_limit_statement> |
 		\~\~<gfsd_connection_cache_statement> |
 		\~\~<xmlattr_size_limit_statement> |
 		\~\~<xattr_size_limit_statement> |
@@ -1379,7 +1354,6 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 		\~\~<synchronous_replication_timeout_statement> |
 		\~\~<synchronous_journaling_statement> |
 		\~\~<metadb_server_force_slave_statement> |
-		\~\~<metadb_server_slave_listen_statement> |
 		\~\~<metadb_server_slave_max_size_statement> |
 		\~\~<metadb_journal_dir_statement> |
 		\~\~<metadb_journal_max_size_statement> |
@@ -1461,12 +1435,11 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 	<schedule_rtt_thresh_diff_statement> ::= "schedule_rtt_thresh_diff" <number>
 	<schedule_rtt_thresh_ratio_statement> ::= "schedule_rtt_thresh_ratio" <floating_point_number>
 	<schedule_rtt_thresh_statement> ::= "schedule_rtt_thresh" <floating_point_number>
+	<write_local_priority_statement> ::= "write_local_priority" <validity>
+	<write_target_domain_statement> ::= "write_target_domain" <string>
 	<minimum_free_disk_space_statement> ::=
 		\~\~"minimum_free_disk_space" <size>
-	<gfs_proto_fhremove_request_window_statement> ::= "gfs_proto_fhremove_request_window" <number>
-	<gfs_proto_replication_request_window_statement> ::= "gfs_proto_replication_request_window" <number>
 	<simultaneous_replication_receivers_statement> ::= "simultaneous_replication_receivers" <number>
-	<outstanding_file_replication_limit_statement> ::= "outstanding_file_replication_limit" <number>
 	<gfsd_connection_cache_statement> ::= "gfsd_connection_cache" <number>
 	<xmlattr_size_limit_statement> ::= "xmlattr_size_limit" <size>
 	<xattr_size_limit_statement> ::= "xattr_size_limit" <size>
@@ -1492,7 +1465,6 @@ gfarm2.confの文法をBNFで記述すると、下記のようになります。
 	<synchronous_replication_timeout_statement> ::= "synchronous_replication_timeout" <number>
 	<synchronous_journaling_statement> ::= "synchronous_journaling" <validity>
 	<metadb_server_force_slave_statement> ::= "metadb_server_force_slave" <validity>
-	<metadb_server_slave_listen_statement> ::= "metadb_server_slave_listen" <validity>
 	<metadb_server_slave_max_size_statement> ::= "metadb_server_slave_max_size" <number>
 	<metadb_journal_dir_statement> ::= "metadb_journal_dir" <pathname>
 	<metadb_journal_max_size_statement> ::= "metadb_journal_max_size" <number>

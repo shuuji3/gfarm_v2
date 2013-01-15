@@ -1,10 +1,10 @@
 # Part 1 data definition
 %define pkg	gfarm
-%define ver	2.5.8
-%define rel	rc1.1
+%define ver	2.5.8-rc2
+%define rel	1
 
 # a hook to make RPM version number different from %{ver}
-%define pkgver	%{ver}
+%define pkgver	2.5.8rc2
 
 %define prefix		%{_prefix}
 %define lib_prefix	%{_libdir}
@@ -58,7 +58,7 @@ Summary: Document for Gfarm file system
 Group: Documentation
 # always provide "gfarm-doc" as a virtual package.
 %if %{globus}
-Provides: %{pkg}-doc = %{ver}-%{rel}
+Provides: %{pkg}-doc = %{pkgver}-%{rel}
 %endif
 
 %package libs
@@ -66,7 +66,7 @@ Summary: Runtime libraries for Gfarm file system
 Group: System Environment/Libraries
 # always provide "gfarm-libs" as a virtual package.
 %if %{globus}
-Provides: %{pkg}-libs = %{ver}-%{rel}
+Provides: %{pkg}-libs = %{pkgver}-%{rel}
 %endif
 BuildRequires: openssl-devel, postgresql-devel
 
@@ -75,43 +75,43 @@ Summary: Clients for Gfarm file system
 Group: Applications/File
 # always provide "gfarm-client" as a virtual package.
 %if %{globus}
-Provides: %{pkg}-client = %{ver}-%{rel}
+Provides: %{pkg}-client = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}
+Requires: %{package_name}-libs = %{pkgver}
 
 %package fsnode
 Summary: File system daemon for Gfarm file system
 Group: System Environment/Daemons
 # always provide "gfarm-fsnode" as a virtual package.
 %if %{globus}
-Provides: %{pkg}-fsnode = %{ver}-%{rel}
+Provides: %{pkg}-fsnode = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}, %{package_name}-client = %{ver}
+Requires: %{package_name}-libs = %{pkgver}, %{package_name}-client = %{pkgver}
 
 %package server
 Summary: Metadata server for Gfarm file system
 Group: System Environment/Daemons
 # always provide "gfarm-server" as a virtual package.
 %if %{globus}
-Provides: %{pkg}-server = %{ver}-%{rel}
+Provides: %{pkg}-server = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}
+Requires: %{package_name}-libs = %{pkgver}
 
 %package ganglia
 Summary: Gfarm performance monitoring plugin for Ganglia
 Group: System Environment/Libraries
 # always provide "gfarm-ganglia" as a virtual package.
 %if %{globus}
-Provides: %{pkg}-ganglia = %{ver}-%{rel}
+Provides: %{pkg}-ganglia = %{pkgver}-%{rel}
 %endif
 
 %package devel
 Summary: Development header files and libraries for Gfarm file system
 Group: Development/Libraries
 %if %{globus}
-Provides: %{pkg}-devel = %{ver}-%{rel}
+Provides: %{pkg}-devel = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}
+Requires: %{package_name}-libs = %{pkgver}
 
 %description
 The Gfarm filesystem is a distributed filesystem consisting of the
@@ -145,6 +145,10 @@ Gfarm performance monitoring plugin for Ganglia
 Development header files and libraries for Gfarm file system
 
 %changelog
+* Thu Jan 15 2013 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.5.8rc2-1
+- Gfarm version 2.5.8 released candidate 2
+- gfruntest, gfservice and systest are included in the client package
+
 * Thu Nov  1 2012 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.5.7.2-1
 - Gfarm version 2.5.7.2 released
 - Use GFARM_CONFIGURE_OPTION instead of GLOBUS_PREFIX and
@@ -1053,6 +1057,7 @@ fi
 %{prefix}/bin/gfrep
 %{prefix}/bin/gfrm
 %{prefix}/bin/gfrmdir
+%{prefix}/bin/gfruntest
 %{prefix}/bin/gfusage
 %{prefix}/bin/gfuser
 %{prefix}/bin/gfsched
@@ -1066,6 +1071,8 @@ fi
 %{prefix}/bin/gfssh
 %{prefix}/bin/gfsshl
 %endif
+%{prefix}/bin/gfservice
+%{prefix}/bin/gfservice-agent
 %{prefix}/bin/gfstat
 %{prefix}/bin/gfstatus
 %if %{gfarm_v2_not_yet}
@@ -1078,6 +1085,10 @@ fi
 %{profile_prefix}/gfarm.sh
 %{profile_prefix}/gfarm.csh
 %endif
+
+%dir %{share_prefix}
+%{share_prefix}/gfservice
+%{share_prefix}/systest
 
 %{prefix}/bin/gfperf-autoreplica
 %{prefix}/bin/gfperf-copy
@@ -1094,7 +1105,6 @@ fi
 %{prefix}/bin/gfperf.rb
 %{prefix}/bin/gfstress.rb
 %{prefix}/bin/gfiops
-%dir %{share_prefix}
 %dir %{share_prefix}/config
 %{share_prefix}/config/gfperf-config.yml
 %{share_prefix}/config/gfperf-simple.yml

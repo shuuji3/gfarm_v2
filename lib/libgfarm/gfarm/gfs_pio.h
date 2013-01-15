@@ -3,7 +3,7 @@
  *
  * This defines internal structure of gfs_pio module.
  *
- * Only gfs_pio_section.c, gfs_pio_{local,remote}.c, gfs_pio.c and context.c
+ * Only gfs_pio_{global,section}.c, gfs_pio_{local,remote}.c and gfs_pio.c
  * are allowed to include this header file.
  * Every other modules shouldn't include this.
  */
@@ -30,9 +30,6 @@ struct gfm_connection;
 struct gfs_file {
 	struct gfs_pio_ops *ops;
 	void *view_context;
-
-	/* XXX should be a per view_context variable to support global view */
-	gfarm_uint64_t scheduled_age;
 
 	struct gfm_connection *gfm_server;
 	int fd;
@@ -113,10 +110,8 @@ struct gfs_file_section_context {
 	int fd; /* this isn't used for remote case, but only local case */
 	pid_t pid;
 
-#ifdef EVP_MD_CTX_FLAG_ONESHOT /* for kernel mode */
 	/* for checksum, maintained only if GFS_FILE_MODE_CALC_DIGEST */
 	EVP_MD_CTX md_ctx;
-#endif
 };
 
 /*

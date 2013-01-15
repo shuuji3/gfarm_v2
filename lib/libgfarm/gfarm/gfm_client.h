@@ -2,7 +2,6 @@ struct gfm_connection;
 struct gfs_dirent;
 
 struct gfarm_host_info;
-struct gfarm_fsngroup_info;
 struct gfarm_user_info;
 struct gfarm_group_info;
 struct gfarm_group_names;
@@ -15,7 +14,7 @@ struct gfarm_host_sched_info {
 	gfarm_uint32_t ncpu;	/* XXX should have whole gfarm_host_info? */
 
 	/* if GFM_PROTO_SCHED_FLAG_LOADAVG_AVAIL */
-	gfarm_int32_t loadavg; /* loadavg_1min * GFM_PROTO_LOADAVG_FSCALE */
+	float loadavg;
 	gfarm_uint64_t cache_time;
 	gfarm_uint64_t disk_used;
 	gfarm_uint64_t disk_avail;
@@ -35,15 +34,16 @@ enum gfarm_auth_method gfm_client_connection_auth_method(
 	struct gfm_connection *);
 
 int gfm_client_is_connection_valid(struct gfm_connection *);
+int gfm_client_refcount(struct gfm_connection *);
 const char *gfm_client_hostname(struct gfm_connection *);
 const char *gfm_client_username(struct gfm_connection *);
 int gfm_client_port(struct gfm_connection *);
-gfarm_error_t gfm_client_source_port(struct gfm_connection *gfm_server, int *);
+gfarm_error_t gfm_client_source_port(struct gfm_connection *gfm_server,
+	int*portp);
 gfarm_error_t gfm_client_set_username_for_gsi(struct gfm_connection *,
 	const char *);
 struct gfarm_metadb_server *gfm_client_connection_get_real_server(
 	struct gfm_connection *);
-int gfm_client_connection_failover_count(struct gfm_connection *);
 
 gfarm_error_t gfm_client_process_get(struct gfm_connection *,
 	gfarm_int32_t *, const char **, size_t *, gfarm_pid_t *);
@@ -60,12 +60,17 @@ gfarm_error_t gfm_client_connect(const char *, int, const char *,
 struct passwd;
 gfarm_error_t gfm_client_connect_with_seteuid(const char *, int, const char *,
 	struct gfm_connection **, const char *, struct passwd *, int);
+struct gfs_file_list;
+struct gfs_file_list *gfm_client_connection_file_list(struct gfm_connection *);
+struct gfs_file_list *gfm_client_connection_detach_file_list(
+	struct gfm_connection *);
+void gfm_client_connection_set_file_list(struct gfm_connection *,
+	struct gfs_file_list *);
+int gfm_client_connection_failover_count(struct gfm_connection *);
+void gfm_client_connection_set_failover_count(struct gfm_connection *, int);
 void gfm_client_connection_free(struct gfm_connection *);
 struct gfp_xdr *gfm_client_connection_convert_to_xdr(struct gfm_connection *);
 void gfm_client_terminate(void);
-
-void gfm_client_connection_lock(struct gfm_connection *);
-void gfm_client_connection_unlock(struct gfm_connection *);
 
 /* host/user/group metadata */
 
@@ -86,12 +91,6 @@ gfarm_error_t gfm_client_host_info_modify(struct gfm_connection *,
 	const struct gfarm_host_info *);
 gfarm_error_t gfm_client_host_info_remove(struct gfm_connection *,
 	const char *);
-gfarm_error_t gfm_client_fsngroup_get_all(struct gfm_connection *,
-	size_t *, struct gfarm_fsngroup_info **);
-gfarm_error_t gfm_client_fsngroup_get_by_hostname(struct gfm_connection *,
-	const char *, char **);
-gfarm_error_t gfm_client_fsngroup_modify(struct gfm_connection *,
-	struct gfarm_fsngroup_info *);
 
 gfarm_error_t gfm_client_user_info_get_all(struct gfm_connection *,
 	int *, struct gfarm_user_info **);
@@ -180,7 +179,7 @@ gfarm_error_t gfm_client_fhclose_read_request(struct gfm_connection *,
 	gfarm_ino_t, gfarm_uint64_t, gfarm_int64_t, gfarm_int32_t);
 gfarm_error_t gfm_client_fhclose_read_result(struct gfm_connection *);
 gfarm_error_t gfm_client_fhclose_write_request(struct gfm_connection *,
-	gfarm_ino_t, gfarm_uint64_t, gfarm_off_t,
+	gfarm_ino_t, gfarm_uint64_t, gfarm_off_t, 
 	gfarm_int64_t, gfarm_int32_t, gfarm_int64_t, gfarm_int32_t);
 gfarm_error_t gfm_client_fhclose_write_result(struct gfm_connection *,
 	gfarm_int32_t *, gfarm_int64_t *, gfarm_int64_t *, gfarm_uint64_t *);
