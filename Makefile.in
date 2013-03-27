@@ -18,8 +18,7 @@ SUBDIRS = \
 	systest \
 	nls \
 	bench/gfperf \
-	bench/gfiops \
-	@linuxkernel_targets@
+	bench/gfiops
 
 #	`[ -d $(srcdir)/ns ] && echo ns` \
 #	gfptool \
