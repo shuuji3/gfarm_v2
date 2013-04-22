@@ -1,7 +1,6 @@
 #include <stddef.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include <stdlib.h>
 
 #define GFARM_INTERNAL_USE
 #include <gfarm/gfarm.h>
@@ -9,48 +8,22 @@
 #include "gfutil.h"
 #include "timer.h"
 
-#include "context.h"
 #include "gfs_profile.h"
 #include "gfm_client.h"
+#include "config.h"
 #include "lookup.h"
-#include "gfs_failover.h"
+#include "gfs_misc.h"
 
-#define staticp	(gfarm_ctxp->gfs_stat_static)
-
-struct gfarm_gfs_stat_static {
-	double stat_time;
-};
-
-gfarm_error_t
-gfarm_gfs_stat_static_init(struct gfarm_context *ctxp)
-{
-	struct gfarm_gfs_stat_static *s;
-
-	GFARM_MALLOC(s);
-	if (s == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	s->stat_time = 0;
-
-	ctxp->gfs_stat_static = s;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-void
-gfarm_gfs_stat_static_term(struct gfarm_context *ctxp)
-{
-	free(ctxp->gfs_stat_static);
-}
+static double gfs_stat_time;
 
 struct gfm_stat_closure {
 	struct gfs_stat *st;
 };
 
 static gfarm_error_t
-gfm_stat_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_stat_request(struct gfm_connection *gfm_server, void *closure)
 {
-	gfarm_error_t e = gfm_client_fstat_request(gfm_server, ctx);
+	gfarm_error_t e = gfm_client_fstat_request(gfm_server);
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_warning(GFARM_MSG_1000130,
@@ -59,11 +32,10 @@ gfm_stat_request(struct gfm_connection *gfm_server,
 }
 
 static gfarm_error_t
-gfm_stat_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_stat_result(struct gfm_connection *gfm_server, void *closure)
 {
 	struct gfm_stat_closure *c = closure;
-	gfarm_error_t e = gfm_client_fstat_result(gfm_server, ctx, c->st);
+	gfarm_error_t e = gfm_client_fstat_result(gfm_server, c->st);
 
 #if 0 /* DEBUG */
 	if (e != GFARM_ERR_NO_ERROR)
@@ -91,12 +63,11 @@ gfs_stat(const char *path, struct gfs_stat *s)
 	struct gfm_stat_closure closure;
 	gfarm_error_t e;
 
-	GFARM_KERNEL_UNUSE2(t1, t2);
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	closure.st = s;
-	e = gfm_inode_op_readonly(path, GFARM_FILE_LOOKUP,
+	e = gfm_inode_op(path, GFARM_FILE_LOOKUP,
 	    gfm_stat_request,
 	    gfm_stat_result,
 	    gfm_inode_success_op_connection_free,
@@ -104,7 +75,7 @@ gfs_stat(const char *path, struct gfs_stat *s)
 	    &closure);
 
 	gfs_profile(gfarm_gettimerval(&t2));
-	gfs_profile(staticp->stat_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_stat_time += gfarm_timerval_sub(&t2, &t1));
 
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1001377,
@@ -123,12 +94,11 @@ gfs_lstat(const char *path, struct gfs_stat *s)
 	struct gfm_stat_closure closure;
 	gfarm_error_t e;
 
-	GFARM_KERNEL_UNUSE2(t1, t2);
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	closure.st = s;
-	e = gfm_inode_op_no_follow_readonly(path, GFARM_FILE_LOOKUP,
+	e = gfm_inode_op_no_follow(path, GFARM_FILE_LOOKUP,
 	    gfm_stat_request,
 	    gfm_stat_result,
 	    gfm_inode_success_op_connection_free,
@@ -136,7 +106,7 @@ gfs_lstat(const char *path, struct gfs_stat *s)
 	    &closure);
 
 	gfs_profile(gfarm_gettimerval(&t2));
-	gfs_profile(staticp->stat_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_stat_time += gfarm_timerval_sub(&t2, &t1));
 
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002666,
@@ -155,22 +125,23 @@ gfs_fstat(GFS_File gf, struct gfs_stat *s)
 	struct gfm_stat_closure closure;
 	gfarm_error_t e;
 
-	GFARM_KERNEL_UNUSE2(t1, t2);
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
 
 	closure.st = s;
-
-	e = gfm_client_compound_file_op_readonly(gf,
-	    gfm_stat_request, gfm_stat_result, NULL, &closure);
+	e = gfm_client_compound_fd_op(gfs_pio_metadb(gf), gfs_pio_fileno(gf),
+	    gfm_stat_request,
+	    gfm_stat_result,
+	    NULL,
+	    &closure);
 
 	gfs_profile(gfarm_gettimerval(&t2));
-	gfs_profile(staticp->stat_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_stat_time += gfarm_timerval_sub(&t2, &t1));
 
 	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfm_client_compound_file_op_readonly() failed: %s",
-		    gfarm_error_string(e));
+		gflog_debug(GFARM_MSG_1001378,
+			"gfm_client_compound_fd_op() failed: %s",
+			gfarm_error_string(e));
 	}
 
 	return (e);
@@ -180,5 +151,5 @@ void
 gfs_stat_display_timers(void)
 {
 	gflog_info(GFARM_MSG_1000132,
-	    "gfs_stat        : %g sec", staticp->stat_time);
+	    "gfs_stat        : %g sec", gfs_stat_time);
 }

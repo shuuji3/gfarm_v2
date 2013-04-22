@@ -2,7 +2,6 @@
  * $Id$
  */
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
@@ -23,15 +22,12 @@
 #include "nanosec.h"
 #include "thrsubr.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
-#include "repattr.h"
 
-#include "fsngroup.h"
 #include "gfmd.h"
 #include "inode.h"
+#include "dead_file_copy.h"
 #include "dir.h"
-#include "file_replication.h"
 #include "host.h"
 #include "subr.h"
 #include "user.h"
@@ -96,7 +92,6 @@ struct replication_info {
 	gfarm_ino_t inum;
 	gfarm_uint64_t gen;
 	int desired_number;
-	char *repattr;
 };
 
 static gfarm_error_t
@@ -104,7 +99,7 @@ replica_check_fix(struct replication_info *info)
 {
 	gfarm_error_t e;
 	struct inode *inode = inode_lookup(info->inum);
-	int n_srcs, n_existing, n_being_removed, n_success;
+	int n_srcs, n_existing, n_being_removed;
 	struct host **srcs, **existing, **being_removed;
 	static const char diag[] = "replica_check_fix";
 
@@ -115,7 +110,7 @@ replica_check_fix(struct replication_info *info)
 		    (long long)info->inum, (long long)info->gen);
 		return (GFARM_ERR_NO_ERROR); /* ignore */
 	}
-	if (info->repattr == NULL && info->desired_number <= 0) /* disabled */
+	if (info->desired_number <= 0) /* disabled */
 		return (GFARM_ERR_NO_ERROR); /* OK */
 	if (inode_is_opened_for_writing(inode)) {
 		gflog_debug(GFARM_MSG_1003627,
@@ -129,7 +124,7 @@ replica_check_fix(struct replication_info *info)
 	e = inode_replica_hosts(
 	    inode, &n_existing, &existing, &n_being_removed, &being_removed);
 	if (e != GFARM_ERR_NO_ERROR) { /* no memory */
-		gflog_error(GFARM_MSG_UNFIXED,
+		gflog_error(GFARM_MSG_1003692,
 		    "replica_check: %lld:%lld:%s: replica_hosts: %s",
 		    (long long)info->inum, (long long)info->gen,
 		    user_name(inode_get_user(inode)), gfarm_error_string(e));
@@ -171,21 +166,12 @@ replica_check_fix(struct replication_info *info)
 		return (GFARM_ERR_NO_ERROR); /* ignore */
 	}
 
-	if (info->repattr != NULL)
-		e = fsngroup_schedule_replication(
-		    inode, info->repattr, n_srcs, srcs,
-		    &n_existing, existing,
-		    gfarm_replica_check_host_down_thresh,
-		    &n_being_removed, being_removed, &n_success, diag);
-	else
+	/* indent for diff */
 		e = inode_schedule_replication_from_all(
 		    inode, info->desired_number, n_srcs, srcs,
 		    &n_existing, existing,
 		    gfarm_replica_check_host_down_thresh,
-		    &n_being_removed, being_removed, &n_success, diag);
-
-	if (n_success > 0)
-		inode_replication_start(inode);
+		    &n_being_removed, being_removed, diag);
 
 	free(existing);
 	free(being_removed);
@@ -193,27 +179,15 @@ replica_check_fix(struct replication_info *info)
 	return (e);
 }
 
-static void
-replica_check_desired_set(
-	struct inode *dir_ino, struct inode *file_ino,
-	struct replication_info *infop)
+static int
+replica_check_desired_number(struct inode *dir_ino, struct inode *file_ino)
 {
-	char *repattr;
 	int desired_number;
 
-	if (inode_get_replica_spec(file_ino, &repattr, &desired_number) ||
-	    inode_search_replica_spec(dir_ino, &repattr, &desired_number)) {
-		if (repattr != NULL) {
-			infop->desired_number = 0;
-			infop->repattr = repattr;
-		} else {
-			infop->desired_number = desired_number;
-			infop->repattr = NULL;
-		}
-	} else {
-		infop->desired_number = 0;
-		infop->repattr = NULL;
-	}
+	if (inode_has_desired_number(file_ino, &desired_number) ||
+	    inode_traverse_desired_replica_number(dir_ino, &desired_number))
+		return (desired_number);
+	return (0);
 }
 
 #define REPLICA_CHECK_DIRENTS_BUFCOUNT 512
@@ -243,8 +217,8 @@ replica_check_stack_push(struct inode *dir_ino, struct inode *file_ino)
 		= inode_get_number(file_ino);
 	replica_check_stack[replica_check_stack_index].gen
 		= inode_get_gen(file_ino);
-	replica_check_desired_set(dir_ino, file_ino,
-	    &(replica_check_stack[replica_check_stack_index]));
+	replica_check_stack[replica_check_stack_index].desired_number
+		= replica_check_desired_number(dir_ino, file_ino);
 	replica_check_stack_index++;
 }
 
@@ -337,7 +311,6 @@ replica_check_main_dir(gfarm_ino_t inum, gfarm_ino_t *countp)
 				    gfarm_error_string(e));
 			}
 			(*countp)++;
-			free(rep_info.repattr);
 		}
 	}
 	return (need_to_retry);
@@ -631,10 +604,14 @@ replica_check_signal_rep_result_failed()
 	replica_check_signal_general(diag, 0);
 }
 
+/* workaround for #406 - obsolete replicas remain existing */
+#define DFC_SCAN_INTERVAL 21600 /* 6 hours */
+
 static void *
 replica_check_thread(void *arg)
 {
 	int wait_time;
+	time_t dfc_scan_time;
 
 	if (!replica_check_stack_init())
 		return (NULL);
@@ -652,6 +629,9 @@ replica_check_thread(void *arg)
 	wait_time = gfarm_metadb_heartbeat_interval;
 	replica_check_targets_add(wait_time);
 
+	dfc_scan_time = time(NULL) + DFC_SCAN_INTERVAL;
+	replica_check_targets_add(DFC_SCAN_INTERVAL);
+
 	for (;;) {
 		time_t t = time(NULL) + gfarm_replica_check_minimum_interval;
 
@@ -660,6 +640,18 @@ replica_check_thread(void *arg)
 
 		if (replica_check_main()) /* error occured, retry */
 			replica_check_targets_add(wait_time);
+
+		if (time(NULL) >= dfc_scan_time) {
+			replica_check_giant_lock();
+			dead_file_copy_scan_deferred_all();
+			replica_check_giant_unlock();
+
+			dfc_scan_time = time(NULL) + DFC_SCAN_INTERVAL;
+			replica_check_targets_add(DFC_SCAN_INTERVAL);
+			RC_LOG_DEBUG(GFARM_MSG_1003641,
+			    "replica_check: dead_file_copy_scan_deferred_all,"
+			    " next=%ld", (long)dfc_scan_time);
+		}
 
 		t = t - time(NULL);
 		if (t > 0)

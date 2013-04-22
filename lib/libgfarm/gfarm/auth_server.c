@@ -22,7 +22,6 @@
 
 #include "gfutil.h"
 
-#include "context.h"
 #include "liberror.h"
 #include "hostspec.h"
 #include "auth.h"
@@ -46,11 +45,8 @@ gfarm_error_t (*gfarm_authorization_table[])(struct gfp_xdr *, int,
 	 * This table entry should be ordered by enum gfarm_auth_method.
 	 */
 	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_NONE */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_SHAREDSECRET_V2 */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_OLD */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_V2 */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_AUTH_V2 */
 	gfarm_authorize_sharedsecret,	/* GFARM_AUTH_METHOD_SHAREDSECRET */
+	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_OLD */
 #ifdef HAVE_GSI
 	gfarm_authorize_gsi,		/* GFARM_AUTH_METHOD_GSI */
 	gfarm_authorize_gsi_auth,	/* GFARM_AUTH_METHOD_GSI_AUTH */
@@ -244,7 +240,7 @@ gfarm_auth_sharedsecret_response(struct gfp_xdr *conn,
 			error = GFARM_AUTH_ERROR_NOT_SUPPORTED;
 			e = gfp_xdr_send(conn, "i", error);
 			break;
-		}
+		}			
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_info(GFARM_MSG_1003583,
 			    "(%s@%s) auth_sharedsecret: key query: %s",
@@ -272,6 +268,22 @@ gfarm_auth_sharedsecret_response(struct gfp_xdr *conn,
 			break;
 		}
 	}
+}
+
+static pthread_once_t getpwnam_r_bufsz_initialized = PTHREAD_ONCE_INIT;
+static int getpwnam_r_bufsz = 0;
+#define BUFSIZE_MAX 2048
+
+static void
+getpwnam_r_bufsz_initialize(void)
+{
+	/* Solaris calls this function more than once with non-pthread apps */
+	if (getpwnam_r_bufsz != 0)
+		return;
+
+	getpwnam_r_bufsz = sysconf(_SC_GETPW_R_SIZE_MAX);
+	if (getpwnam_r_bufsz == -1)
+		getpwnam_r_bufsz = BUFSIZE_MAX;
 }
 
 gfarm_error_t
@@ -334,7 +346,9 @@ gfarm_authorize_sharedsecret(struct gfp_xdr *conn, int switch_to,
 		local_username = NULL;
 		pwd = NULL;
 	} else {
-		GFARM_MALLOC_ARRAY(buf, gfarm_ctxp->getpw_r_bufsz);
+		pthread_once(&getpwnam_r_bufsz_initialized,
+		    getpwnam_r_bufsz_initialize);
+		GFARM_MALLOC_ARRAY(buf, getpwnam_r_bufsz);
 		if (buf == NULL) {
 			e = GFARM_ERR_NO_MEMORY;
 			gflog_error(GFARM_MSG_1000042,
@@ -345,8 +359,8 @@ gfarm_authorize_sharedsecret(struct gfp_xdr *conn, int switch_to,
 			free(global_username);
 			return (e);
 		}
-		if (getpwnam_r(local_username, &pwbuf, buf,
-		    gfarm_ctxp->getpw_r_bufsz, &pwd) != 0)
+		if (getpwnam_r(local_username, &pwbuf, buf, getpwnam_r_bufsz,
+		    &pwd) != 0)
 			gflog_notice(GFARM_MSG_1000043,
 			    "(%s@%s) %s: authorize_sharedsecret: "
 			    "local account doesn't exist",

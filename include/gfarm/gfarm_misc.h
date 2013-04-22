@@ -62,6 +62,14 @@ gfarm_error_t gfarm_initialize(int *, char ***);
 gfarm_error_t gfarm_terminate(void);
 gfarm_error_t gfarm_config_read(void);
 
+/* the following function is for server. */
+gfarm_error_t gfarm_server_initialize(int *, char ***);
+gfarm_error_t gfarm_server_terminate(void);
+gfarm_error_t gfarm_server_config_read(void);
+void gfarm_config_set_filename(char *);
+
+const char *gfarm_version(void);
+
 /*
  * GFarm URL and pathname handling
  */
@@ -191,7 +199,6 @@ size_t gfarm_humanize_signed_number(char *, size_t, long long, int);
 #endif /* WORDS_BIGENDIAN */
 
 /* support nanosecond */
-#ifndef __KERNEL__
 #if defined(HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
 #define gfarm_stat_mtime_nsec(st) ((st)->st_mtim.tv_nsec)
 #define gfarm_stat_atime_nsec(st) ((st)->st_atim.tv_nsec)
@@ -201,8 +208,3 @@ size_t gfarm_humanize_signed_number(char *, size_t, long long, int);
 #define gfarm_stat_atime_nsec(st) 0
 #define gfarm_stat_ctime_nsec(st) 0
 #endif
-#else /* __KERNEL__ */
-#define gfarm_stat_mtime_nsec(st) ((st)->st_mtime_nsec)
-#define gfarm_stat_atime_nsec(st) ((st)->st_atime_nsec)
-#define gfarm_stat_ctime_nsec(st) ((st)->st_ctime_nsec)
-#endif /* __KERNEL__ */
