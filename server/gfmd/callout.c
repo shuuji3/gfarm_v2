@@ -8,7 +8,6 @@
 #include <gfarm/gfarm.h>
 
 #include "gfutil.h"
-#include "nanosec.h"
 #include "thrsubr.h"
 
 #include "subr.h"
@@ -62,7 +61,8 @@ callout_main(void *arg)
 	void *(*func)(void *);
 	void *closure;
 	int rv;
-	struct timespec now;
+	struct timeval now;
+	struct timespec n;
 
 #ifdef __GNUC__ /* shut up stupid warning by gcc */
 	thrpool = NULL;
@@ -87,8 +87,10 @@ callout_main(void *arg)
 		/* cm->pendings may be changed while cond_wait */
 		c = cm->pendings.next;
 		if (c != &cm->pendings) {
-			gfarm_gettime(&now);
-			if (timespec_cmp(&c->target_time, &now) <= 0) {
+			gettimeofday(&now, NULL);
+			n.tv_sec = now.tv_sec;
+			n.tv_nsec = now.tv_usec * 1000;
+			if (timespec_cmp(&c->target_time, &n) <= 0) {
 				/* remove the head of the list */
 				c->prev->next = c->next;
 				c->next->prev = c->prev;
@@ -104,17 +106,9 @@ callout_main(void *arg)
 		}
 		gfarm_mutex_unlock(&cm->mutex, module_name, "main lock");
 
-		if (func != NULL) {
-			if (thrpool == NULL)
-				(*func)(closure);
-			else
-				thrpool_add_job(thrpool, func, closure);
-		}
+		if (func != NULL)
+			thrpool_add_job(thrpool, func, closure);
 	}
-#ifdef __GNUC__ /* shut up stupid warning by gcc */
-	/*NOTREACHED*/
-	return (NULL);
-#endif
 }
 
 /* This function is equivalent to callout_startup(9) */
@@ -180,7 +174,7 @@ callout_schedule_common(struct callout *n, int microseconds)
 	gettimeofday(&now, NULL);
 	gfarm_timeval_add_microsec(&now, microseconds);
 	n->target_time.tv_sec = now.tv_sec;
-	n->target_time.tv_nsec = now.tv_usec * GFARM_MICROSEC_BY_NANOSEC;
+	n->target_time.tv_nsec = now.tv_usec * 1000LL;
 	n->state &= ~(CALLOUT_FIRED | CALLOUT_INVOKING);
 
 	if ((n->state & CALLOUT_PENDING) != 0) {
@@ -222,7 +216,6 @@ callout_schedule(struct callout *c, int microseconds)
 	gfarm_mutex_unlock(&cm->mutex, module_name, "schedule unlock");
 }
 
-/* if thrpool == NULL, use the callout_main thread to call the func. */
 void
 callout_reset(struct callout *c, int microseconds,
 	struct thread_pool *thrpool, void *(*func)(void *), void *closure)
@@ -237,7 +230,6 @@ callout_reset(struct callout *c, int microseconds,
 	gfarm_mutex_unlock(&cm->mutex, module_name, "reset unlock");
 }
 
-/* if thrpool == NULL, use the callout_main thread to call the func. */
 void
 callout_setfunc(struct callout *c,
 	struct thread_pool *thrpool, void *(*func)(void *), void *closure)

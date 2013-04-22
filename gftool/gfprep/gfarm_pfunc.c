@@ -16,21 +16,17 @@
 
 #include <gfarm/gfarm.h>
 
-#include "nanosec.h"
-#include "thrsubr.h"
-
 #include "config.h"
 #include "queue.h" /* for gfs_pio.h */
 #include <openssl/evp.h> /* for gfs_pio.h */
 #include "gfs_pio.h"
+#include "thrsubr.h"
 
 #include "gfprep.h"
 #include "gfarm_parallel.h"
 #include "gfarm_fifo.h"
 #include "gfarm_pfunc.h"
 #include "gfarm_dirtree.h"
-
-static mode_t mask;
 
 struct gfarm_pfunc {
 	gfpara_t *gfpara_handle;
@@ -67,12 +63,12 @@ enum pfunc_cmdnum {
 	PFUNC_CMD_TERMINATE
 };
 
-enum pfunc_result {
-	PFUNC_RESULT_OK,
-	PFUNC_RESULT_NG,
-	PFUNC_RESULT_WAIT_OK,
-	PFUNC_RESULT_END,
-	PFUNC_RESULT_FATAL
+enum pfunc_stat {
+	PFUNC_STAT_OK,
+	PFUNC_STAT_NG,
+	PFUNC_STAT_WAIT_OK,
+	PFUNC_STAT_END,
+	PFUNC_STAT_FATAL
 };
 
 enum pfunc_mode {
@@ -118,21 +114,20 @@ pfunc_simulate(const char *url, gfarm_uint64_t KBs)
 			gfs_stat_free(&st);
 		}
 	}
-	/* simulate: "size / (KBs * 1000)" seconds per a file */
-	gfarm_nanosleep((size * (GFARM_SECOND_BY_NANOSEC / 1000)) / KBs);
+	/* size / (KB/s * 1000) * 1000000 usec */
+	usleep(size / KBs * 1000);
 }
 
 static gfarm_error_t
-pfunc_check_disk_avail(
-	const char *url, char *hostname, int port, gfarm_off_t filesize)
+pfunc_check_disk_avail(char *hostname, int port, gfarm_off_t filesize)
 {
 	gfarm_error_t e;
 	gfarm_int32_t bsize;
 	gfarm_off_t blocks, bfree, bavail, files;
 	gfarm_off_t ffree, favail, avail;
 
-	e = gfs_statfsnode_by_path(
-		url, hostname, port, &bsize, &blocks, &bfree, &bavail,
+	e = gfs_statfsnode(
+		hostname, port, &bsize, &blocks, &bfree, &bavail,
 		&files, &ffree, &favail);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -148,12 +143,12 @@ pfunc_replicate_main(gfarm_pfunc_t *handle, int pfunc_mode,
 		     FILE *from_parent, FILE *to_parent)
 {
 	gfarm_error_t e;
-	char *url, *src_host, *dst_host;
+	char *src_url, *src_host, *dst_host;
 	int src_port, dst_port;
 	gfarm_off_t src_size;
 	int check_disk_avail;
 
-	gfpara_recv_string(from_parent, &url);
+	gfpara_recv_string(from_parent, &src_url);
 	gfpara_recv_int64(from_parent, &src_size);
 	gfpara_recv_string(from_parent, &src_host);
 	gfpara_recv_int(from_parent, &src_port);
@@ -162,52 +157,51 @@ pfunc_replicate_main(gfarm_pfunc_t *handle, int pfunc_mode,
 	gfpara_recv_int(from_parent, &check_disk_avail);
 
 	if (handle->simulate_KBs > 0) {
-		pfunc_simulate(url, handle->simulate_KBs);
+		pfunc_simulate(src_url, handle->simulate_KBs);
 		goto end;
 	}
 	if (check_disk_avail && dst_port > 0) { /* dst is gfarm */
-		e = pfunc_check_disk_avail(
-		    url, dst_host, dst_port, src_size);
+		e = pfunc_check_disk_avail(dst_host, dst_port, src_size);
 		if (e != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr,
 				"ERROR: cannot replicate: "
 				"checking disk_avail: %s (%s:%d, %s:%d): %s\n",
-				url, src_host, src_port,
+				src_url, src_host, src_port,
 				dst_host, dst_port, gfarm_error_string(e));
-			gfpara_send_int(to_parent, PFUNC_RESULT_NG);
+			gfpara_send_int(to_parent, PFUNC_STAT_NG);
 			goto free_mem;
 		}
 	}
-	e = gfs_replicate_from_to(url, src_host, src_port,
+	e = gfs_replicate_from_to(src_url, src_host, src_port,
 				  dst_host, dst_port);
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr,
 			"ERROR: cannot replicate: %s (%s:%d, %s:%d): %s\n",
-			url, src_host, src_port, dst_host, dst_port,
+			src_url, src_host, src_port, dst_host, dst_port,
 			gfarm_error_string(e));
-		gfpara_send_int(to_parent, PFUNC_RESULT_NG);
+		gfpara_send_int(to_parent, PFUNC_STAT_NG);
 		goto free_mem;
 	}
 	if (pfunc_mode == PFUNC_MODE_MIGRATE) {
-		e = gfs_replica_remove_by_file(url, src_host);
+		e = gfs_replica_remove_by_file(src_url, src_host);
 		if (e != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr,
 				"ERROR: cannot migrate: %s (%s:%d): %s\n",
-				url, src_host, src_port,
+				src_url, src_host, src_port,
 				gfarm_error_string(e));
-			e = gfs_replica_remove_by_file(url, dst_host);
+			e = gfs_replica_remove_by_file(src_url, dst_host);
 			if (e != GFARM_ERR_NO_ERROR)
 				fprintf(stderr,
 					"ERROR: cannot remove useless "
 					"replica: %s (%s:%d): %s\n",
-					url, dst_host, dst_port,
+					src_url, dst_host, dst_port,
 					gfarm_error_string(e));
 		}
 	}
 end:
-	gfpara_send_int(to_parent, PFUNC_RESULT_OK);
+	gfpara_send_int(to_parent, PFUNC_STAT_OK);
 free_mem:
-	free(url);
+	free(src_url);
 	free(src_host);
 	free(dst_host);
 }
@@ -252,50 +246,29 @@ pfunc_open(const char *url, int flags, int mode, struct pfunc_file *fp)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-struct pfunc_stat {
-	gfarm_int32_t mode;
-	gfarm_int64_t size;
-	gfarm_int64_t atime_sec;
-	gfarm_int32_t atime_nsec;
-	gfarm_int64_t mtime_sec;
-	gfarm_int32_t mtime_nsec;
-};
-
 static gfarm_error_t
-pfunc_fstat(struct pfunc_file *fp, struct pfunc_stat *stp)
+pfunc_fstat(struct pfunc_file *fp, struct stat *stp)
 {
-#ifdef __GNUC__ /* to shut up gcc warning "may be used uninitialized" */
-	stp->mode = stp->size = 0;
-	stp->mtime_sec = stp->atime_sec = 0;
-	stp->mtime_nsec = stp->atime_nsec = 0;
-#endif
+	int retv;
+
 	if (fp->gfarm) {
 		struct gfs_stat gst;
 		gfarm_error_t e = gfs_pio_stat(fp->gfarm, &gst);
-
-		if (e != GFARM_ERR_NO_ERROR)
-			return (e);
-		stp->mode = gst.st_mode;
-		stp->size = gst.st_size;
-		stp->atime_sec = gst.st_atimespec.tv_sec;
-		stp->atime_nsec = gst.st_atimespec.tv_nsec;
-		stp->mtime_sec = gst.st_mtimespec.tv_sec;
-		stp->mtime_nsec = gst.st_mtimespec.tv_nsec;
-		gfs_stat_free(&gst);
-	} else {
-		int retv;
-		struct stat st;
-
-		retv = fstat(fp->fd, &st);
-		if (retv == -1)
-			return (gfarm_errno_to_error(errno));
-		stp->mode = st.st_mode;
-		stp->size = st.st_size;
-		stp->atime_sec = st.st_atime;
-		stp->atime_nsec = gfarm_stat_atime_nsec(&st);
-		stp->mtime_sec = st.st_mtime;
-		stp->mtime_nsec = gfarm_stat_mtime_nsec(&st);
+		if (e == GFARM_ERR_NO_ERROR) {
+			/* XXX copy all of st_*  */
+			stp->st_mode = gst.st_mode;
+			stp->st_size = gst.st_size;
+			stp->st_atime = gst.st_atimespec.tv_sec;
+			stp->st_mtime = gst.st_mtimespec.tv_sec;
+			stp->st_ctime = gst.st_ctimespec.tv_sec;
+			/* XXX tv_nsec */
+			gfs_stat_free(&gst);
+		}
+		return (e);
 	}
+	retv = fstat(fp->fd, stp);
+	if (retv == -1)
+		return (gfarm_errno_to_error(errno));
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -358,29 +331,23 @@ pfunc_close(struct pfunc_file *fp)
 }
 
 static gfarm_error_t
-pfunc_lutimens(const char *url, struct pfunc_stat *stp)
+pfunc_utimes(const char *url, struct timeval *tv)
 {
 	if (gfprep_url_is_local(url)) {
 		int retv;
-		const char *path = url + GFPREP_FILE_URL_PREFIX_LENGTH;
-		struct timespec ts[2];
-
-		ts[0].tv_sec = stp->atime_sec;
-		ts[0].tv_nsec = stp->atime_nsec;
-		ts[1].tv_sec = stp->mtime_sec;
-		ts[1].tv_nsec = stp->mtime_nsec;
-		retv = gfarm_local_lutimens(path, ts);
+		const char *path = url;
+		path += GFPREP_FILE_URL_PREFIX_LENGTH;
+		retv = utimes(path, tv);
 		if (retv == -1)
 			return (gfarm_errno_to_error(errno));
 	} else if (gfprep_url_is_gfarm(url)) {
 		gfarm_error_t e;
 		struct gfarm_timespec gt[2];
-
-		gt[0].tv_sec = stp->atime_sec;
-		gt[0].tv_nsec = stp->atime_nsec;
-		gt[1].tv_sec = stp->mtime_sec;
-		gt[1].tv_nsec = stp->mtime_nsec;
-		e = gfs_lutimes(url, gt);
+		gt[0].tv_sec = tv[0].tv_sec;
+		gt[0].tv_nsec = tv[0].tv_usec * 1000;
+		gt[1].tv_sec = tv[1].tv_sec;
+		gt[1].tv_nsec = tv[1].tv_usec * 1000;
+		e = gfs_utimes(url, gt);
 		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
 	} else
@@ -443,7 +410,8 @@ pfunc_copy_main(gfarm_pfunc_t *handle, int pfunc_mode,
 	int src_port, dst_port;
 	int rsize, wsize;
 	struct pfunc_file src_fp, dst_fp;
-	struct pfunc_stat st;
+	struct stat st;
+	struct timeval tv[2];
 	gfarm_off_t src_size;
 	int check_disk_avail;
 
@@ -468,8 +436,7 @@ pfunc_copy_main(gfarm_pfunc_t *handle, int pfunc_mode,
 		goto end;
 	}
 	if (check_disk_avail && dst_port > 0) { /* dst is gfarm */
-		e = pfunc_check_disk_avail(
-		    dst_url, dst_host, dst_port, src_size);
+		e = pfunc_check_disk_avail(dst_host, dst_port, src_size);
 		if (e != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr,
 				"ERROR: copy failed: checking disk_avail: "
@@ -496,7 +463,7 @@ pfunc_copy_main(gfarm_pfunc_t *handle, int pfunc_mode,
 		goto end;
 	}
 	e = pfunc_open(tmp_url, O_CREAT | O_WRONLY | O_TRUNC,
-	    st.mode & 0777 & ~mask, &dst_fp);
+		       st.st_mode & 07777, &dst_fp);
 	if (e != GFARM_ERR_NO_ERROR) {
 		(void) pfunc_close(&src_fp);
 		fprintf(stderr, "ERROR: copy failed: open(%s): %s\n",
@@ -504,7 +471,7 @@ pfunc_copy_main(gfarm_pfunc_t *handle, int pfunc_mode,
 		ng = 1;
 		goto end;
 	}
-	if (st.size > 0 && src_fp.gfarm && strcmp(src_host, "") != 0) {
+	if (st.st_size > 0 && src_fp.gfarm && strcmp(src_host, "") != 0) {
 		/* XXX FIXME: INTERNAL FUNCTION SHOULD NOT BE USED */
 		e = gfs_pio_internal_set_view_section(src_fp.gfarm, src_host);
 		if (e != GFARM_ERR_NO_ERROR) {
@@ -515,7 +482,7 @@ pfunc_copy_main(gfarm_pfunc_t *handle, int pfunc_mode,
 			goto close;
 		}
 	}
-	if (st.size > 0 && dst_fp.gfarm && strcmp(dst_host, "") != 0) {
+	if (st.st_size > 0 && dst_fp.gfarm && strcmp(dst_host, "") != 0) {
 		/* XXX FIXME: INTERNAL FUNCTION SHOULD NOT BE USED */
 		e = gfs_pio_internal_set_view_section(dst_fp.gfarm, dst_host);
 		if (e != GFARM_ERR_NO_ERROR) {
@@ -567,7 +534,11 @@ close:
 		ng = 1;
 		goto end;
 	}
-	e = pfunc_lutimens(tmp_url, &st);
+	tv[0].tv_sec = st.st_atime;
+	tv[0].tv_usec = 0; /* XXX */
+	tv[1].tv_sec = st.st_mtime;
+	tv[1].tv_usec = 0; /* XXX */
+	e = pfunc_utimes(tmp_url, tv);
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "ERROR: copy failed: utimes(%s): %s\n",
 			tmp_url, gfarm_error_string(e));
@@ -584,15 +555,14 @@ close:
 	/* XXX pfunc_mode == PFUNC_MODE_MIGRATE : unlink src_url */
 end:
 	if (ng) {
-		gfpara_send_int(to_parent, PFUNC_RESULT_NG);
+		gfpara_send_int(to_parent, PFUNC_STAT_NG);
 		e = pfunc_unlink(tmp_url);
-		if (e != GFARM_ERR_NO_ERROR &&
-		    e != GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY)
+		if (e != GFARM_ERR_NO_ERROR)
 			fprintf(stderr,
 				"ERROR: cannot remove tmp-file: %s: %s\n",
 			tmp_url, gfarm_error_string(e));
 	} else
-		gfpara_send_int(to_parent, PFUNC_RESULT_OK);
+		gfpara_send_int(to_parent, PFUNC_STAT_OK);
 	free(tmp_url);
 	free(src_url);
 	free(dst_url);
@@ -613,7 +583,7 @@ pfunc_remove_replica_main(gfarm_pfunc_t *handle,
 	gfpara_recv_int(from_parent, &src_port);
 
 	if (handle->simulate_KBs > 0) {
-		gfpara_send_int(to_parent, PFUNC_RESULT_OK);
+		gfpara_send_int(to_parent, PFUNC_STAT_OK);
 		goto end;
 	}
 
@@ -623,9 +593,9 @@ pfunc_remove_replica_main(gfarm_pfunc_t *handle,
 			"ERROR: cannot remove replica: %s (%s:%d): %s\n",
 			src_url, src_host, src_port,
 			gfarm_error_string(e));
-		gfpara_send_int(to_parent, PFUNC_RESULT_NG);
+		gfpara_send_int(to_parent, PFUNC_STAT_NG);
 	} else
-		gfpara_send_int(to_parent, PFUNC_RESULT_OK);
+		gfpara_send_int(to_parent, PFUNC_STAT_OK);
 end:
 	free(src_url);
 	free(src_host);
@@ -643,7 +613,7 @@ pfunc_child(void *param, FILE *from_parent, FILE *to_parent)
 		fprintf(stderr, "ERROR: gfarm_initialize: %s\n",
 			gfarm_error_string(e));
 		gfpara_recv_purge(from_parent);
-		gfpara_send_int(to_parent, PFUNC_RESULT_FATAL);
+		gfpara_send_int(to_parent, PFUNC_STAT_FATAL);
 		return (0);
 	}
 	for (;;) {
@@ -670,13 +640,13 @@ pfunc_child(void *param, FILE *from_parent, FILE *to_parent)
 						  from_parent, to_parent);
 			continue;
 		case PFUNC_CMD_TERMINATE:
-			gfpara_send_int(to_parent, PFUNC_RESULT_END);
+			gfpara_send_int(to_parent, PFUNC_STAT_END);
 			goto term;
 		default:
 			fprintf(stderr,
 				"ERROR: unexpected command = %d\n", command);
 			gfpara_recv_purge(from_parent);
-			gfpara_send_int(to_parent, PFUNC_RESULT_FATAL);
+			gfpara_send_int(to_parent, PFUNC_STAT_FATAL);
 			goto term;
 		}
 	}
@@ -798,16 +768,16 @@ pfunc_recv(FILE *child_out, gfpara_proc_t *proc, void *param)
 
 	gfpara_recv_int(child_out, &status);
 	switch (status) {
-	case PFUNC_RESULT_OK:
-	case PFUNC_RESULT_NG:
+	case PFUNC_STAT_OK:
+	case PFUNC_STAT_NG:
 		if (handle->cb_end && data)
-			handle->cb_end(status == PFUNC_RESULT_OK, data);
+			handle->cb_end(status == PFUNC_STAT_OK, data);
 		return (GFPARA_NEXT);
-	case PFUNC_RESULT_WAIT_OK:
+	case PFUNC_STAT_WAIT_OK:
 		return (GFPARA_NEXT);
-	case PFUNC_RESULT_END:
+	case PFUNC_STAT_END:
 		return (GFPARA_END);
-	case PFUNC_RESULT_FATAL:
+	case PFUNC_STAT_FATAL:
 	default:
 		gfpara_recv_purge(child_out);
 		return (GFPARA_FATAL);
@@ -859,10 +829,6 @@ gfarm_pfunc_start(gfarm_pfunc_t **handlep, int n_parallel, int queue_size,
 		return (e);
 	}
 	*handlep = handle;
-
-	mask = umask(0022);
-	umask(mask);
-
 	return (GFARM_ERR_NO_ERROR);
 }
 

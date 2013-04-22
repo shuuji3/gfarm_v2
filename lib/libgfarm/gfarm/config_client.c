@@ -12,7 +12,6 @@
 #include "timer.h"
 #include "gfutil.h"
 
-#include "context.h"
 #include "liberror.h"
 #include "gfs_profile.h"
 #include "host.h"
@@ -26,6 +25,43 @@
 #include "lookup.h"
 #include "filesystem.h"
 #include "metadb_server.h"
+
+static gfarm_error_t
+gfarm_config_set_default_metadb_server(void)
+{
+	gfarm_error_t e;
+	struct gfarm_metadb_server *m;
+	struct gfarm_metadb_server *ms[1];
+	struct gfarm_filesystem *fs;
+	char *host;
+
+	if (gfarm_filesystem_get(
+	    gfarm_metadb_server_name, gfarm_metadb_server_port) != NULL)
+		return (GFARM_ERR_NO_ERROR);
+
+	fs = gfarm_filesystem_get_default();
+	if ((host = strdup(gfarm_metadb_server_name)) == NULL) {
+		e = GFARM_ERR_NO_MEMORY;
+		gflog_debug(GFARM_MSG_1003433,
+		    "%s", gfarm_error_string(e));
+		return (e);
+	}
+
+	if ((e = gfarm_metadb_server_new(&m, host, gfarm_metadb_server_port))
+	    != GFARM_ERR_NO_ERROR) {
+		free(host);
+		gflog_debug(GFARM_MSG_1002556,
+		    "%s", gfarm_error_string(e));
+		return (e);
+	}
+	gfarm_metadb_server_set_is_master(m, 1);
+	ms[0] = m;
+	if ((e = gfarm_filesystem_set_metadb_server_list(fs, ms, 1))
+	    != GFARM_ERR_NO_ERROR)
+		gflog_debug(GFARM_MSG_1002557,
+		    "%s", gfarm_error_string(e));
+	return (e);
+}
 
 /*
  * the following function is for client,
@@ -41,7 +77,7 @@ gfarm_config_read(void)
 	FILE *config;
 	int lineno, user_config_errno, rc_need_free;
 	static const char gfarm_client_rc[] = GFARM_CLIENT_RC;
-	char *rc, *config_file = gfarm_config_get_filename();
+	char *rc;
 
 	rc_need_free = 0;
 	rc = getenv("GFARM_CONFIG_FILE");
@@ -80,29 +116,31 @@ gfarm_config_read(void)
 	if (rc_need_free)
 		free(rc);
 
-	if ((config = fopen(config_file, "r")) == NULL) {
+	if ((config = fopen(gfarm_config_file, "r")) == NULL) {
 		if (user_config_errno != 0) {
 			e = GFARM_ERRMSG_CANNOT_OPEN_CONFIG;
 			gflog_debug(GFARM_MSG_1000981,
-			    "%s: %s", config_file, gfarm_error_string(e));
+			    "%s: %s", gfarm_config_file, gfarm_error_string(e));
 			return (e);
 		}
 	} else {
 		e = gfarm_config_read_file(config, &lineno);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gflog_error(GFARM_MSG_1000016, "%s: line %d: %s",
-			    config_file, lineno, gfarm_error_string(e));
+			    gfarm_config_file, lineno, gfarm_error_string(e));
 			return (e);
 		}
 	}
 
 	gfarm_config_set_default_ports();
 	gfarm_config_set_default_misc();
+	gfarm_config_set_default_metadb_server();
 
 	return (GFARM_ERR_NO_ERROR);
 }
 
-#ifndef __KERNEL__	/* gfarm_initialize :: kernel spec */
+int gf_on_demand_replication;
+
 static void
 gfarm_parse_env_client(void)
 {
@@ -111,14 +149,11 @@ gfarm_parse_env_client(void)
 	if ((env = getenv("GFARM_FLAGS")) != NULL) {
 		for (; *env; env++) {
 			switch (*env) {
-			case 'r':
-				gfarm_ctxp->on_demand_replication = 1;
-				break;
+			case 'r': gf_on_demand_replication = 1; break;
 			}
 		}
 	}
 }
-
 
 /*
  * the following function is for client,
@@ -131,13 +166,6 @@ gfarm_initialize(int *argcp, char ***argvp)
 {
 	gfarm_error_t e;
 
-	e = gfarm_context_init();
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-			"gfarm_context_init failed: %s",
-			gfarm_error_string(e));
-		return (e);
-	}
 	gflog_initialize();
 	if (argvp)
 		gfarm_config_set_argv0(**argvp);
@@ -146,13 +174,6 @@ gfarm_initialize(int *argcp, char ***argvp)
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1000982,
 		    "gfarm_set_local_user_for_this_local_account() failed: %s",
-		    gfarm_error_string(e));
-		return (e);
-	}
-	e = gfarm_known_network_list_add_local_host();
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1003570,
-		    "gfarm_known_network_list_add_local_host() failed: %s",
 		    gfarm_error_string(e));
 		return (e);
 	}
@@ -168,7 +189,6 @@ gfarm_initialize(int *argcp, char ***argvp)
 
 	return (GFARM_ERR_NO_ERROR);
 }
-#endif /* __KERNEL__ */
 
 static gfarm_error_t
 gfarm_client_process_set_or_reset(struct gfs_connection *gfs_server,
@@ -223,7 +243,6 @@ gfarm_terminate(void)
 	gfs_client_terminate();
 	gfm_client_terminate();
 	gflog_terminate();
-	gfarm_context_term();
 
 	return (GFARM_ERR_NO_ERROR);
 }

@@ -15,7 +15,6 @@
 #include "gfm_client.h"
 #include "gfm_schedule.h"
 #include "schedule.h"
-#include "gfarm_path.h"
 
 /*
  *  Create a hostfile.
@@ -83,7 +82,7 @@ main(int argc, char **argv)
 	int opt_create_mode = 0;
 	int c, i, available_nhosts, nhosts, *ports;
 	struct gfarm_host_sched_info *available_hosts;
-	char *path, **hosts, *realpath = NULL;
+	char *path, **hosts;
 
 	if (argc >= 1)
 		program_name = basename(argv[0]);
@@ -146,11 +145,7 @@ main(int argc, char **argv)
 	}
 
 	if (opt_file != NULL) {
-		e = gfarm_realpath_by_gfarm2fs(opt_file, &realpath);
-		if (e == GFARM_ERR_NO_ERROR)
-			path = realpath;
-		else
-			path = opt_file;
+		path = opt_file;
 		if (opt_create_mode) {
 			GFS_File gf;
 
@@ -174,10 +169,7 @@ main(int argc, char **argv)
 		    opt_domain,
 		    &available_nhosts, &available_hosts);
 	} else {
-		path = opt_mount_point == NULL ? "." : opt_mount_point;
-		e = gfarm_realpath_by_gfarm2fs(path, &realpath);
-		if (e == GFARM_ERR_NO_ERROR)
-			path = realpath;
+		path = opt_mount_point == NULL ? "/" : opt_mount_point;
 		e = gfarm_schedule_hosts_domain_all(path, opt_domain,
 		    &available_nhosts, &available_hosts);
 	}
@@ -212,7 +204,6 @@ main(int argc, char **argv)
 		    available_nhosts, available_hosts,
 		    &nhosts, hosts, ports);
 	}
-	free(realpath);
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: client side scheduling: %s\n",
 		    program_name, gfarm_error_string(e));
@@ -225,8 +216,6 @@ main(int argc, char **argv)
 			printf("\t%d", ports[i]);
 		putchar('\n');
 	}
-	free(hosts);
-	free(ports);
 
 	e = gfarm_terminate();
 	if (e != GFARM_ERR_NO_ERROR) {

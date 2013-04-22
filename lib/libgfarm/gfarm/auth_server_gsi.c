@@ -18,12 +18,11 @@
 #include <gfarm/error.h>
 #include <gfarm/gfarm_misc.h>
 
-#include "gfutil.h"
-
 #include "gfarm_secure_session.h"
 #include "gfarm_auth.h"
 
 #include "liberror.h"
+#include "gfutil.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
 #include "io_gfsl.h"
@@ -57,7 +56,7 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 	char *cred_service = gfarm_auth_server_cred_service_get(service_tag);
 	char *cred_name = gfarm_auth_server_cred_name_get(service_tag);
 	gss_cred_id_t cred;
-	enum gfarm_auth_id_type peer_type = GFARM_AUTH_ID_TYPE_UNKNOWN;
+	enum gfarm_auth_id_type peer_type;
 
 	e = gfp_xdr_flush(conn);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -267,7 +266,6 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 		    userinfo->authData.userAuth.localName);
 		gfarm_set_local_homedir(
 		    userinfo->authData.userAuth.homeDir);
-
 		/*
 		 * set the delegated credential
 		 *
@@ -280,8 +278,12 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 	}
 
 	/* determine *peer_typep == GFARM_AUTH_ID_TYPE_SPOOL_HOST */
-	if (peer_typep != NULL)
-		*peer_typep = peer_type;
+	if (peer_typep != NULL) {
+		if (gfarmAuthGetAuthEntryType(userinfo) == GFARM_AUTH_HOST)
+			*peer_typep = GFARM_AUTH_ID_TYPE_SPOOL_HOST;
+		else
+			*peer_typep = GFARM_AUTH_ID_TYPE_USER;
+	}
 	if (global_usernamep != NULL)
 		*global_usernamep = global_username;
 	else

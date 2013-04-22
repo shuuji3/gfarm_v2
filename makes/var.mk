@@ -10,6 +10,7 @@ example_bindir = $(default_bindir)
 metadb_client_includes = $(ldap_includes) $(postgresql_includes)
 metadb_client_libs = $(ldap_libs) $(postgresql_libs)
 
+SHELL = /bin/sh
 RM = rm
 GENCAT = gencat
 
@@ -19,10 +20,12 @@ ASSIGNMSGNO=$(top_srcdir)/makes/assign_msgno.pl
 # library to be installed, see lib.mk
 LIBRARY_RESULT = $(LIBRARY)
 
-# the following symbol is removed in gfarm-3.0 and later
-#	-DCOMPAT_GFARM_2_3 - enable protocols which were deprecated in 2.4.0
+# libgfarm
+#	COMPAT_GFARM_2_3 - enable protocols which were deprecated in 2.4.0
+
 COMMON_CFLAGS = $(OPTFLAGS) $(largefile_cflags) \
-	-I$(top_builddir)/include -I$(top_srcdir)/include
+	-I$(top_builddir)/include -I$(top_srcdir)/include \
+	-DCOMPAT_GFARM_2_3
 COMMON_LDFLAGS = $(largefile_ldflags) $(dynamic_ldflags)
 GFARMLIB = -L$(top_builddir)/lib/libgfarm -lgfarm \
 	$(globus_gssapi_libs) $(openssl_libs)

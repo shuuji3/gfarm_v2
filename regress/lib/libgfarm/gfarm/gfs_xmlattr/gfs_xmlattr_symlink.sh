@@ -12,9 +12,10 @@ attrname1=testattr1
 attrname2=testattr2
 xml_mode=-x
 
-if $regress/bin/is_xmlattr_supported; then
-	:
-else
+# is XML attr supported?
+if gfxattr -x -g / test 2>&1 |
+	egrep "^gfxattr: (unknown|invalid) option -- ('x'|x)" >/dev/null
+then
 	exit $exit_unsupported
 fi
 

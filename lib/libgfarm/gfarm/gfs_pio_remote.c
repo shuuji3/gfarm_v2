@@ -20,7 +20,6 @@
 #include "gfs_client.h"
 #include "gfs_io.h"
 #include "gfs_pio.h"
-#include "schedule.h"
 
 static gfarm_error_t
 gfs_pio_remote_storage_close(GFS_File gf)
@@ -38,12 +37,6 @@ gfs_pio_remote_storage_close(GFS_File gf)
 	if (vc->pid != getpid())
 		return (GFARM_ERR_NO_ERROR);
 	e = gfs_client_close(gfs_server, gf->fd);
-	gfarm_schedule_host_unused(
-	    gfs_client_hostname(gfs_server),
-	    gfs_client_port(gfs_server),
-	    gfs_client_username(gfs_server),
-	    gf->scheduled_age);
-
 	vc->storage_context = NULL;
 	gfs_client_connection_free(gfs_server);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -71,26 +64,6 @@ gfs_pio_remote_storage_pwrite(GFS_File gf,
 		size = GFS_PROTO_MAX_IOSIZE;
 	return (gfs_client_pwrite(gfs_server, gf->fd, buffer, size, offset,
 	    lengthp));
-}
-
-static gfarm_error_t
-gfs_pio_remote_storage_write(GFS_File gf,
-	const char *buffer, size_t size, size_t *lengthp,
-	gfarm_off_t *offsetp, gfarm_off_t *total_sizep)
-{
-	struct gfs_file_section_context *vc = gf->view_context;
-	struct gfs_connection *gfs_server = vc->storage_context;
-
-	/*
-	 * buffer beyond GFS_PROTO_MAX_IOSIZE are just ignored by gfsd,
-	 * we don't perform such GFS_PROTO_WRITE request, because it's
-	 * inefficient.
-	 * Note that upper gfs_pio layer should care this partial write.
-	 */
-	if (size > GFS_PROTO_MAX_IOSIZE)
-		size = GFS_PROTO_MAX_IOSIZE;
-	return (gfs_client_write(gfs_server, gf->fd, buffer, size,
-	    lengthp, offsetp, total_sizep));
 }
 
 static gfarm_error_t
@@ -171,7 +144,6 @@ struct gfs_storage_ops gfs_pio_remote_storage_ops = {
 	gfs_pio_remote_storage_fsync,
 	gfs_pio_remote_storage_fstat,
 	gfs_pio_remote_storage_reopen,
-	gfs_pio_remote_storage_write,
 };
 
 gfarm_error_t

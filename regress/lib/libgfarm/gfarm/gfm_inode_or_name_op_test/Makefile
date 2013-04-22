@@ -17,7 +17,4 @@ include $(top_srcdir)/makes/prog.mk
 
 ###
 
-$(OBJS): $(DEPGFARMINC) \
-	$(GFARMLIB_SRCDIR)/context.h \
-	$(GFARMLIB_SRCDIR)/gfm_client.h \
-	$(GFARMLIB_SRCDIR)/lookup.h
+$(OBJS): $(DEPGFARMINC)

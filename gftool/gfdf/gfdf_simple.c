@@ -12,7 +12,6 @@
 
 #include "gfm_client.h"
 #include "lookup.h"
-#include "gfarm_path.h"
 
 char *program_name = "gfdf";
 
@@ -274,8 +273,7 @@ int
 main(int argc, char *argv[])
 {
 	gfarm_error_t e;
-	const char *domain = "", *path = ".";
-	char *p = NULL;
+	const char *domain = "", *path = GFARM_PATH_ROOT;
 	gfarm_error_t (*statfs)(const char *, const char *) =
 		display_statfs_nodes;
 	int c;
@@ -323,10 +321,7 @@ main(int argc, char *argv[])
 			usage();
 		}
 	}
-	if (gfarm_realpath_by_gfarm2fs(path, &p) == GFARM_ERR_NO_ERROR)
-		path = p;
 	e = statfs(path, domain);
-	free(p);
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: %s\n", program_name,
 		    gfarm_error_string(e));

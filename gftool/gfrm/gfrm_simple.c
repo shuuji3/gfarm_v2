@@ -10,7 +10,6 @@
 
 #include <gfarm/gfarm.h>
 #include "gfarm_foreach.h"
-#include "gfarm_path.h"
 
 char *program_name = "gfrm";
 
@@ -204,11 +203,8 @@ main(int argc, char **argv)
 
 	n = gfarm_stringlist_length(&paths);
 	for (i = 0; i < n; i++) {
-		char *file = gfarm_stringlist_elem(&paths, i), *realpath = NULL;
+		char *file = gfarm_stringlist_elem(&paths, i);
 
-		e = gfarm_realpath_by_gfarm2fs(file, &realpath);
-		if (e == GFARM_ERR_NO_ERROR)
-			file = realpath;
 		e = gfarm_foreach_directory_hierarchy(
 			add_file, op_dir_before, add_dir, file, &files);
 
@@ -219,7 +215,7 @@ main(int argc, char **argv)
 			    program_name, file, gfarm_error_string(e));
 			status = 1;
 		}
-		free(realpath);
+
 	}
 	gfarm_stringlist_free_deeply(&paths);
 

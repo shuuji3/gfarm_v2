@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -137,7 +136,6 @@ mdcluster_enter(const char *name, struct mdcluster **cpp)
 	struct mdcluster *c;
 	gfarm_error_t e;
 	char *name2;
-	static const char diag[] = "mdcluster_enter";
 
 	c = mdcluster_lookup_internal(name);
 	if (c) {
@@ -148,9 +146,10 @@ mdcluster_enter(const char *name, struct mdcluster **cpp)
 		return (GFARM_ERR_NO_ERROR);
 	}
 
-	name2 = strdup_ck(name, diag);
-	c = mdcluster_new(name2);
-	if (c == NULL) {
+	name2 = strdup(name);
+	if (name2 != NULL)
+		c = mdcluster_new(name2);
+	if (name2 == NULL || c == NULL) {
 		e = GFARM_ERR_NO_MEMORY;
 		gflog_error(GFARM_MSG_1003012,
 		    "%s", gfarm_error_string(e));
@@ -216,10 +215,10 @@ mdcluster_get_or_create_by_mdhost(struct mdhost *h)
 void
 mdcluster_remove_mdhost(struct mdhost *h)
 {
-	struct mdhost_elem *he, *tmp;
+	struct mdhost_elem *he;
 	struct mdcluster *c = mdhost_get_cluster(h);
 
-	GFARM_STAILQ_FOREACH_SAFE(he, &c->mh_list, next, tmp) {
+	GFARM_STAILQ_FOREACH(he, &c->mh_list, next) {
 		if (he->mh == h) {
 			GFARM_STAILQ_REMOVE(&c->mh_list, he,
 				mdhost_elem, next);

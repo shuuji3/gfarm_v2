@@ -22,21 +22,15 @@ SUBDIRS=	\
 	lib/libgfarm/gfarm/gfs_xattr \
 	lib/libgfarm/gfarm/gfs_getxattr_cached \
 	lib/libgfarm/gfarm/gfm_inode_or_name_op_test \
-	server/gfmd/db_journal \
-	manual/lib/libgfarm/gfarm/gfs_pio_failover
+	server/gfmd/db_journal
 
 check test: all
 	@echo ""
 	@$(CHECK_ENV) $(srcdir)/regress.sh
 	@echo ""
 
-check-jenkins: all
-	@echo ""
-	@$(CHECK_ENV) $(srcdir)/regress.sh -j "${JENKINS_CLASSNAME}"
-	@echo ""
-
 loop: all
-	@@$(CHECK_ENV) $(srcdir)/loop.sh
+	@$(CHECK_ENV) $(srcdir)/loop.sh
 
 all: config
 

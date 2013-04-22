@@ -21,8 +21,6 @@
 #include <gfarm/gfarm.h>
 #include "gfutil.h"
 
-#include "gfarm_path.h"
-
 #define DEFAULT_ALLOC_SIZE (64 * 1024)
 
 static gfarm_error_t
@@ -251,7 +249,7 @@ int
 main(int argc, char *argv[])
 {
 	char *prog_name = basename(argv[0]);
-	char *filename = NULL, *c_path, *c_realpath = NULL, *xattrname = NULL;
+	char *filename = NULL, *c_path = NULL, *xattrname = NULL;
 	enum { NONE, SET_MODE, GET_MODE, REMOVE_MODE, LIST_MODE } mode = NONE;
 	int c, xmlMode = 0, nofollow = 0, flags = 0;
 	gfarm_error_t e;
@@ -315,11 +313,7 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	e = gfarm_realpath_by_gfarm2fs(argv[0], &c_realpath);
-	if (e == GFARM_ERR_NO_ERROR)
-		c_path = c_realpath;
-	else
-		c_path = argv[0];
+	c_path = argv[0];
 	if (argc > 1) {
 		xattrname = argv[1];
 	}
@@ -354,7 +348,6 @@ main(int argc, char *argv[])
 		fprintf(stderr, "%s\n", gfarm_error_string(e));
 		exit(1);
 	}
-	free(c_realpath);
 
 	e = gfarm_terminate();
 	if (e != GFARM_ERR_NO_ERROR) {
