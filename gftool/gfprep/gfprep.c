@@ -8,7 +8,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <libgen.h>
-#include <limits.h>
 #include <assert.h>
 #include <pthread.h>
 #include <sys/types.h>
@@ -18,18 +17,13 @@
 
 #include <gfarm/gfarm.h>
 
-#include "hash.h"
-#include "nanosec.h"
-#include "thrsubr.h"
-#include "gfutil.h"
-#include "queue.h"
-
 #include "config.h"
-#include "context.h"
-#include "gfarm_path.h"
 #include "gfm_client.h"
+#include "gfutil.h"
+#include "hash.h"
 #include "host.h"
 #include "lookup.h"
+#include "thrsubr.h"
 
 #include "gfarm_list.h"
 
@@ -143,7 +137,7 @@ gfprep_usage()
 {
 	fprintf(stderr,
 "\t[-N <#replica>] [-x (remove surplus replicas)] [-m (migrate)]\n"
-"\t<gfarm_url(gfarm:///...) or relative-path>\n");
+"\t<gfarm_url(gfarm:///...)>\n");
 }
 
 static void
@@ -151,8 +145,8 @@ gfpcopy_usage()
 {
 	fprintf(stderr,
 "\t[-f (force copy)(overwrite)] [-b <#bufsize to copy>]\n"
-"\t<src_url(gfarm:///... or file:///...) or relative-path>\n"
-"\t<dst_dir(gfarm:///... or file:///...) or relative-path>\n");
+"\t<src_url(gfarm:///... or file:///...)>\n"
+"\t<dst_dir(gfarm:///... or file:///...)>\n");
 }
 
 static void
@@ -160,12 +154,10 @@ gfprep_usage_common(int error)
 {
 	fprintf(stderr,
 "Usage: %s [-?] [-q (quiet)] [-v (verbose)] [-d (debug)]\n"
-"\t[-S <source domainname to select a replica>]\n"
-"\t[-h <source hostfile to select a replica>]\n"
+"\t[-S <source domainname to select a file>]\n"
+"\t[-h <source hostfile to select a file>]\n"
 "\t[-L (select a src_host within specified source)(limited scope)]\n"
-"\t[-D <destination domainname\n"
-"\t     ('' means all nodes even if write_target_domain is set)>]\n"
-"\t[-H <destination hostfile>]\n"
+"\t[-D <destination domainname>] [-H <destination hostfile>]\n"
 "\t[-j <#parallel(connections)>]\n"
 "\t[-w <scheduling way (noplan,greedy)(default:noplan)>]\n"
 "\t[-W <#KB> (threshold size to flat connections cost)(for -w greedy)]\n"
@@ -503,7 +495,6 @@ gfprep_filter_hostinfohash(const char *path,
 	     !gfarm_hash_iterator_is_end(&iter);
 	     gfarm_hash_iterator_next(&iter)) {
 		struct gfprep_host_info **hip, **hip_orig, *hi;
-
 		he = gfarm_hash_iterator_access(&iter);
 		if (he == NULL)
 			continue; /* unexpected */
@@ -764,13 +755,11 @@ gfprep_create_hostnamehash_from_file(const char *path,
 
 /* GFS_DT_REG, GFS_DT_DIR, GFS_DT_LNK, GFS_DT_UNKNOWN */
 static int
-gfprep_get_type(int is_gfarm, const char *url, int *modep,
-	struct gfarm_timespec *mtimep, gfarm_error_t *ep)
+gfprep_get_type(int is_gfarm, const char *url, int *modep, gfarm_error_t *ep)
 {
 	if (is_gfarm) {
 		struct gfs_stat st;
 		gfarm_error_t e;
-
 		e = gfs_lstat(url, &st);
 		if (ep)
 			*ep = e;
@@ -778,8 +767,6 @@ gfprep_get_type(int is_gfarm, const char *url, int *modep,
 			return (GFS_DT_UNKNOWN);
 		if (modep)
 			*modep = (int) st.st_mode & 07777;
-		if (mtimep)
-			*mtimep = st.st_mtimespec;
 		gfs_stat_free(&st);
 		if (GFARM_S_ISREG(st.st_mode))
 			return (GFS_DT_REG);
@@ -792,7 +779,6 @@ gfprep_get_type(int is_gfarm, const char *url, int *modep,
 		int retv;
 		struct stat st;
 		const char *p = url + GFPREP_FILE_URL_PREFIX_LENGTH;
-
 		errno = 0;
 		retv = lstat(p, &st);
 		if (ep)
@@ -801,10 +787,6 @@ gfprep_get_type(int is_gfarm, const char *url, int *modep,
 			return (GFS_DT_UNKNOWN);
 		if (modep)
 			*modep = (int) st.st_mode & 07777;
-		if (mtimep) {
-			mtimep->tv_sec = st.st_mtime;
-			mtimep->tv_nsec = gfarm_stat_mtime_nsec(&st);
-		}
 		if (S_ISREG(st.st_mode))
 			return (GFS_DT_REG);
 		else if (S_ISDIR(st.st_mode))
@@ -821,7 +803,7 @@ gfprep_is_dir(int is_gfarm, const char *url, int *modep, gfarm_error_t *ep)
 	int type;
 	gfarm_error_t e;
 
-	type = gfprep_get_type(is_gfarm, url, modep, NULL, &e);
+	type = gfprep_get_type(is_gfarm, url, modep, &e);
 	if (e != GFARM_ERR_NO_ERROR) {
 		if (ep)
 			*ep = e;
@@ -840,7 +822,7 @@ gfprep_is_existed(int is_gfarm, const char *url, int *modep, gfarm_error_t *ep)
 {
 	gfarm_error_t e;
 
-	gfprep_get_type(is_gfarm, url, modep, NULL, &e);
+	gfprep_get_type(is_gfarm, url, modep, &e);
 	if (e == GFARM_ERR_NO_ERROR) {
 		if (ep)
 			*ep = e;
@@ -1003,7 +985,8 @@ gfprep_is_same_name(const char *src_url, int src_is_gfarm,
 }
 
 static gfarm_error_t
-gfprep_set_mtime(int is_gfarm, const char *url, struct gfarm_timespec *mtimep)
+gfprep_set_mtime(int is_gfarm, const char *url, struct gfarm_timespec *mtimep,
+		 unsigned char d_type)
 {
 	gfarm_error_t e;
 
@@ -1012,160 +995,45 @@ gfprep_set_mtime(int is_gfarm, const char *url, struct gfarm_timespec *mtimep)
 
 	if (is_gfarm) {
 		struct gfarm_timespec gt[2];
-
-		gt[0].tv_sec = gt[1].tv_sec = mtimep->tv_sec;
-		gt[0].tv_nsec = gt[1].tv_nsec = mtimep->tv_nsec;
+		gt[0].tv_sec = mtimep->tv_sec;
+		gt[0].tv_nsec = mtimep->tv_nsec;
+		gt[1].tv_sec = gt[0].tv_sec;
+		gt[1].tv_nsec = gt[0].tv_nsec;
 		e = gfs_lutimes(url, gt);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gfprep_error_e(e, "gfs_lutimes(%s)", url);
 			return (e);
 		}
 	} else { /* to local */
-		int retv, save_errno;
-		struct timespec ts[2];
-		const char *path = url + GFPREP_FILE_URL_PREFIX_LENGTH;
-
-		ts[0].tv_sec = ts[1].tv_sec = mtimep->tv_sec;
-		ts[0].tv_nsec = ts[1].tv_nsec = mtimep->tv_nsec;
-		retv = gfarm_local_lutimens(path, ts);
-		if (retv == -1) {
-			save_errno = errno;
-			e = gfarm_errno_to_error(save_errno);
-			if (save_errno == EOPNOTSUPP) {
-				if (opt.verbose)
-					gfprep_warn_e(e,
-					    "gfarm_local_lutimens(%s)", url);
-			} else
-				gfprep_error_e(
-				    e, "gfarm_local_lutimens(%s)", url);
-			return (e);
-		}
-	}
-	return (GFARM_ERR_NO_ERROR);
-}
-
-/* do not call this for symlinks */
-static gfarm_error_t
-gfprep_chmod(int is_gfarm, const char *url, int mode)
-{
-	gfarm_error_t e;
-
-	if (is_gfarm) {
-		e = gfs_lchmod(url, (gfarm_mode_t)mode);
-		if (e != GFARM_ERR_NO_ERROR) {
-			gfprep_error_e(e, "gfs_lchmod(%s, %o)", url, mode);
-			return (e);
-		}
-	} else { /* to local */
 		int retv;
-		const char *path = url + GFPREP_FILE_URL_PREFIX_LENGTH;
-
-		retv = chmod(path, (mode_t)mode);
+		struct timeval tv[2];
+		const char *path = url;
+		if (d_type == GFS_DT_LNK) /* not support lutimes() */
+			return (GFARM_ERR_NO_ERROR); /* no effect */
+		path += GFPREP_FILE_URL_PREFIX_LENGTH;
+		tv[0].tv_sec = (long) mtimep->tv_sec;
+		tv[0].tv_usec = (long) mtimep->tv_nsec / 1000;
+		tv[1].tv_sec = tv[0].tv_sec;
+		tv[1].tv_usec = tv[0].tv_usec;
+		retv = utimes(path, tv);
 		if (retv == -1) {
 			e = gfarm_errno_to_error(errno);
-			gfprep_error_e(e, "chmod(%s, %o)", url, mode);
+			gfprep_error_e(e, "utimes(%s)", url);
 			return (e);
 		}
 	}
 	return (GFARM_ERR_NO_ERROR);
 }
 
-struct dirstat {
-	GFARM_HCIRCLEQ_ENTRY(dirstat) list;
-	int is_gfarm;
-	char *url;
-	int orig_mode;
-	int tmp_mode;
-	struct gfarm_timespec mtime;
-};
-
-static mode_t mask;
-static GFARM_HCIRCLEQ_HEAD(dirstat) dirstat_head;
-
-static void
-gfprep_dirstat_init(void)
-{
-	mask = umask(0022);
-	umask(mask);
-
-	GFARM_HCIRCLEQ_INIT(dirstat_head, list);
-}
-
-static void
-gfprep_dirstat_add(int is_gfarm, const char *url, int orig_mode, int tmp_mode,
-	struct gfarm_timespec *mtimep)
-{
-	char *url2;
-	struct dirstat *ds;
-
-	GFARM_MALLOC(ds);
-	url2 = strdup(url);
-	if (ds == NULL || url2 == NULL) {
-		free(ds);
-		free(url2);
-		gfprep_error("cannot copy mode and mtime (no memory): %s: ",
-		    url);
-	} else {
-		ds->is_gfarm = is_gfarm;
-		ds->url = url2;
-		ds->orig_mode = orig_mode;
-		ds->tmp_mode = tmp_mode;
-		ds->mtime = *mtimep;
-		GFARM_HCIRCLEQ_INSERT_HEAD(dirstat_head, ds, list);
-	}
-}
-
-static void
-gfprep_dirstat_final(void)
-{
-	struct dirstat *ds;
-
-	while (!GFARM_HCIRCLEQ_EMPTY(dirstat_head, list)) {
-		ds = GFARM_HCIRCLEQ_FIRST(dirstat_head, list);
-		GFARM_HCIRCLEQ_REMOVE(ds, list);
-
-		gfprep_verbose("set mode and mtime: %s", ds->url);
-
-		(void)gfprep_set_mtime(ds->is_gfarm, ds->url, &ds->mtime);
-
-		if (ds->orig_mode != ds->tmp_mode)
-			(void)gfprep_chmod(ds->is_gfarm, ds->url,
-			    ds->orig_mode);
-
-		free(ds->url);
-		free(ds);
-	}
-}
-
-static void
-gfprep_set_tmp_mode_and_mtime(int is_gfarm, const char *url, int mode,
-	struct gfarm_timespec *mtimep)
-{
-	gfarm_error_t e;
-	int tmp_mode;
-
-	mode = mode & 0777;
-	tmp_mode = mode | 0700; /* to create files in any st_mode and mask */
-	if (mode != tmp_mode) {
-		e = gfprep_chmod(is_gfarm, url, tmp_mode);
-		if (e == GFARM_ERR_NO_ERROR)
-			gfprep_verbose("chmod(mode=%o): %s", tmp_mode, url);
-	}
-
-	gfprep_dirstat_add(is_gfarm, url, mode, tmp_mode, mtimep);
-}
-
+/* gfpcopy cannot save the mtime of directories */
 static gfarm_error_t
-gfprep_mkdir(int is_gfarm, const char *url, int restore, int mode,
-	struct gfarm_timespec *mtimep)
+gfprep_mkdir(int is_gfarm, const char *url, int mode)
 {
 	gfarm_error_t e;
-	int tmp_mode;
 
-	mode = mode & 0777 & ~mask;
-	tmp_mode = mode | 0700; /* to create files in any st_mode and mask */
+	mode &= 07777;
 	if (is_gfarm) {
-		e = gfs_mkdir(url, (gfarm_mode_t)tmp_mode);
+		e = gfs_mkdir(url, (gfarm_mode_t) mode);
 		if (e != GFARM_ERR_NO_ERROR) {
 			gfprep_error_e(e, "gfs_mkdir(%s)", url);
 			return (e);
@@ -1173,20 +1041,15 @@ gfprep_mkdir(int is_gfarm, const char *url, int restore, int mode,
 	} else { /* to local */
 		int retv;
 		const char *path = url;
-
 		path += GFPREP_FILE_URL_PREFIX_LENGTH;
-		retv = mkdir(path, (mode_t)tmp_mode);
+		retv = mkdir(path, (mode_t) mode);
 		if (retv == -1) {
 			e = gfarm_errno_to_error(errno);
 			gfprep_error_e(e, "mkdir(%s)", url);
 			return (e);
 		}
 	}
-	gfprep_verbose("mkdir(mode=%o): %s", tmp_mode, url);
-
-	if (restore)
-		gfprep_dirstat_add(is_gfarm, url, mode, tmp_mode, mtimep);
-
+	gfprep_verbose("mkdir(mode=%o): %s", mode, url);
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -1320,6 +1183,7 @@ gfprep_copy_symlink(int src_is_gfarm, const char *src_url,
 
 /* callback functions and data (locked by cb_mutex) */
 struct pfunc_cb_data {
+	int type;
 	int migrate;
 	char *src_url;
 	char *dst_url;
@@ -1328,55 +1192,13 @@ struct pfunc_cb_data {
 	struct timeval start;
 	gfarm_off_t filesize;
 	char *done_p;
-
-	void (*func_timer_begin)(struct pfunc_cb_data *);
-	void (*func_timer_end)(struct pfunc_cb_data *, int);
-	void (*func_start)(struct pfunc_cb_data *);
-	void (*func_update)(struct pfunc_cb_data *, int);
 };
 
-static void (*pfunc_cb_start_copy)(struct pfunc_cb_data *) = NULL;
-static void (*pfunc_cb_start_replicate)(struct pfunc_cb_data *) = NULL;
-static void (*pfunc_cb_start_remove_replica)(struct pfunc_cb_data *) = NULL;
-
-static void (*pfunc_cb_timer_begin)(struct pfunc_cb_data *) = NULL;
-
-static void
-pfunc_cb_start_copy_main(struct pfunc_cb_data *cbd)
-{
-	gfprep_debug("START COPY: %s (%s:%d) -> %s (%s:%d)",
-	    cbd->src_url,
-	    cbd->src_hi ? cbd->src_hi->hostname : "local",
-	    cbd->src_hi ? cbd->src_hi->port : 0,
-	    cbd->dst_url,
-	    cbd->dst_hi ? cbd->dst_hi->hostname : "local",
-	    cbd->dst_hi ? cbd->dst_hi->port : 0);
-}
-
-static void
-pfunc_cb_start_replicate_main(struct pfunc_cb_data *cbd)
-{
-	gfprep_debug("START %s: %s (%s:%d -> %s:%d)",
-	    cbd->migrate ? "MIGRATE" : "REPLICATE",  cbd->src_url,
-	    cbd->src_hi ? cbd->src_hi->hostname : "local",
-	    cbd->src_hi ? cbd->src_hi->port : 0,
-	    cbd->dst_hi ? cbd->dst_hi->hostname : "local",
-	    cbd->dst_hi ? cbd->dst_hi->port : 0);
-}
-
-static void
-pfunc_cb_start_remove_replica_main(struct pfunc_cb_data *cbd)
-{
-	gfprep_debug("START REMOVE REPLICA: %s (%s:%d)",
-	    cbd->src_url, cbd->src_hi->hostname,
-	    cbd->src_hi->port);
-}
-
-static void
-pfunc_cb_timer_begin_main(struct pfunc_cb_data *cbd)
-{
-	gettimeofday(&cbd->start, NULL);
-}
+enum pfunc_cb_type {
+	PFUNC_TYPE_COPY,
+	PFUNC_TYPE_REPLICATE,
+	PFUNC_TYPE_REMOVE_REPLICA
+};
 
 static void
 pfunc_cb_start(void *data)
@@ -1386,111 +1208,31 @@ pfunc_cb_start(void *data)
 
 	if (cbd == NULL)
 		return;
+	gfarm_mutex_lock(&cb_mutex, diag, CB_MUTEX_DIAG);
+	if (cbd->type == PFUNC_TYPE_COPY)
+		gfprep_debug("START COPY: %s (%s:%d) -> %s (%s:%d)",
+			     cbd->src_url,
+			     cbd->src_hi ? cbd->src_hi->hostname : "local",
+			     cbd->src_hi ? cbd->src_hi->port : 0,
+			     cbd->dst_url,
+			     cbd->dst_hi ? cbd->dst_hi->hostname : "local",
+			     cbd->dst_hi ? cbd->dst_hi->port : 0);
+	else if (cbd->type == PFUNC_TYPE_REPLICATE)
+		gfprep_debug("START %s: %s (%s:%d -> %s:%d)",
+			     cbd->migrate ? "MIGRATE" : "REPLICATE",
+			     cbd->src_url,
+			     cbd->src_hi ? cbd->src_hi->hostname : "local",
+			     cbd->src_hi ? cbd->src_hi->port : 0,
+			     cbd->dst_hi ? cbd->dst_hi->hostname : "local",
+			     cbd->dst_hi ? cbd->dst_hi->port : 0);
+	else if (cbd->type == PFUNC_TYPE_REMOVE_REPLICA && cbd->src_hi)
+		gfprep_debug("START REMOVE REPLICA: %s (%s:%d)",
+			     cbd->src_url, cbd->src_hi->hostname,
+			     cbd->src_hi->port);
+	gfarm_mutex_unlock(&cb_mutex, diag, CB_MUTEX_DIAG);
 
-	if (cbd->func_start) {
-		gfarm_mutex_lock(&cb_mutex, diag, CB_MUTEX_DIAG);
-		cbd->func_start(cbd);
-		gfarm_mutex_unlock(&cb_mutex, diag, CB_MUTEX_DIAG);
-	}
-	if (cbd->func_timer_begin)
-		cbd->func_timer_begin(cbd);
-}
-
-static void (*pfunc_cb_timer_end_copy)(struct pfunc_cb_data *, int) = NULL;
-static void (*pfunc_cb_timer_end_replicate)(struct pfunc_cb_data *, int)
-= NULL;
-static void (*pfunc_cb_timer_end_remove_replica)(struct pfunc_cb_data *, int)
-= NULL;
-
-static const char pfunc_cb_ok[] = "OK";
-static const char pfunc_cb_ng[] = "NG";
-#define PF_FMT ", %.3gMB/s(%.3gs): " /* performance */
-
-static void
-timer_end(struct pfunc_cb_data *cbd, double *mbsp, double *secp)
-{
-	struct timeval end;
-	double usec;
-
-	gettimeofday(&end, NULL);
-	gfarm_timeval_sub(&end, &cbd->start);
-	usec = (double)end.tv_sec * GFARM_SECOND_BY_MICROSEC + end.tv_usec;
-	/* Bytes/usec == MB/sec */
-	*mbsp = (double)cbd->filesize / usec;
-	*secp = usec / GFARM_SECOND_BY_MICROSEC;
-}
-
-static void
-pfunc_cb_timer_end_copy_main(struct pfunc_cb_data *cbd, int success)
-{
-	double mbs, sec;
-
-	timer_end(cbd, &mbs, &sec);
-	printf("[%s]COPY" PF_FMT "%s",
-	    success ? pfunc_cb_ok : pfunc_cb_ng, mbs, sec, cbd->src_url);
-	if (cbd->src_hi)
-		printf("(%s:%d)",
-		    cbd->src_hi->hostname, cbd->src_hi->port);
-	printf(" -> %s", cbd->dst_url);
-	if (cbd->dst_hi)
-		printf("(%s:%d)",
-		    cbd->dst_hi->hostname, cbd->dst_hi->port);
-	puts("");
-}
-
-static void
-pfunc_cb_timer_end_replicate_main(struct pfunc_cb_data *cbd, int success)
-{
-	double mbs, sec;
-
-	timer_end(cbd, &mbs, &sec);
-	printf("[%s]%s" PF_FMT "%s (%s:%d -> %s:%d)\n",
-	    success ? pfunc_cb_ok : pfunc_cb_ng,
-	    cbd->migrate ? "MIGRATE" : "REPLICATE",
-	    mbs, sec, cbd->src_url,
-	    cbd->src_hi->hostname, cbd->src_hi->port,
-	    cbd->dst_hi->hostname, cbd->dst_hi->port);
-}
-
-static void
-pfunc_cb_timer_end_remove_replica_main(struct pfunc_cb_data *cbd, int success)
-{
-	printf("[%s]REMOVE REPLICA: %s (%s:%d)\n",
-	    success ? pfunc_cb_ok : pfunc_cb_ng, cbd->src_url,
-	    cbd->src_hi->hostname, cbd->src_hi->port);
-}
-
-static void
-pfunc_cb_update_default(struct pfunc_cb_data *cbd, int success)
-{
-	if (cbd->src_hi)
-		cbd->src_hi->n_using--;
-	if (cbd->dst_hi)
-		cbd->dst_hi->n_using--;
-	if (success) {
-		total_ok_filesize += cbd->filesize;
-		total_ok_filenum++;
-	} else {
-		total_ng_filesize += cbd->filesize;
-		total_ng_filenum++;
-		if (cbd->dst_hi)
-			cbd->dst_hi->failed_size += cbd->filesize;
-	}
-	if (cbd->done_p)
-		*cbd->done_p = 1;
-}
-
-static void
-pfunc_cb_update_remove_replica(struct pfunc_cb_data *cbd, int success)
-{
-	if (success) {
-		removed_replica_ok_num++;
-		removed_replica_ok_filesize += cbd->filesize;
-	} else {
-		removed_replica_ng_num++;
-		removed_replica_ng_filesize += cbd->filesize;
-		cbd->src_hi->failed_size -= cbd->filesize;
-	}
+	if (opt.performance_each || opt.verbose)
+		gettimeofday(&cbd->start, NULL);
 }
 
 static void
@@ -1498,16 +1240,84 @@ pfunc_cb_end(int success, void *data)
 {
 	static const char diag[] = "pfunc_cb_end";
 	struct pfunc_cb_data *cbd = data;
+	struct timeval end;
 
 	if (cbd == NULL)
 		return;
-
 	gfarm_mutex_lock(&cb_mutex, diag, CB_MUTEX_DIAG);
+	if (opt.performance_each || opt.verbose) {
+		double usec, mbs, sec;
+		static const char ok[] = "OK";
+		static const char ng[] = "NG";
+#define PF_FMT ", %.3gMB/s(%.3gs): " /* performance */
+#define HP_FMT " (%s:%d)" /* hostname:port */
 
-	if (cbd->func_timer_end)
-		cbd->func_timer_end(cbd, success);
+		gettimeofday(&end, NULL);
+		gfarm_timeval_sub(&end, &cbd->start);
+		usec = (double)end.tv_sec * GFARM_SECOND_BY_MICROSEC
+			+ end.tv_usec;
+		/* Bytes/usec == MB/sec */
+		mbs = (double)cbd->filesize / usec;
+		sec = usec / GFARM_SECOND_BY_MICROSEC;
 
-	cbd->func_update(cbd, success);
+		if (cbd->type == PFUNC_TYPE_COPY) {
+			printf("[%s]COPY" PF_FMT "%s",
+			    success ? ok : ng, mbs, sec, cbd->src_url);
+			if (cbd->src_hi)
+				printf(HP_FMT,
+				    cbd->src_hi->hostname, cbd->src_hi->port);
+			printf(" -> %s", cbd->dst_url);
+			if (cbd->dst_hi)
+				printf(HP_FMT,
+				    cbd->dst_hi->hostname, cbd->dst_hi->port);
+		} else if (cbd->type == PFUNC_TYPE_REPLICATE &&
+			   cbd->src_hi && cbd->dst_hi)
+			printf("[%s]%s" PF_FMT "%s (%s:%d -> %s:%d)",
+			    success ? ok : ng,
+			    cbd->migrate ? "MIGRATE" : "REPLICATE",
+			    mbs, sec, cbd->src_url,
+			    cbd->src_hi->hostname, cbd->src_hi->port,
+			    cbd->dst_hi->hostname, cbd->dst_hi->port);
+		else if (cbd->type == PFUNC_TYPE_REMOVE_REPLICA &&
+			 cbd->src_hi)
+			printf("[%s]REMOVE REPLICA: %s" HP_FMT,
+			    success ? ok : ng, cbd->src_url,
+			    cbd->src_hi->hostname, cbd->src_hi->port);
+		else
+			printf("[%s]unexpected, type=%d" PF_FMT "%s",
+			    success ? ok : ng, cbd->type,
+			    mbs, sec, cbd->src_url);
+
+		puts("");
+	}
+
+	if (cbd->type == PFUNC_TYPE_REMOVE_REPLICA) {
+		if (success) {
+			removed_replica_ok_num++;
+			removed_replica_ok_filesize += cbd->filesize;
+		} else {
+			removed_replica_ng_num++;
+			removed_replica_ng_filesize += cbd->filesize;
+			if (cbd->dst_hi)
+				cbd->dst_hi->failed_size -= cbd->filesize;
+		}
+	} else { /* PFUNC_TYPE_COPY or PFUNC_TYPE_REPLICATE */
+		if (cbd->src_hi)
+			cbd->src_hi->n_using--;
+		if (cbd->dst_hi)
+			cbd->dst_hi->n_using--;
+		if (success) {
+			total_ok_filesize += cbd->filesize;
+			total_ok_filenum++;
+		} else {
+			total_ng_filesize += cbd->filesize;
+			total_ng_filenum++;
+			if (cbd->dst_hi)
+				cbd->dst_hi->failed_size += cbd->filesize;
+		}
+		if (cbd->done_p)
+			*cbd->done_p = 1;
+	}
 
 	gfarm_cond_signal(&cb_cond, diag, CB_COND_DIAG);
 	gfarm_mutex_unlock(&cb_mutex, diag, CB_MUTEX_DIAG);
@@ -1515,26 +1325,6 @@ pfunc_cb_end(int success, void *data)
 	free(cbd->src_url);
 	free(cbd->dst_url);
 	free(cbd);
-}
-
-static void
-pfunc_cb_func_init()
-{
-	if (opt.debug) {
-		pfunc_cb_start_copy = pfunc_cb_start_copy_main;
-		pfunc_cb_start_replicate = pfunc_cb_start_replicate_main;
-		pfunc_cb_start_remove_replica
-			= pfunc_cb_start_remove_replica_main;
-	}
-	if (opt.performance_each || opt.verbose) {
-		pfunc_cb_timer_begin = pfunc_cb_timer_begin_main;
-
-		pfunc_cb_timer_end_copy = pfunc_cb_timer_end_copy_main;
-		pfunc_cb_timer_end_replicate
-			= pfunc_cb_timer_end_replicate_main;
-		pfunc_cb_timer_end_remove_replica
-			= pfunc_cb_timer_end_remove_replica_main;
-	}
 }
 
 static void
@@ -2117,130 +1907,78 @@ gfprep_select_dst(int n_array_dst, struct gfprep_host_info **array_dst,
 	*dst_hi_p = found_dst_hi;
 }
 
-static struct pfunc_cb_data *
-gfprep_cb_data_init(
-	char *done_p, int migrate, gfarm_off_t size,
-	const char *src_url, struct gfprep_host_info *src_hi,
-	const char *dst_url, struct gfprep_host_info *dst_hi,
-	void (*func_timer_begin)(struct pfunc_cb_data *),
-	void (*func_timer_end)(struct pfunc_cb_data *, int),
-	void (*func_start)(struct pfunc_cb_data *),
-	void (*func_update)(struct pfunc_cb_data *, int))
+static void
+gfprep_do_job(gfarm_pfunc_t *pfunc_handle, int pfunc_type, char *done_p,
+	      int opt_migrate, gfarm_off_t src_size,
+	      const char *src_url, struct gfprep_host_info *src_hi,
+	      const char *dst_url, struct gfprep_host_info *dst_hi)
 {
+	gfarm_error_t e;
 	struct pfunc_cb_data *cbd;
 
 	GFARM_MALLOC(cbd);
 	if (cbd == NULL)
 		gfprep_fatal("no memory");
-
 	cbd->src_url = strdup(src_url);
 	if (cbd->src_url == NULL)
 		gfprep_fatal("no memory");
-
-	if (dst_url) {
+	cbd->type = pfunc_type;
+	cbd->src_hi = src_hi;
+	cbd->dst_hi = dst_hi;
+	cbd->filesize = src_size;
+	cbd->done_p = done_p;
+	if (pfunc_type == PFUNC_TYPE_COPY) {
+		char *src_hostname = NULL, *dst_hostname = NULL;
+		int src_port = 0, dst_port = 0;
 		cbd->dst_url = strdup(dst_url);
 		if (cbd->dst_url == NULL)
 			gfprep_fatal("no memory");
-	} else
-		cbd->dst_url = NULL;
-
-	cbd->src_hi = src_hi;
-	cbd->dst_hi = dst_hi;
-	cbd->filesize = size;
-	cbd->done_p = done_p;
-	cbd->migrate = migrate;
-
-	cbd->func_timer_begin = func_timer_begin;
-	cbd->func_timer_end = func_timer_end;
-	cbd->func_start = func_start;
-	cbd->func_update = func_update;
-	return (cbd);
-}
-
-static void
-gfprep_do_copy(
-	gfarm_pfunc_t *pfunc_handle, char *done_p,
-	int opt_migrate, gfarm_off_t size,
-	const char *src_url, struct gfprep_host_info *src_hi,
-	const char *dst_url, struct gfprep_host_info *dst_hi)
-{
-	gfarm_error_t e;
-	struct pfunc_cb_data *cbd;
-	char *src_hostname = NULL, *dst_hostname = NULL;
-	int src_port = 0, dst_port = 0;
-
-	cbd = gfprep_cb_data_init(
-	    done_p, opt_migrate, size, src_url, src_hi, dst_url, dst_hi,
-	    pfunc_cb_timer_begin, pfunc_cb_timer_end_copy,
-	    pfunc_cb_start_copy, pfunc_cb_update_default);
-	if (src_hi) { /* src is gfarm */
 		gfprep_update_n_using(src_hi, 1);
-		src_hostname = src_hi->hostname;
-		src_port = src_hi->port;
-	}
-	if (dst_hi) { /* dst is gfarm */
 		gfprep_update_n_using(dst_hi, 1);
-		dst_hostname = dst_hi->hostname;
-		dst_port = dst_hi->port;
-
+		if (src_hi) { /* src gfarm: */
+			src_hostname = src_hi->hostname;
+			src_port = src_hi->port;
+		}
+		if (dst_hi) { /* dst gfarm: */
+			dst_hostname = dst_hi->hostname;
+			dst_port = dst_hi->port;
+		}
+		e = gfarm_pfunc_copy(
+			pfunc_handle,
+			src_url, src_hostname, src_port, src_size,
+			dst_url, dst_hostname, dst_port, cbd, 0,
+			opt.check_disk_avail);
+		gfprep_fatal_e(e, "gfarm_pfunc_copy");
 		/* update disk_avail for next scheduling */
-		dst_hi->disk_avail -= size;
+		if (dst_hi)
+			dst_hi->disk_avail -= src_size;
+	} else if (pfunc_type == PFUNC_TYPE_REPLICATE) {
+		assert(src_hi);
+		assert(dst_hi);
+		cbd->dst_url = NULL;
+		cbd->migrate = opt_migrate;
+		gfprep_update_n_using(src_hi, 1);
+		gfprep_update_n_using(dst_hi, 1);
+		e = gfarm_pfunc_replicate(
+			pfunc_handle, src_url,
+			src_hi->hostname, src_hi->port, src_size,
+			dst_hi->hostname, dst_hi->port,
+			cbd, opt_migrate, opt.check_disk_avail);
+		gfprep_fatal_e(e, "gfarm_pfunc_replicate_from_to");
+		/* update disk_avail for next scheduling */
+		if (dst_hi)
+			dst_hi->disk_avail -= src_size;
+	} else if (pfunc_type == PFUNC_TYPE_REMOVE_REPLICA) {
+		assert(src_hi);
+		cbd->dst_url = NULL;
+		e = gfarm_pfunc_remove_replica(
+			pfunc_handle, src_url,
+			src_hi->hostname, src_hi->port, src_size, cbd);
+		gfprep_fatal_e(e, "gfarm_pfunc_remove_replica");
+		/* update disk_avail for next scheduling */
+		if (dst_hi)
+			dst_hi->disk_avail += src_size;
 	}
-	e = gfarm_pfunc_copy(
-	    pfunc_handle,
-	    src_url, src_hostname, src_port, size,
-	    dst_url, dst_hostname, dst_port, cbd, 0,
-	    opt.check_disk_avail);
-	gfprep_fatal_e(e, "gfarm_pfunc_copy");
-}
-
-static void
-gfprep_do_replicate(
-	gfarm_pfunc_t *pfunc_handle, char *done_p,
-	int opt_migrate, gfarm_off_t size,
-	const char *src_url, struct gfprep_host_info *src_hi,
-	const char *dst_url, struct gfprep_host_info *dst_hi)
-{
-	gfarm_error_t e;
-	struct pfunc_cb_data *cbd;
-
-	assert(src_hi);
-	assert(dst_hi);
-	cbd = gfprep_cb_data_init(
-	    done_p, opt_migrate, size, src_url, src_hi, NULL, dst_hi,
-	    pfunc_cb_timer_begin, pfunc_cb_timer_end_replicate,
-	    pfunc_cb_start_replicate, pfunc_cb_update_default);
-	gfprep_update_n_using(src_hi, 1);
-	gfprep_update_n_using(dst_hi, 1);
-	e = gfarm_pfunc_replicate(
-	    pfunc_handle, src_url,
-	    src_hi->hostname, src_hi->port, size,
-	    dst_hi->hostname, dst_hi->port,
-	    cbd, opt_migrate, opt.check_disk_avail);
-	gfprep_fatal_e(e, "gfarm_pfunc_replicate_from_to");
-	/* update disk_avail for next scheduling */
-	dst_hi->disk_avail -= size;
-}
-
-static void
-gfprep_do_remove_replica(
-	gfarm_pfunc_t *pfunc_handle, char *done_p, gfarm_off_t size,
-	const char *src_url, struct gfprep_host_info *src_hi)
-{
-	gfarm_error_t e;
-	struct pfunc_cb_data *cbd;
-
-	assert(src_hi);
-	cbd = gfprep_cb_data_init(
-	    done_p, 0, size, src_url, src_hi, NULL, NULL,
-	    pfunc_cb_timer_begin, pfunc_cb_timer_end_remove_replica,
-	    pfunc_cb_start_remove_replica, pfunc_cb_update_remove_replica);
-	e = gfarm_pfunc_remove_replica(
-	    pfunc_handle, src_url,
-	    src_hi->hostname, src_hi->port, size, cbd);
-	gfprep_fatal_e(e, "gfarm_pfunc_remove_replica");
-	/* update disk_avail for next scheduling */
-	src_hi->disk_avail += size;
 }
 
 struct file_job {
@@ -2343,6 +2081,7 @@ gfprep_connections_exec(gfarm_pfunc_t *pfunc_handle, int is_gfpcopy,
 	char is_done;
 	struct gfprep_host_info *src_hi, *dst_hi;
 	struct timespec timeout;
+	struct timeval now;
 
 	if (conns == NULL)
 		return (GFARM_ERR_NO_ERROR);
@@ -2393,16 +2132,11 @@ next:
 				assert(dst_hi); /* because no_limit == 1 */
 			}
 			done[i] = 0;
-			if (is_gfpcopy)
-				gfprep_do_copy(
-				    pfunc_handle, &done[i], migrate,
-				    job.file->src_size,
-				    src_url, src_hi, tmp_url, dst_hi);
-			else
-				gfprep_do_replicate(
-				    pfunc_handle, &done[i], migrate,
-				    job.file->src_size,
-				    src_url, src_hi, tmp_url, dst_hi);
+			gfprep_do_job(pfunc_handle,
+				      is_gfpcopy ?
+				      PFUNC_TYPE_COPY : PFUNC_TYPE_REPLICATE,
+				      &done[i], migrate, job.file->src_size,
+				      src_url, src_hi, tmp_url, dst_hi);
 		}
 	}
 	if (n_end < n_conns) {
@@ -2415,8 +2149,9 @@ next:
 			}
 		}
 		if (is_done == 0) {
-			gfarm_gettime(&timeout);
-			timeout.tv_sec += 2;
+			gettimeofday(&now, NULL);
+			timeout.tv_sec = now.tv_sec + 2;
+			timeout.tv_nsec = now.tv_usec * 1000;
 			if (!gfarm_cond_timedwait(
 			    &cb_cond, &cb_mutex, &timeout, diag, CB_COND_DIAG))
 				gfprep_debug("cb_cond timeout");
@@ -2439,15 +2174,14 @@ end:
 
 static void
 gfprep_check_dirurl_filename(int is_gfarm, const char *url,
-	char **dir_urlp, char **file_namep, int *dir_modep, int *file_modep,
-	struct gfarm_timespec *dir_mtimep, struct gfarm_timespec *file_mtimep)
+			     char **dir_urlp, char **file_namep,
+			     int *dir_modep, int *file_modep)
 {
 	gfarm_error_t e;
 	int type, retv, mode;
 	char *tmp, *tmp2, *dir_url;
-	struct gfarm_timespec mtime;
 
-	type = gfprep_get_type(is_gfarm, url, &mode, &mtime, &e);
+	type = gfprep_get_type(is_gfarm, url, &mode, &e);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfprep_error_e(e, "%s", url);
 		exit(EXIT_FAILURE);
@@ -2455,8 +2189,6 @@ gfprep_check_dirurl_filename(int is_gfarm, const char *url,
 	if (type == GFS_DT_REG) {
 		if (file_modep)
 			*file_modep = mode;
-		if (file_mtimep)
-			*file_mtimep = mtime;
 		if (file_namep) {
 			tmp = strdup(url);
 			if (tmp == NULL)
@@ -2484,17 +2216,13 @@ gfprep_check_dirurl_filename(int is_gfarm, const char *url,
 			}
 			if (dir_url == NULL)
 				gfprep_fatal("no memory");
-			if (dir_modep || dir_mtimep) {
-				(void)gfprep_get_type(is_gfarm, dir_url, &mode,
-				    &mtime, &e);
+			if (dir_modep) {
+				gfprep_get_type(is_gfarm, dir_url, &mode, &e);
 				if (e != GFARM_ERR_NO_ERROR) {
 					gfprep_error_e(e, "%s", url);
 					exit(EXIT_FAILURE);
 				}
-				if (dir_modep)
-					*dir_modep = mode;
-				if (dir_mtimep)
-					*dir_mtimep = mtime;
+				*dir_modep = mode;
 			}
 			if (dir_urlp)
 				*dir_urlp = dir_url;
@@ -2513,12 +2241,6 @@ gfprep_check_dirurl_filename(int is_gfarm, const char *url,
 			*dir_modep = mode;
 		if (file_modep)
 			*file_modep = 0;
-		if (dir_mtimep)
-			*dir_mtimep = mtime;
-		if (file_mtimep) {
-			file_mtimep->tv_sec = 0;
-			file_mtimep->tv_nsec = 0;
-		}
 	} else {
 		gfprep_error("unsupported entry: %s", url);
 		exit(EXIT_FAILURE);
@@ -2544,6 +2266,7 @@ gfprep_check_busy_and_wait(
 	const char *src_url, gfarm_dirtree_entry_t *entry, int n_desire,
 	int n, struct gfprep_host_info **his)
 {
+	struct timeval now;
 	struct timespec timeout;
 	int i,  n_unbusy, busy, waited = 0;
 	static const char diag[] = "gfprep_check_busy_and_wait";
@@ -2576,8 +2299,9 @@ gfprep_check_busy_and_wait(
 		}
 		gfprep_debug("wait[n_pending=%"GFARM_PRId64"]: %s",
 			     entry->n_pending, src_url);
-		gfarm_gettime(&timeout);
-		timeout.tv_sec += 1;
+		gettimeofday(&now, NULL);
+		timeout.tv_sec = now.tv_sec + 1;
+		timeout.tv_nsec = now.tv_usec * 1000;
 		if (!gfarm_cond_timedwait(
 		    &cb_cond, &cb_mutex, &timeout, diag, CB_COND_DIAG)) {
 			gfprep_debug("timeout: waiting busy host");
@@ -2590,195 +2314,6 @@ gfprep_check_busy_and_wait(
 	return (busy);
 }
 
-/* debug for gfarm_dirtree_open() */
-static void
-gfprep_print_list(
-	const char *src_dir, const char *dst_dir, const char *src_base_name,
-	int n_para, int n_fifo)
-{
-	gfarm_error_t e;
-	gfarm_dirtree_t *dirtree_handle;
-	gfarm_dirtree_entry_t *entry;
-	gfarm_uint64_t n_entry;
-	char *src_url = NULL, *dst_url = NULL;
-	int i, src_url_size = 0, dst_url_size = 0;
-
-	e = gfarm_dirtree_open(
-		&dirtree_handle, src_dir, dst_dir,
-		n_para, n_fifo,
-		src_base_name ? 0 : 1);
-	gfprep_fatal_e(e, "gfarm_dirtree_open");
-	n_entry = 0;
-	while ((e = gfarm_dirtree_checknext(dirtree_handle, &entry))
-	       == GFARM_ERR_NO_ERROR) {
-		if (src_base_name &&
-		    strcmp(src_base_name, entry->subpath) != 0) {
-			gfarm_dirtree_delete(dirtree_handle);
-			continue;
-		}
-		n_entry++;
-		gfprep_url_realloc(
-			&src_url, &src_url_size, src_dir, entry->subpath);
-		printf("%lld: src=%s\n", (long long)n_entry, src_url);
-		if (dst_dir) {
-			gfprep_url_realloc(
-				&dst_url, &dst_url_size,
-				dst_dir, entry->subpath);
-			printf("%lld: dst=%s\n", (long long)n_entry, dst_url);
-		}
-		printf("%lld: src: "
-		       "size=%lld, "
-		       "m_sec=%lld, "
-		       "m_nsec=%d, "
-		       "ncopy=%d\n",
-		       (long long)n_entry,
-		       (long long)entry->src_size,
-		       (long long)entry->src_m_sec,
-		       entry->src_m_nsec,
-		       entry->src_ncopy);
-		if (dst_dir) {
-			if (entry->dst_exist) {
-				printf("%lld: dst: "
-				       "size=%lld, "
-				       "m_sec=%lld, "
-				       "m_nsec=%d, "
-				       "ncopy=%d\n",
-				       (long long)n_entry,
-				       (long long)entry->dst_size,
-				       (long long)entry->dst_m_sec,
-				       entry->dst_m_nsec,
-				       entry->dst_ncopy);
-			} else
-				printf("%lld: dst: not exist\n",
-				       (long long)n_entry);
-		}
-		for (i = 0; i < entry->src_ncopy; i++)
-			printf("%lld: src_copy[%d]=%s\n",
-			       (long long)n_entry, i, entry->src_copy[i]);
-		for (i = 0; i < entry->dst_ncopy; i++)
-			printf("%lld: dst_copy[%d]=%s\n",
-			       (long long)n_entry, i, entry->dst_copy[i]);
-		gfarm_dirtree_delete(dirtree_handle);
-	}
-	gfarm_dirtree_close(dirtree_handle);
-	free(src_url);
-	free(dst_url);
-}
-
-/* XXX gfutil? */
-static gfarm_error_t
-gfarm_local_realpath(const char *path, char **realpathp)
-{
-	gfarm_error_t e;
-	char *rv, *parent, *p;
-	const char *base;
-	int overflow = 0;
-	size_t len;
-	char buf[PATH_MAX];
-
-	rv = realpath(path, buf);
-	if (rv) {
-		*realpathp = strdup(rv);
-		if (*realpathp == NULL)
-			gfprep_fatal("no memory");
-		return (GFARM_ERR_NO_ERROR);
-	}
-	if (errno != ENOENT) {
-		e = gfarm_errno_to_error(errno);
-		/* XXX gflog_debug save_errno */
-		return (e);
-	}
-	if (path[0] == '\0' || /* "" */
-	    (path[0] == '/' && path[1] == '\0') || /* "/" */
-	    (path[0] == '.' && (path[1] == '\0' || /* "." */
-			(path[1] == '.' && path[2] == '\0')))) /* ".." */
-		return (GFARM_ERR_INVALID_ARGUMENT); /* unexpected */
-
-	/* to create new entry */
-	parent = gfarm_path_dir(path); /* malloc'ed */
-	if (parent == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-	p = realpath(parent, buf);
-	if (p == NULL) {
-		e = gfarm_errno_to_error(errno);
-		/* XXX gflog_debug save_errno */
-		free(parent);
-		return (e);
-	}
-	free(parent);
-	base = gfarm_path_dir_skip(path);
-	len = gfarm_size_add(&overflow, strlen(p), strlen(base));
-	if (overflow)
-		return (GFARM_ERR_RESULT_OUT_OF_RANGE);
-	len = gfarm_size_add(&overflow, len, 2); /* '/' and '\0' */
-	if (overflow)
-		return (GFARM_ERR_RESULT_OUT_OF_RANGE);
-	GFARM_MALLOC_ARRAY(rv, len);
-	if (rv == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-	strcpy(rv, p);
-	if (strcmp(p, "/") != 0)
-		strcat(rv, "/");
-	strcat(rv, base);
-	*realpathp = rv;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-static char *
-gfprep_path_to_real_url(const char *path)
-{
-	gfarm_error_t e;
-	char *real, *p;
-	size_t len;
-	int overflow = 0;
-
-	if (gfprep_url_is_gfarm(path) || gfprep_url_is_local(path)) {
-		real = strdup(path);
-		if (real == NULL)
-			gfprep_fatal("no memory");
-		return (real);
-	}
-
-	e = gfarm_realpath_by_gfarm2fs(path, &real);
-	if (e == GFARM_ERR_NO_ERROR)
-		return (real); /* gfarm://host:port/... */
-
-	e = gfarm_local_realpath(path, &real);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gfprep_error("gfarm_local_realpath: %s: %s",
-		    path, gfarm_error_string(e));
-		exit(EXIT_FAILURE);
-	}
-	/* file://...<real>...\0 */
-	len = gfarm_size_add(&overflow, strlen(real),
-	    GFPREP_FILE_URL_PREFIX_LENGTH + 2 + 1);
-	if (overflow)
-		gfprep_fatal("gfprep_path_to_real_url: overflow");
-	GFARM_MALLOC_ARRAY(p, len);
-	if (p == NULL)
-		gfprep_fatal("no memory");
-	strcpy(p, GFPREP_FILE_URL_PREFIX);
-	strcat(p, "//");
-	strcat(p, real);
-	free(real);
-	return (p);
-}
-
-static gfarm_error_t
-gfprep_unlink_to_overwrite(gfarm_dirtree_entry_t *entry, int dst_is_gfarm,
-	const char *dst_url)
-{
-	gfarm_error_t e;
-
-	if (entry->dst_d_type == GFS_DT_DIR)
-		e = gfprep_rmdir(dst_is_gfarm, dst_url);
-	else
-		e = gfprep_unlink(dst_is_gfarm, dst_url);
-	if (e == GFARM_ERR_NO_ERROR)
-		entry->dst_exist = 0;
-	return (e);
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -2786,13 +2321,10 @@ main(int argc, char *argv[])
 	char **orig_argv = argv;
 	int ch, i, j, retv, is_gfpcopy;
 	gfarm_error_t e;
-	char *src_orig_path, *dst_orig_path;
-	char *src_real_url, *dst_real_url, *src_base_name;
+	char *src_orig_url, *dst_orig_url, *src_base_name;
 	char *src_dir, *dst_dir;
 	int src_is_gfarm, dst_is_gfarm;
 	int src_dir_mode;
-	int should_restore; /* for mtime and mode of directories */
-	struct gfarm_timespec src_dir_mtime;
 	gfarm_pfunc_t *pfunc_handle;
 	gfarm_dirtree_t *dirtree_handle;
 	gfarm_dirtree_entry_t *entry;
@@ -2813,7 +2345,7 @@ main(int argc, char *argv[])
 	const char *opt_src_hostfile = NULL; /* -h */
 	const char *opt_dst_hostfile = NULL; /* -H */
 	const char *opt_src_domain = NULL;   /* -S */
-	char *opt_dst_domain = NULL;   /* -D */
+	const char *opt_dst_domain = NULL;   /* -D */
 	const char *opt_way = NULL; /* -w */
 	gfarm_uint64_t opt_sched_threshold_size
 		= 50 * 1024 * 1024; /* -W, default=50MiB */
@@ -2948,27 +2480,21 @@ main(int argc, char *argv[])
 	if (strcmp(program_name, name_gfpcopy) == 0) { /* gfpcopy */
 		if (argc != 2)
 			gfprep_usage_common(1);
-		src_orig_path = argv[0];
-		dst_orig_path = argv[1];
-		src_real_url = gfprep_path_to_real_url(src_orig_path);
-		dst_real_url = gfprep_path_to_real_url(dst_orig_path);
-		src_is_gfarm = gfprep_url_is_gfarm(src_real_url);
-		dst_is_gfarm = gfprep_url_is_gfarm(dst_real_url);
-		if (!src_is_gfarm && !gfprep_url_is_local(src_real_url))
+		src_orig_url = argv[0];
+		dst_orig_url = argv[1];
+		src_is_gfarm = gfprep_url_is_gfarm(src_orig_url);
+		dst_is_gfarm = gfprep_url_is_gfarm(dst_orig_url);
+		if (!src_is_gfarm && !gfprep_url_is_local(src_orig_url))
 			gfprep_usage_common(1);
-		if (!dst_is_gfarm && !gfprep_url_is_local(dst_real_url))
+		if (!dst_is_gfarm && !gfprep_url_is_local(dst_orig_url))
 			gfprep_usage_common(1);
 		is_gfpcopy = 1;
 	} else { /* gfprep */
 		if (argc != 1)
 			gfprep_usage_common(1);
-		src_orig_path = argv[0];
-		dst_orig_path = src_orig_path;
-		src_real_url = gfprep_path_to_real_url(src_orig_path);
-		dst_real_url = strdup(src_real_url);
-		if (dst_real_url == NULL)
-			gfprep_fatal("no memory");
-		src_is_gfarm = gfprep_url_is_gfarm(src_real_url);
+		src_orig_url = argv[0];
+		dst_orig_url = src_orig_url;
+		src_is_gfarm = gfprep_url_is_gfarm(src_orig_url);
 		if (!src_is_gfarm)
 			gfprep_usage_common(1);
 		dst_is_gfarm = 1;
@@ -2997,13 +2523,13 @@ main(int argc, char *argv[])
 		if (opt_remove) /* -x */
 			gfprep_usage_common(1);
 		if (!src_is_gfarm && (opt_src_domain || opt_src_hostfile)) {
-			gfprep_error(
-			    "%s needs neither -S nor -h", src_real_url);
+			gfprep_error("%s needs neither -S nor -h",
+				     src_orig_url);
 			exit(EXIT_FAILURE);
 		}
 		if (!dst_is_gfarm && (opt_dst_domain || opt_dst_hostfile)) {
-			gfprep_error(
-			    "%s needs neither -D nor -H", dst_real_url);
+			gfprep_error("%s needs neither -D nor -H",
+				     dst_orig_url);
 			exit(EXIT_FAILURE);
 		}
 	} else { /* gfprep */
@@ -3047,24 +2573,8 @@ main(int argc, char *argv[])
 			}
 		}
 	}
-
-	if (opt_dst_domain == NULL) {
-		opt_dst_domain = gfarm_schedule_write_target_domain();
-		gfprep_verbose("use write_target_domain: %s", opt_dst_domain);
-	} else if (strcmp(opt_dst_domain, "") == 0)
-		opt_dst_domain = NULL; /* select from all nodes */
-	if (opt_dst_domain != NULL) {
-		/*
-		 * NOTE: gfarm_schedule_write_target_domain() may be
-		 * free()ed after gfarm_terminate().
-		 */
-		opt_dst_domain = strdup(opt_dst_domain);
-		if (opt_dst_domain == NULL)
-			gfprep_fatal("no memory");
-	}
-
 	if (opt_n_para <= 0)
-		opt_n_para = gfarm_ctxp->client_parallel_copy;
+		opt_n_para = gfarm_client_parallel_copy;
 	if (opt_n_para <= 0) {
 		gfprep_error("client_parallel_copy must be "
 			     "a positive interger");
@@ -3082,32 +2592,20 @@ main(int argc, char *argv[])
 	if (opt_dirtree_n_fifo <= 0)
 		gfprep_usage_common(1);
 
-	gfprep_check_dirurl_filename(
-	    src_is_gfarm, src_real_url, &src_dir, &src_base_name,
-	    &src_dir_mode, NULL, &src_dir_mtime, NULL);
+	gfprep_check_dirurl_filename(src_is_gfarm, src_orig_url,
+				     &src_dir, &src_base_name,
+				     &src_dir_mode, NULL);
 	gfprep_convert_gfarm_rootdir(&src_dir);
 
 	if (is_gfpcopy)
-		dst_dir = strdup(dst_real_url);
+		dst_dir = strdup(dst_orig_url);
 	else
 		dst_dir = strdup(src_dir);
 	if (dst_dir == NULL)
 		gfprep_fatal("no memory");
 
-	if (opt_list_only) {
-		e = gfarm_terminate();
-		gfprep_fatal_e(e, "gfarm_terminate");
-		gfprep_print_list(
-			src_dir, is_gfpcopy ? dst_dir : NULL, src_base_name,
-			opt_dirtree_n_para, opt_dirtree_n_fifo);
-		exit(0);
-	}
-
-	gfprep_dirstat_init();
-
 	if (is_gfpcopy) { /* gfpcopy */
 		int create_dst_dir = 0, checked;
-
 		/* [1] gfpcopy p1/d1 p2/d2(exist)     : mkdir p2/d2/d1 */
 		/* [2] gfpcopy p1/d1 p2/d2(not exist) : mkdir p2/d2 */
 		/* [3] gfpcopy p1/f1 p2/(exist)       : copy p2/f1 */
@@ -3180,18 +2678,11 @@ main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 		gfprep_convert_gfarm_rootdir(&dst_dir);
-
-		should_restore = (opt_simulate_KBs <= 0 && !opt_list_only);
-
 		if (checked == 0 &&
 		    gfprep_is_dir(dst_is_gfarm, dst_dir, NULL, &e)) {
 			/* OK */
-			if (should_restore)
-				gfprep_set_tmp_mode_and_mtime(dst_is_gfarm,
-				    dst_dir, src_dir_mode, &src_dir_mtime);
 		} else if (e == GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY) {
-			e = gfprep_mkdir(dst_is_gfarm, dst_dir, should_restore,
-			    src_dir_mode, &src_dir_mtime);
+			e = gfprep_mkdir(dst_is_gfarm, dst_dir, src_dir_mode);
 			if (e != GFARM_ERR_NO_ERROR)
 				exit(EXIT_FAILURE);
 			create_dst_dir = 1;
@@ -3221,12 +2712,57 @@ main(int argc, char *argv[])
 	if (opt.performance)
 		gettimeofday(&time_start, NULL);
 
+	if (opt_list_only) {
+		e = gfarm_dirtree_open(&dirtree_handle, src_dir,
+				       is_gfpcopy ? dst_dir : NULL,
+				       opt_dirtree_n_para,
+				       opt_dirtree_n_fifo,
+				       src_base_name ? 0 : 1);
+		gfprep_fatal_e(e, "gfarm_dirtree_open");
+		n_entry = 0;
+		while ((e = gfarm_dirtree_checknext(dirtree_handle, &entry))
+		       == GFARM_ERR_NO_ERROR) {
+			if (src_base_name && strcmp(src_base_name,
+						    entry->subpath) != 0) {
+				gfarm_dirtree_delete(dirtree_handle);
+				continue;
+			}
+			n_entry++;
+			gfprep_url_realloc(&src_url, &src_url_size, src_dir,
+					   entry->subpath);
+			printf("%"GFARM_PRId64": src=%s\n", n_entry, src_url);
+			if (is_gfpcopy) {
+				gfprep_url_realloc(&dst_url, &dst_url_size,
+						   dst_dir, entry->subpath);
+				printf("%"GFARM_PRId64": dst=%s\n",
+				       n_entry, dst_url);
+			}
+			printf("%"GFARM_PRId64": src_nlink=%d"
+			       ", src_size=%"GFARM_PRId64
+			       ", dst_size=%"GFARM_PRId64
+			       ", dst_exist=%d, src_ncopy=%d, dst_ncopy=%d\n",
+			       n_entry, entry->src_nlink, entry->src_size,
+			       entry->dst_size, entry->dst_exist,
+			       entry->src_ncopy, entry->dst_ncopy);
+			for (i = 0; i < entry->src_ncopy; i++)
+				printf("%"GFARM_PRId64": src_copy[%d]=%s\n",
+				       n_entry, i, entry->src_copy[i]);
+			for (i = 0; i < entry->dst_ncopy; i++)
+				printf("%"GFARM_PRId64": dst_copy[%d]=%s\n",
+				       n_entry, i, entry->dst_copy[i]);
+			gfarm_dirtree_delete(dirtree_handle);
+		}
+		gfarm_dirtree_close(dirtree_handle);
+		free(src_url);
+		free(dst_url);
+		exit(0);
+	}
+
 	/* create child-processes before gfarm_initialize() */
 	e = gfarm_pfunc_start(&pfunc_handle, opt_n_para, 1, opt_simulate_KBs,
 			      opt_copy_bufsize, pfunc_cb_start, pfunc_cb_end);
 	gfprep_fatal_e(e, "gfarm_pfunc_start");
 	gfprep_debug("pfunc_start...done");
-	pfunc_cb_func_init();
 
 	/* create child-processes before gfarm_initialize() */
 	e = gfarm_dirtree_open(&dirtree_handle, src_dir,
@@ -3258,12 +2794,11 @@ main(int argc, char *argv[])
 		int n_src_all = 0;
 		struct gfarm_hash_table *exclude_hash_dstname;
 		const char *exclude_dst_domain;
-
 		e = gfprep_create_hostinfohash_all(
 		    src_dir, &n_src_all, &hash_all_src);
 		gfprep_fatal_e(e, "gfprep_create_hostinfohash_all");
 		if (n_src_all == 0) {
-			gfprep_error("no available node for source");
+			gfprep_error("no available src host");
 			exit(EXIT_FAILURE);
 		}
 		if (is_gfpcopy) {
@@ -3279,15 +2814,14 @@ main(int argc, char *argv[])
 					       opt_src_domain,
 					       exclude_hash_dstname,
 					       exclude_dst_domain);
-		gfprep_fatal_e(e, "gfprep_filter_hostinfohash for source");
+		gfprep_fatal_e(e, "gfprep_filter_hostinfohash for target src");
 		/* count n_src_available only */
 		e = gfprep_hostinfohash_to_array(src_dir, &n_src_available,
 						 NULL, hash_src);
-		gfprep_fatal_e(e, "gfprep_hostinfohash_to_array for soruce");
+		gfprep_fatal_e(e,
+			       "gfprep_hostinfohash_to_array for target src");
 		if (n_src_available == 0) {
-			gfprep_error(
-			    "no available node for source "
-			    "(wrong -S/-h/-D/-H or write_target_domain ?)");
+			gfprep_error("no available src host");
 			exit(EXIT_FAILURE);
 		}
 		/* src scope */
@@ -3322,8 +2856,7 @@ main(int argc, char *argv[])
 			    dst_dir, &n_all_dst, &hash_all_dst);
 			gfprep_fatal_e(e, "gfprep_create_hostinfohash_all");
 			if (n_all_dst == 0) {
-				gfprep_error(
-				    "no available node for destination");
+				gfprep_error("no available dst host");
 				exit(EXIT_FAILURE);
 			}
 			this_hash_all_dst = hash_all_dst;
@@ -3333,16 +2866,12 @@ main(int argc, char *argv[])
 					       opt_dst_domain,
 					       exclude_hash_srcname,
 					       exclude_src_domain);
-		gfprep_fatal_e(
-		    e, "gfprep_filter_hostinfohash for destination");
+		gfprep_fatal_e(e, "gfprep_filter_hostinfohash for dst");
 		e = gfprep_hostinfohash_to_array(dst_dir, &n_array_dst,
 						 &array_dst, hash_dst);
-		gfprep_fatal_e(
-		    e, "gfprep_hostinfohash_to_array for destination");
+		gfprep_fatal_e(e, "gfprep_hostinfohash_to_array for dst");
 		if (n_array_dst == 0) {
-			gfprep_error(
-			    "no available node for destination "
-			    "(wrong -S/-h/-D/-H or write_target_domain ?)");
+			gfprep_error("no available dst host");
 			exit(EXIT_FAILURE);
 		}
 	} else {
@@ -3370,8 +2899,8 @@ main(int argc, char *argv[])
 		int n_desire;
 		int n_src_select, n_dst_select, n_dst_exist;
 
-		if (src_base_name &&
-		    strcmp(src_base_name, entry->subpath) != 0)
+		if (src_base_name && strcmp(src_base_name,
+					    entry->subpath) != 0)
 			goto next_entry;
 		if (entry->n_pending == 0) /* new entry (not pending) */
 			n_entry++;
@@ -3387,10 +2916,7 @@ main(int argc, char *argv[])
 				gfprep_debug("src_url=%s: copy[%d]=%s",
 					     src_url, i, entry->src_copy[i]);
 		}
-		if (!is_gfpcopy) { /* gfprep */
-			if (entry->src_d_type != GFS_DT_REG) /* not a file */
-				goto next_entry; /* nothing to do */
-		} else { /* gfpcopy */
+		if (is_gfpcopy) {
 			gfprep_url_realloc(&dst_url, &dst_url_size,
 					   dst_dir, entry->subpath);
 			gfprep_debug("dst[%s]=%s: ncopy=%d, mtime=%"
@@ -3398,133 +2924,77 @@ main(int argc, char *argv[])
 				     entry->dst_exist ? "exist" : "noent",
 				     dst_url, entry->dst_ncopy,
 				     entry->dst_m_sec);
-			if (entry->src_d_type == GFS_DT_REG) {
-				if (entry->dst_exist) {
-					if (entry->dst_d_type == GFS_DT_REG) {
-						if (entry->src_size ==
-						    entry->dst_size &&
-						    ((!opt_force_copy &&
-						      entry->src_m_sec <=
-						      entry->dst_m_sec)
-						     ||
-						     (opt_force_copy &&
-						      entry->src_m_sec ==
-						      entry->dst_m_sec))) {
-							gfprep_verbose(
-							  "already exists: %s",
+			if (entry->dst_exist && opt_simulate_KBs <= 0) {
+				if (entry->src_size == entry->dst_size &&
+				    ((!opt_force_copy &&
+				      entry->src_m_sec <= entry->dst_m_sec)
+				    ||
+				    (opt_force_copy &&
+				     entry->src_m_sec == entry->dst_m_sec))) {
+					gfprep_verbose(
+					    "already exists: %s", dst_url);
+					goto next_entry;
+				}
+				/* opt_force_copy or different mtime */
+				gfprep_debug("overwrite: "
+				    "src_size=%lld, dst_size=%lld, "
+				    "src_m_sec=%lld, dst_m_sec=%lld",
+				    (long long)entry->src_size,
+				    (long long)entry->dst_size,
+				    (long long)entry->src_m_sec,
+				    (long long)entry->dst_m_sec);
+				if (entry->dst_d_type == GFS_DT_LNK ||
+				    entry->dst_d_type == GFS_DT_UNKNOWN) {
+					e = gfprep_unlink(dst_is_gfarm,
 							  dst_url);
-							goto next_entry;
-						}
-						/* overwrite, not unlink */
-					} else if (opt_simulate_KBs <= 0) {
-						e = gfprep_unlink_to_overwrite(
-						   entry, dst_is_gfarm,
-						   dst_url);
-						if (e != GFARM_ERR_NO_ERROR) {
-							gfprep_error(
-							    "cannot overwrite:"
-							    " %s", dst_url);
-							goto next_entry;
-						}
-					}
-					gfprep_debug(
-					    "overwrite: "
-					    "src_size=%lld, "
-					    "dst_size=%lld, "
-					    "src_m_sec=%lld, "
-					    "dst_m_sec=%lld, "
-					    "src_m_nsec=%d, "
-					    "dst_m_nsec=%d",
-					    (long long)entry->src_size,
-					    (long long)entry->dst_size,
-					    (long long)entry->src_m_sec,
-					    (long long)entry->dst_m_sec,
-					    entry->dst_m_nsec,
-					    entry->dst_m_nsec);
-				}
-				/* through: copy a file */
-			} else if (entry->src_d_type == GFS_DT_LNK) {
-				if (entry->dst_exist) {
-					if (entry->dst_d_type == GFS_DT_LNK &&
-					    ((!opt_force_copy &&
-					      entry->src_m_sec <=
-					      entry->dst_m_sec)
-					     ||
-					     (opt_force_copy &&
-					      entry->src_m_sec ==
-					      entry->dst_m_sec))) {
-						gfprep_verbose(
-						    "already exists: %s",
-						    dst_url);
-						goto next_entry;
-					}
-					if (opt_simulate_KBs <= 0) {
-						e = gfprep_unlink_to_overwrite(
-						   entry, dst_is_gfarm,
-						   dst_url);
-						if (e != GFARM_ERR_NO_ERROR) {
-							gfprep_error(
-							    "cannot overwrite:"
-							    " %s", dst_url);
-							goto next_entry;
-						}
-					}
-				}
-				if (opt_simulate_KBs > 0)
-					goto next_entry;
-				e = gfprep_copy_symlink(
-				    src_is_gfarm, src_url,
-				    dst_is_gfarm, dst_url);
-				if (e == GFARM_ERR_NO_ERROR) {
-					struct gfarm_timespec mtime;
-
-					mtime.tv_sec = entry->src_m_sec;
-					mtime.tv_nsec = entry->src_m_nsec;
-					(void)gfprep_set_mtime(
-					    dst_is_gfarm, dst_url, &mtime);
-				}
-				goto next_entry;
-			} else if (entry->src_d_type == GFS_DT_DIR) {
-				struct gfarm_timespec mtime;
-
-				if (opt_simulate_KBs > 0)
-					goto next_entry;
-
-				mtime.tv_sec = entry->src_m_sec;
-				mtime.tv_nsec = entry->src_m_nsec;
-				if (entry->dst_exist) {
-					if (entry->dst_d_type == GFS_DT_DIR) {
-						gfprep_set_tmp_mode_and_mtime(
-						    dst_is_gfarm, dst_url,
-						    entry->src_mode, &mtime);
-						goto next_entry;
-					} else {
-						e = gfprep_unlink_to_overwrite(
-						   entry, dst_is_gfarm,
-						   dst_url);
-						if (e != GFARM_ERR_NO_ERROR) {
-							gfprep_error(
-							    "cannot overwrite:"
-							    " %s", dst_url);
-							goto next_entry;
-						}
-					}
-				}
-				e = gfprep_mkdir(dst_is_gfarm, dst_url, 1,
-				    entry->src_mode, &mtime);
-				if (e != GFARM_ERR_NO_ERROR)
+					if (e == GFARM_ERR_NO_ERROR)
+						entry->dst_exist = 0;
+				} else if (entry->src_d_type
+					   != entry->dst_d_type) {
+					if (entry->dst_d_type == GFS_DT_DIR)
+						e = gfprep_rmdir(dst_is_gfarm,
+								 dst_url);
+					else
+						e = gfprep_unlink(dst_is_gfarm,
+								  dst_url);
+					if (e == GFARM_ERR_NO_ERROR)
+						entry->dst_exist = 0;
+				} else /* dst directory or file exists */
+					e = GFARM_ERR_NO_ERROR;
+				if (e != GFARM_ERR_NO_ERROR) {
 					gfprep_error(
-					   "cannot make a directory: %s",
-					   dst_url);
-				goto next_entry;
-			} else {
-				gfprep_warn(
-				    "cannot copy (unsupported type): %s",
-				    src_url);
-				goto next_entry;
+						"cannot overwrite: %s",
+						dst_url);
+					goto next_entry;
+				}
 			}
 		}
-
+		if (entry->src_d_type != GFS_DT_REG) { /* not a file */
+			if (is_gfpcopy && !entry->dst_exist &&
+			    opt_simulate_KBs <= 0) {
+				if (entry->src_d_type == GFS_DT_DIR)
+					(void) gfprep_mkdir(
+						dst_is_gfarm, dst_url,
+						entry->src_mode);
+				else if (entry->src_d_type == GFS_DT_LNK) {
+					struct gfarm_timespec gt;
+					gt.tv_sec = entry->src_m_sec;
+					gt.tv_nsec = 0; /* XXX */
+					e = gfprep_copy_symlink(
+						src_is_gfarm, src_url,
+						dst_is_gfarm, dst_url);
+					if (e == GFARM_ERR_NO_ERROR)
+						(void) gfprep_set_mtime(
+							dst_is_gfarm, dst_url,
+							&gt, GFS_DT_LNK);
+				} else
+					gfprep_warn(
+						"cannot copy "
+						"(unsupported type): %s",
+						src_url);
+			}
+			goto next_entry;
+		}
 		/* ----- a file ----- */
 		/* select a file within specified src  */
 		if (hash_src && (hash_srcname || opt_src_domain)) {
@@ -3547,9 +3017,9 @@ main(int argc, char *argv[])
 		if (entry->src_size == 0) {
 			if (is_gfpcopy) {
 				/* not specified src/dst host */
-				gfprep_do_copy(
-				    pfunc_handle, NULL, 0, entry->src_size,
-				    src_url, NULL, dst_url, NULL);
+				gfprep_do_job(pfunc_handle, PFUNC_TYPE_COPY,
+					      NULL, 0, entry->src_size,
+					      src_url, NULL, dst_url, NULL);
 				goto next_entry;
 			} else {
 				assert(src_is_gfarm);
@@ -3618,9 +3088,8 @@ main(int argc, char *argv[])
 			n_src_select = gfarm_list_length(&src_select_list);
 			if (n_src_select == 0) {
 				gfarm_list_free(&src_select_list);
-				gfprep_error(
-				    "no available replica for source: %s",
-				    src_url);
+				gfprep_error("no available src host: %s",
+					    src_url);
 				gfprep_count_ng_file(entry->src_size);
 				goto next_entry;
 			}
@@ -3726,7 +3195,6 @@ main(int argc, char *argv[])
 				if (gfprep_check_busy_and_wait(
 					    src_url, entry, n_desire,
 					    n_dst_select, dst_select_array)) {
-					free(src_select_array);
 					free(dst_select_array);
 					free(dst_exist_array);
 					gfprep_debug(
@@ -3741,10 +3209,9 @@ main(int argc, char *argv[])
 		if (is_gfpcopy) { /* gfpcopy */
 			assert(src_is_gfarm ? n_src_select > 0 : 1);
 			if (dst_is_gfarm && n_dst_select <= 0) {
-				gfprep_error(
-				    "insufficient number of destination nodes"
-				    " to copy (n_dst=%d): %s",
-				    n_dst_select, src_url);
+				gfprep_error("lack of dst host to copy"
+					    " (n_dst=%d): %s",
+					    n_dst_select, src_url);
 				gfprep_count_ng_file(entry->src_size);
 				goto next_entry_with_free;
 			}
@@ -3752,10 +3219,10 @@ main(int argc, char *argv[])
 		} else if (opt_migrate) { /* gfprep -m */
 			assert(n_src_select > 0);
 			if (n_dst_select < n_src_select) {
-				gfprep_error(
-				    "insufficient number of destination nodes"
-				    " to migrate (n_src=%d, n_dst=%d): %s",
-				    n_src_select, n_dst_select, src_url);
+				gfprep_error("lack of dst host to migrate"
+					    " (n_src=%d, n_dst=%d): %s",
+					    n_src_select, n_dst_select,
+					    src_url);
 				n_desire = n_dst_select;
 			} else
 				n_desire = n_src_select;
@@ -3776,20 +3243,22 @@ main(int argc, char *argv[])
 					goto next_entry_with_free;
 				/* disk_avail: small to large */
 				for (i = n_dst_exist - 1; i >= 0; i--) {
-					gfprep_do_remove_replica(
-					    pfunc_handle, NULL,
-					    entry->src_size,
-					    src_url, dst_exist_array[i]);
+					gfprep_do_job(
+						pfunc_handle,
+						PFUNC_TYPE_REMOVE_REPLICA,
+						NULL, 0, entry->src_size,
+						src_url, dst_exist_array[i],
+						NULL, NULL);
 					n_desire++;
 					if (n_desire >= 0)
 						break;
 				}
 				goto next_entry_with_free;
 			} else if (n_dst_select < n_desire) {/* n_desire > 0 */
-				gfprep_error(
-				    "insufficient number of destination nodes"
-				    " to replicate (n_desire=%d, n_dst=%d):"
-				    " %s", n_desire, n_dst_select, src_url);
+				gfprep_error("lack of dst host to replicate"
+					    " (n_desire=%d, n_dst=%d): %s",
+					    n_desire, n_dst_select,
+					    src_url);
 				n_desire = n_dst_select;
 				if (n_desire <= 0) {
 					gfprep_count_ng_file(entry->src_size);
@@ -3811,14 +3280,11 @@ main(int argc, char *argv[])
 					j = 0;
 			} else
 				src_hi = NULL;
-			if (is_gfpcopy)
-				gfprep_do_copy(pfunc_handle,
-				    NULL, opt_migrate, entry->src_size,
-				    src_url, src_hi, dst_url, dst_hi);
-			else
-				gfprep_do_replicate(pfunc_handle,
-				    NULL, opt_migrate, entry->src_size,
-				    src_url, src_hi, dst_url, dst_hi);
+			gfprep_do_job(pfunc_handle,
+				      is_gfpcopy ?
+				      PFUNC_TYPE_COPY : PFUNC_TYPE_REPLICATE,
+				      NULL, opt_migrate, entry->src_size,
+				      src_url, src_hi, dst_url, dst_hi);
 		}
 next_entry_with_free:
 		free(src_select_array);
@@ -3920,9 +3386,6 @@ next_entry:
 	e = gfarm_pfunc_join(pfunc_handle);
 	gfprep_error_e(e, "gfarm_pfunc_join");
 
-	/* set mode and mtime for directories */
-	gfprep_dirstat_final();
-
 	if (opt.performance) {
 		char *prefix = is_gfpcopy ? "copied" : "replicated";
 		gettimeofday(&time_end, NULL);
@@ -3980,9 +3443,6 @@ next_entry:
 	free(src_base_name);
 	free(src_dir);
 	free(dst_dir);
-	free(src_real_url);
-	free(dst_real_url);
-	free(opt_dst_domain);
 
 	e = gfarm_terminate();
 	gfprep_warn_e(e, "gfarm_terminate");

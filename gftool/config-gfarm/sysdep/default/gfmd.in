@@ -41,10 +41,7 @@ then
 fi
 
 case $1 in 
-start|slavestart)
-	if [ $1 = slavestart ]; then
-		OPTIONS="-S $OPTIONS"
-	fi
+start)
 	if [ ! -x "$DAEMON" ]; then
 		echo -n "$DAEMON is not installed"
 		exit 1

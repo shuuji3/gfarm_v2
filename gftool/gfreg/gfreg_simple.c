@@ -10,7 +10,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <assert.h>
 
 #include <gfarm/gfarm.h>
 
@@ -18,11 +17,9 @@
 
 #include "gfutil.h"
 #include "timer.h"
-
-#include "context.h"
 #include "gfs_profile.h"
 #include "host.h"
-#include "gfarm_path.h"
+#include "config.h"
 
 /* XXX FIXME: INTERNAL FUNCTION SHOULD NOT BE USED */
 #include <openssl/evp.h>
@@ -30,38 +27,8 @@
 
 char *program_name = "gfreg";
 
-/* from GFS_FILE_BUFSIZE in lib/libgfarm/gfarm/gfs_pio.h */
-#define BUFFER_SIZE (1048576 - 8)
-static char buffer[BUFFER_SIZE];
-
 gfarm_error_t
 gfimport(FILE *ifp, GFS_File ogf, gfarm_off_t size)
-{
-	int nreq, nin, nout;
-	gfarm_error_t e = GFARM_ERR_NO_ERROR;
-
-	/* when size is zero or below zero, copy entire content */
-	nreq = sizeof buffer;
-	while (1) {
-		if (size > 0 && nreq > size)
-			nreq = size;
-
-		nin = fread(buffer, 1, nreq, ifp);
-		if (nin > 0) {
-			e = gfs_pio_write(ogf, buffer, nin, &nout);
-			if (e != GFARM_ERR_NO_ERROR)
-				break;
-			assert(nin == nout);
-		}
-		size -= nin;
-		if (nin < nreq || size == 0)
-			break;
-	}
-	return (e != GFARM_ERR_NO_ERROR ? e : gfs_pio_error(ogf));
-}
-
-gfarm_error_t
-gfimport_byte(FILE *ifp, GFS_File ogf, gfarm_off_t size)
 {
 	gfarm_error_t e;
 	int c;
@@ -199,7 +166,8 @@ main(int argc, char **argv)
 {
 	gfarm_error_t e;
 	int c, status = 0;
-	char *host = NULL, *path = NULL;
+	char *host = NULL;
+	extern int optind;
 	gfarm_off_t off = -1, size = -1;
 
 	if (argc > 0)
@@ -238,13 +206,9 @@ main(int argc, char **argv)
 	if (argc != 2)
 		usage();
 
-	e = gfarm_realpath_by_gfarm2fs(argv[1], &path);
-	if (e == GFARM_ERR_NO_ERROR)
-		argv[1] = path;
 	e = gfimport_from_to(argv[0], argv[1], host, off, size);
 	if (e != GFARM_ERR_NO_ERROR)
 		status = 1;
-	free(path);
 
 	e = gfarm_terminate();
 	if (e != GFARM_ERR_NO_ERROR) {

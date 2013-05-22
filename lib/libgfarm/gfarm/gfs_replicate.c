@@ -16,7 +16,6 @@
 #include "lookup.h"
 #include "schedule.h"
 #include "gfs_misc.h"
-#include "gfs_failover.h"
 
 /*#define V2_4 1*/
 
@@ -28,12 +27,11 @@ struct gfm_replicate_file_from_to_closure {
 
 static gfarm_error_t
 gfm_replicate_file_from_to_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx,
 	void *closure)
 {
 	struct gfm_replicate_file_from_to_closure *c = closure;
 	gfarm_error_t e = gfm_client_replicate_file_from_to_request(
-	    gfm_server, ctx, c->srchost, c->dsthost, c->flags);
+	    gfm_server, c->srchost, c->dsthost, c->flags);
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_warning(GFARM_MSG_1001386,
@@ -44,10 +42,9 @@ gfm_replicate_file_from_to_request(struct gfm_connection *gfm_server,
 
 static gfarm_error_t
 gfm_replicate_file_from_to_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+	void *closure)
 {
-	gfarm_error_t e = gfm_client_replicate_file_from_to_result(
-	    gfm_server, ctx);
+	gfarm_error_t e = gfm_client_replicate_file_from_to_result(gfm_server);
 
 #if 0 /* DEBUG */
 	if (e != GFARM_ERR_NO_ERROR)
@@ -71,11 +68,11 @@ gfs_replicate_file_from_to_request(
 	closure.srchost = srchost;
 	closure.dsthost = dsthost;
 	closure.flags = (flags & ~GFS_REPLICATE_FILE_MIGRATE);
-	e = gfm_inode_op_modifiable(file, GFARM_FILE_LOOKUP,
+	e = gfm_inode_op(file, GFARM_FILE_LOOKUP,
 	    gfm_replicate_file_from_to_request,
 	    gfm_replicate_file_from_to_result,
 	    gfm_inode_success_op_connection_free,
-	    NULL, NULL,
+	    NULL,
 	    &closure);
 
 	/*
@@ -136,57 +133,39 @@ gfs_replicate_from_to_internal(GFS_File gf, char *srchost, int srcport,
 	gfarm_error_t e;
 	struct gfm_connection *gfm_server = gfs_pio_metadb(gf);
 	struct gfs_connection *gfs_server;
-	int nretry = 1, gfsd_retried = 0, failover_retried = 0;
+	int retry = 0;
 
-retry:
-	gfm_server = gfs_pio_metadb(gf);
-	if ((e = gfs_client_connection_and_process_acquire(
-	    &gfm_server, dsthost, dstport, &gfs_server, NULL))
-		!= GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001388,
-			"acquirement of client connection failed: %s",
-			gfarm_error_string(e));
-		return (e);
-	}
+	for (;;) {
+		if ((e = gfs_client_connection_acquire_by_host(gfm_server,
+		    dsthost, dstport, &gfs_server, NULL))
+			!= GFARM_ERR_NO_ERROR) {
+			gflog_debug(GFARM_MSG_1001388,
+				"acquirement of client connection failed: %s",
+				gfarm_error_string(e));
+			return (e);
+		}
 
-	e = gfs_client_replica_add_from(gfs_server, srchost, srcport,
-	    gfs_pio_fileno(gf));
-	gfs_client_connection_free(gfs_server);
-	if (e != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfs_client_replica_add_from: %s",
-		    gfarm_error_string(e));
-		if (nretry-- > 0) {
-			if (gfs_client_is_connection_error(e)) {
-				gfsd_retried = 1;
-				goto retry;
-			}
-			if (gfs_pio_should_failover(gf, e)) {
-				if ((e = gfs_pio_failover(gf))
-				    != GFARM_ERR_NO_ERROR) {
-					gflog_debug(GFARM_MSG_UNFIXED,
-					    "gfs_pio_failover: %s",
-					    gfarm_error_string(e));
-				} else {
-					failover_retried = 1;
-					goto retry;
-				}
+		if (gfs_client_pid(gfs_server) == 0)
+			e = gfarm_client_process_set(gfs_server, gfm_server);
+		if (e == GFARM_ERR_NO_ERROR) {
+			e = gfs_client_replica_add_from(gfs_server,
+			    srchost, srcport, gfs_pio_fileno(gf));
+			if (gfs_client_is_connection_error(e) && ++retry<=1) {
+				gfs_client_connection_free(gfs_server);
+				continue;
 			}
 		}
+
+		break;
 	}
+	gfs_client_connection_free(gfs_server);
 	if ((e == GFARM_ERR_ALREADY_EXISTS || e == GFARM_ERR_FILE_BUSY) &&
-	    (gfsd_retried || failover_retried)) {
+	    retry > 0) {
 		gflog_warning(GFARM_MSG_1003453,
-		    "error ocurred at retry for the operation after "
-		    "connection to %s, "
-		    "so the operation possibly succeeded in the server."
+		    "error occurred by retrying the non-idempotent file "
+		    "replication operation due to the disconnection of gfsd, "
+		    "so it might succeed in the server."
 		    " error='%s'",
-		    gfsd_retried && failover_retried ?
-		    "gfsd was disconnected and connection to "
-		    "gfmd was failed over" :
-		    gfsd_retried ?
-		    "gfsd was disconnected" :
-		    "gfmd was failed over" ,
 		    gfarm_error_string(e));
 	}
 	return (e);

@@ -143,7 +143,6 @@ set_last_defaults_postgresql()
 		case `uname` in
 		*BSD|DragonFly)
 			: ${BACKEND_ADMIN_USER:="pgsql"};;
-		Darwin)	: ${BACKEND_ADMIN_USER:="_postgres"};;
 		*)	: ${BACKEND_ADMIN_USER:="postgres"};;
 		esac
 		: ${BACKEND_PRIVILEGE:="$BACKEND_ADMIN_USER"}
@@ -192,9 +191,10 @@ set_last_defaults_postgresql()
 	esac
 	# postgresql in debian needs to specify unix_socket_directory
 	# start up in user mode, which makes -w option ineffective
-	if $PRIVATE_MODE; then
-		case X$LINUX_RC_TYPE in
-		Xdebian)
+	ARCH=`$prefix/bin/gfarm.arch.guess`
+	if $PRIVATE_MODE && [ X"$ARCH" != X ]; then
+		case $ARCH in
+		*debian*)
 			PRIVATE_MODE_FOR_DEBIAN=true
 			WAIT_F='' ;;
 		esac

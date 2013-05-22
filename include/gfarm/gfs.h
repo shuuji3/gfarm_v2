@@ -72,17 +72,14 @@ int gfs_desc_fileno(GFS_Desc);
 #define GFARM_FILE_CREATE		0x00000200
 #endif
 #define GFARM_FILE_TRUNC		0x00000400
-#define GFARM_FILE_APPEND		0x00000800
 #if 0 /* not yet on Gfarm v2 */
+#define GFARM_FILE_APPEND		0x00000800
 #define GFARM_FILE_EXCLUSIVE		0x00001000
 #endif
 #ifdef GFARM_INTERNAL_USE /* internal use only, but passed via protocol */
-#define GFARM_FILE_REPLICA_SPEC		0x00010000
 #endif
 #ifdef GFARM_INTERNAL_USE /* internal use only, never passed via protocol */
-#define GFARM_FILE_SLAVE_ONLY		0x00400000 /* used by gfmd only */
 #define GFARM_FILE_SYMLINK_NO_FOLLOW	0x00400000 /* used by libgfarm only */
-#define GFARM_FILE_UNBUFFERED		0x00200000
 #define GFARM_FILE_TRUNC_PENDING	0x00800000 /* used by gfmd only */
 #define GFARM_FILE_OPEN_LAST_COMPONENT	0x00800000 /* used by libgfarm only */
 #endif
@@ -93,6 +90,7 @@ int gfs_desc_fileno(GFS_Desc);
 #define GFARM_FILE_NOT_REPLICATE	0x04000000
 #define GFARM_FILE_NOT_RETRY		0x08000000
 #endif
+#define GFARM_FILE_UNBUFFERED		0x10000000
 #define GFARM_FILE_CREATE_REPLICA	0x20000000
 #ifdef GFARM_INTERNAL_USE /* internal use only, but passed via protocol */
 #define GFARM_FILE_BEQUEATHED		0x40000000
@@ -101,16 +99,12 @@ int gfs_desc_fileno(GFS_Desc);
 #if 0 /* not yet on Gfarm v2 */
 #define GFARM_FILE_USER_MODE	(GFARM_FILE_ACCMODE|GFARM_FILE_TRUNC| \
 		GFARM_FILE_APPEND|GFARM_FILE_EXCLUSIVE|GFARM_FILE_SEQUENTIAL| \
-		GFARM_FILE_REPLICATE|GFARM_FILE_NOT_REPLICATE)
-
+		GFARM_FILE_REPLICATE|GFARM_FILE_NOT_REPLICATE| \
+		GFARM_FILE_UNBUFFERED)
 #else
 #define GFARM_FILE_USER_MODE	(GFARM_FILE_ACCMODE|GFARM_FILE_TRUNC| \
-	GFARM_FILE_APPEND| \
-	GFARM_FILE_CREATE_REPLICA|GFARM_FILE_REPLICA_SPEC)
-
+	GFARM_FILE_UNBUFFERED|GFARM_FILE_CREATE_REPLICA)
 #endif /* not yet on Gfarm v2 */
-#define GFARM_FILE_USER_OPEN_FLAGS	(GFARM_FILE_USER_MODE|\
-		GFARM_FILE_UNBUFFERED)
 #define GFARM_FILE_PROTOCOL_MASK	(GFARM_FILE_USER_MODE|\
 	GFARM_FILE_BEQUEATHED|GFARM_FILE_CKSUM_INVALIDATED)
 #endif /* GFARM_INTERNAL_USE */
@@ -175,9 +169,6 @@ gfarm_error_t gfs_pio_flush(GFS_File);
 gfarm_error_t gfs_pio_sync(GFS_File);
 gfarm_error_t gfs_pio_datasync(GFS_File);
 gfarm_error_t gfs_pio_truncate(GFS_File, gfarm_off_t);
-gfarm_error_t gfs_pio_pread(GFS_File, void *, int, gfarm_off_t, int *);
-gfarm_error_t gfs_pio_pwrite(GFS_File, void *, int, gfarm_off_t, int *);
-
 
 int gfs_pio_getc(GFS_File);
 int gfs_pio_ungetc(GFS_File, int);
@@ -254,8 +245,6 @@ gfarm_error_t gfs_getcwd(char *, int);
 gfarm_error_t gfs_chown(const char *, const char *, const char *);
 gfarm_error_t gfs_chmod(const char *, gfarm_mode_t);
 gfarm_error_t gfs_utimes(const char *, const struct gfarm_timespec *);
-#define GFARM_UTIME_NOW		((1l << 30) - 1l)
-#define GFARM_UTIME_OMIT	((1l << 30) - 2l)
 gfarm_error_t gfs_lchown(const char *, const char *, const char *);
 gfarm_error_t gfs_lchmod(const char *, gfarm_mode_t);
 gfarm_error_t gfs_lutimes(const char *, const struct gfarm_timespec *);
@@ -357,9 +346,6 @@ gfarm_error_t gfs_replicate_to_local(GFS_File, char *, int);
 gfarm_error_t gfs_execve(const char *, char *const *, char *const *);
 #endif
 gfarm_error_t gfs_statfs(gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);
-gfarm_error_t gfs_statfsnode_by_path(const char *, char *, int,
-	gfarm_int32_t *, gfarm_off_t *, gfarm_off_t *,
-	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);
 gfarm_error_t gfs_statfsnode(char *, int,
 	gfarm_int32_t *, gfarm_off_t *, gfarm_off_t *,
 	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);

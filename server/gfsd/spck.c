@@ -19,12 +19,75 @@
 #include "gfutil.h"
 #include "hash.h"
 
-#include "config.h"
 #include "gfm_client.h"
 
 #include "gfsd_subr.h"
 
-static enum gfarm_spool_check_level spool_check_level;
+static enum {
+	MODE_DISPLAY,
+	MODE_DELETE,
+	MODE_LOST_FOUND
+} invalid_file_mode = MODE_DISPLAY;
+
+static gfarm_error_t
+gfm_client_replica_add(gfarm_ino_t inum, gfarm_uint64_t gen, gfarm_off_t size)
+{
+	gfarm_error_t e;
+	static const char diag[] = "replica_add";
+
+	if ((e = gfm_client_replica_add_request(gfm_server, inum, gen, size))
+	    != GFARM_ERR_NO_ERROR)
+		fatal_metadb_proto(GFARM_MSG_1000601, "replica_add request",
+		    diag, e);
+	else if ((e = gfm_client_replica_add_result(gfm_server))
+	    != GFARM_ERR_NO_ERROR) {
+		if (debug_mode && e != GFARM_ERR_ALREADY_EXISTS)
+			gflog_info(GFARM_MSG_1000602, "replica_add result: %s",
+			    gfarm_error_string(e));
+	}
+	return (e);
+}
+
+static gfarm_error_t
+gfm_client_replica_get_my_entries(gfarm_ino_t start_inum, int *np,
+	gfarm_ino_t **inumsp, gfarm_uint64_t **gensp, gfarm_off_t **sizesp)
+{
+	gfarm_error_t e;
+	static const char diag[] = "replica_get_my_entries2";
+
+	if ((e = gfm_client_replica_get_my_entries_request(
+	    gfm_server, start_inum, *np)) != GFARM_ERR_NO_ERROR)
+		fatal_metadb_proto(GFARM_MSG_1003516, "request", diag, e);
+	else if ((e = gfm_client_replica_get_my_entries_result(
+	    gfm_server, np, inumsp, gensp, sizesp)) != GFARM_ERR_NO_ERROR) {
+		if (debug_mode)
+			gflog_info(GFARM_MSG_1003517, "%s result: %s", diag,
+			    gfarm_error_string(e));
+	}
+	return (e);
+}
+
+static gfarm_error_t
+gfm_client_replica_create_file_in_lost_found(
+	gfarm_ino_t inum_old, gfarm_uint64_t gen_old, gfarm_off_t size,
+	const struct gfarm_timespec *mtime,
+	gfarm_ino_t *inum_newp, gfarm_uint64_t *gen_newp)
+{
+	gfarm_error_t e;
+	static const char diag[] = "replica_create_file_in_lost_found";
+
+	if ((e = gfm_client_replica_create_file_in_lost_found_request(
+	    gfm_server, inum_old, gen_old, size, mtime))
+	    != GFARM_ERR_NO_ERROR)
+		fatal_metadb_proto(GFARM_MSG_1003518, "request", diag, e);
+	else if ((e = gfm_client_replica_create_file_in_lost_found_result(
+	    gfm_server, inum_newp, gen_newp)) != GFARM_ERR_NO_ERROR) {
+		if (debug_mode)
+			gflog_info(GFARM_MSG_1003519, "%s result: %s", diag,
+			    gfarm_error_string(e));
+	}
+	return (e);
+}
 
 static gfarm_error_t
 move_file_to_lost_found_main(const char *file, struct stat *stp,
@@ -38,8 +101,12 @@ move_file_to_lost_found_main(const char *file, struct stat *stp,
 	gfarm_uint64_t gen_new;
 
 	mtime.tv_sec = stp->st_mtime;
-	mtime.tv_nsec = gfarm_stat_mtime_nsec(stp);
-	e = gfm_client_replica_create_file_in_lost_found(gfm_server,
+#ifdef HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC
+	mtime.tv_nsec = stp->st_mtim.tv_nsec;
+#else
+	mtime.tv_nsec = 0;
+#endif
+	e = gfm_client_replica_create_file_in_lost_found(
 	    inum_old, gen_old, (gfarm_off_t)stp->st_size, &mtime,
 	    &inum_new, &gen_new);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -77,7 +144,7 @@ move_file_to_lost_found_main(const char *file, struct stat *stp,
 		free(newpath);
 		return (gfarm_errno_to_error(save_errno));
 	}
-	e = gfm_client_replica_add(gfm_server, inum_new, gen_new,
+	e = gfm_client_replica_add(inum_new, gen_new,
 	    (gfarm_off_t)stp->st_size);
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_error(GFARM_MSG_1003523,
@@ -90,7 +157,7 @@ move_file_to_lost_found_main(const char *file, struct stat *stp,
 static void
 replica_lost(gfarm_ino_t inum, gfarm_uint64_t gen)
 {
-	gfarm_error_t e = gfm_client_replica_lost(gfm_server, inum, gen);
+	gfarm_error_t e = gfm_client_replica_lost(inum, gen);
 
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_error(GFARM_MSG_1003527,
@@ -261,12 +328,12 @@ deal_with_invalid_file(const char *file, struct stat *stp, int valid_inum_gen,
 {
 	gfarm_error_t e;
 
-	switch (spool_check_level) {
-	case GFARM_SPOOL_CHECK_LEVEL_DISPLAY:
+	switch (invalid_file_mode) {
+	case MODE_DISPLAY:
 		gflog_notice(GFARM_MSG_1000603, "%s: invalid file", file);
 		e = GFARM_ERR_NO_ERROR;
 		break;
-	case GFARM_SPOOL_CHECK_LEVEL_DELETE:
+	case MODE_DELETE:
 		e = unlink_file(file);
 		if (e != GFARM_ERR_NO_ERROR)
 			gflog_warning(GFARM_MSG_1000604,
@@ -275,17 +342,16 @@ deal_with_invalid_file(const char *file, struct stat *stp, int valid_inum_gen,
 			gflog_notice(GFARM_MSG_1000605,
 			    "%s: deleted", file);
 		break;
-	case GFARM_SPOOL_CHECK_LEVEL_LOST_FOUND:
+	case MODE_LOST_FOUND:
 	default:
 		if (valid_inum_gen)
 			e = move_file_to_lost_found(file, stp, inum, gen,
 			    size_mismatch);
 		else {
-			gflog_notice(GFARM_MSG_1003530,
+			gflog_warning(GFARM_MSG_1003530,
 			    "%s: unsupported file (ignored)", file);
 			e = GFARM_ERR_INVALID_ARGUMENT;
 		}
-		break;
 	}
 	return (e);
 }
@@ -316,7 +382,7 @@ check_file(char *file, struct stat *stp, void *arg)
 	}
 
 	size = stp->st_size;
-	e = gfm_client_replica_add(gfm_server, inum, gen, size);
+	e = gfm_client_replica_add(inum, gen, size);
 	switch (e) {
 	case GFARM_ERR_ALREADY_EXISTS:
 		/* correct entry */
@@ -411,7 +477,7 @@ check_existing(
 	/* else: This file will be checked by gfm_client_replica_add(). */
 
 	if (lost) { /* delete the replica-reference from metadata */
-		e = gfm_client_replica_lost(gfm_server, inum, gen);
+		e = gfm_client_replica_lost(inum, gen);
 		if (e != GFARM_ERR_NO_ERROR)
 			gflog_error(GFARM_MSG_1003537,
 			    "replica_lost(%llu, %llu): %s",
@@ -434,8 +500,8 @@ check_metadata(struct gfarm_hash_table *hash_ok)
 
 	for (inum = 0;; inum++) {
 		n = REQUEST_NUM;
-		e = gfm_client_replica_get_my_entries(gfm_server,
-		    inum, n, &n, &inums, &gens, &sizes);
+		e = gfm_client_replica_get_my_entries(
+		    inum, &n, &inums, &gens, &sizes);
 		if (e == GFARM_ERR_NO_SUCH_OBJECT)
 			return (GFARM_ERR_NO_ERROR); /* end */
 		else if (e != GFARM_ERR_NO_ERROR) {
@@ -460,37 +526,39 @@ check_metadata(struct gfarm_hash_table *hash_ok)
 #define HASH_OK_SIZE 999983
 
 /*
- *  gfarm_spool_check_level == GFARM_SPOOL_CHECK_LEVEL_... :
- *  DISPLAY    ... display invalid files (slow)
- *  DELETE     ... delete invalid files  (slow)
- *  LOST_FOUND ... move invalid files to gfarm:///lost+found
- *                 and delete invalid replica-references from metadata
+ * check_level:
+ *  0, 1      ... display invalid files (slow)
+ *  2         ... delete invalid files  (slow)
+ *  otherwise ... move invalid files to gfarm:///lost+found
+ *                and delete invalid replica-references from metadata
  */
-void
-gfsd_spool_check()
+gfarm_error_t
+gfsd_spool_check(int check_level)
 {
-	struct gfarm_hash_table *hash_ok; /* valid files */
+	gfarm_error_t e;
+	struct gfarm_hash_table *hash_ok;
 
-	gflog_debug(GFARM_MSG_1003680, "spool_check_level=%s",
-	    gfarm_spool_check_level_get_by_name());
-
-	spool_check_level = gfarm_spool_check_level_get();
-	switch (spool_check_level) {
-	case GFARM_SPOOL_CHECK_LEVEL_LOST_FOUND:
-		hash_ok = gfarm_hash_table_alloc(HASH_OK_SIZE,
-		    gfarm_hash_default, gfarm_hash_key_equal_default);
+	switch (check_level) {
+	case 0:
+	case 1:
+		invalid_file_mode = MODE_DISPLAY;
+		e = check_spool(".", NULL);
+		break;
+	case 2:
+		invalid_file_mode = MODE_DELETE;
+		e = check_spool(".", NULL);
+		break;
+	default:
+		hash_ok = gfarm_hash_table_alloc(
+			HASH_OK_SIZE,
+			gfarm_hash_default, gfarm_hash_key_equal_default);
 		if (hash_ok == NULL)
 			fatal(GFARM_MSG_1003560, "no memory for spool_check");
 		check_metadata(hash_ok);
-		break;
-	case GFARM_SPOOL_CHECK_LEVEL_DISPLAY:
-	case GFARM_SPOOL_CHECK_LEVEL_DELETE:
-		hash_ok = NULL;
-		break;
-	default:
-		return;
-	}
-	(void)check_spool(".", hash_ok);
-	if (hash_ok)
+
+		invalid_file_mode = MODE_LOST_FOUND;
+		e = check_spool(".", hash_ok);
 		gfarm_hash_table_free(hash_ok);
+	}
+	return (e);
 }

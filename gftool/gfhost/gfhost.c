@@ -28,9 +28,7 @@
 #include "gfm_client.h"
 #include "gfs_client.h"
 #include "lookup.h"
-#include "filesystem.h"
 #include "config.h"
-#include "gfarm_path.h"
 
 char *program_name = "gfhost";
 
@@ -733,8 +731,6 @@ gfarm_paraccess_connect_request(void *closure)
 	struct gfarm_access *a = closure;
 	gfarm_error_t e;
 	struct gfs_client_connect_state *cs;
-	struct gfarm_filesystem *fs =
-	    gfarm_filesystem_get_by_connection(gfm_server);
 
 	e = gfs_client_get_load_result_multiplexed(a->protocol_state,
 	    &a->load);
@@ -744,7 +740,7 @@ gfarm_paraccess_connect_request(void *closure)
 	}
 	e = gfs_client_connect_request_multiplexed(a->pa->q,
 	    a->canonical_hostname, a->port, gfm_client_username(gfm_server),
-	    &a->peer_addr, fs, gfarm_paraccess_connect_finish, a, &cs);
+	    &a->peer_addr, gfarm_paraccess_connect_finish, a, &cs);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfarm_paraccess_callback(a->pa, a, &a->load, NULL, e);
 		return;
@@ -790,7 +786,7 @@ gfarm_paraccess_request(struct gfarm_paraccess *pa,
 	    gfarm_paraccess_connect_request :
 	    gfarm_paraccess_load_finish,
 	    a,
-	    &gls, 1);
+	    &gls);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfarm_paraccess_callback(pa, a, NULL, NULL, e);
 		return (e);
@@ -1258,9 +1254,9 @@ main(int argc, char **argv)
 	char opt_operation = '\0'; /* default operation */
 	int opt_concurrency = DEFAULT_CONCURRENCY;
 	int opt_alter_aliases = 0;
-	const char *opt_path = ".";
-	char *realpath = NULL;
-	char *opt_architecture = NULL, *opt_domainname = NULL;
+	const char *opt_path = GFARM_PATH_ROOT;
+	char *opt_architecture = NULL;
+	char *opt_domainname = NULL;
 	long opt_ncpu = 0;
 	int opt_port = 0, opt_flags = -1;
 	int opt_plain_order = 0; /* i.e. do not sort */
@@ -1419,9 +1415,6 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
-	e = gfarm_realpath_by_gfarm2fs(opt_path, &realpath);
-	if (e == GFARM_ERR_NO_ERROR)
-		opt_path = realpath;
 	if (opt_use_metadb &&
 	    (e = gfm_client_connection_and_process_acquire_by_path(opt_path,
 	    &gfm_server)) != GFARM_ERR_NO_ERROR) {
@@ -1429,7 +1422,6 @@ main(int argc, char **argv)
 		    program_name, opt_path, gfarm_error_string(e));
 		exit(1);
 	}
-	free(realpath);
 
 	switch (opt_operation) {
 	case OP_CREATE_ENTRY:

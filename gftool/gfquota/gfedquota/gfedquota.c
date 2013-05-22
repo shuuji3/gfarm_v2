@@ -18,7 +18,6 @@
 #include "gfm_client.h"
 #include "lookup.h"
 #include "quota_info.h"
-#include "gfarm_path.h"
 
 char *program_name = "gfedquota";
 
@@ -114,8 +113,7 @@ main(int argc, char **argv)
 		GFARM_QUOTA_NOT_UPDATE,
 	};
 	struct gfm_connection *gfm_server;
-	const char *path = ".";
-	char *realpath = NULL;
+        const char *path = GFARM_PATH_ROOT;
 
 	if (argc > 0)
 		program_name = basename(argv[0]);
@@ -181,8 +179,6 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (gfarm_realpath_by_gfarm2fs(path, &realpath) == GFARM_ERR_NO_ERROR)
-		path = realpath;
 	if ((e = gfm_client_connection_and_process_acquire_by_path(
 		     path, &gfm_server)) != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: metadata server for \"%s\": %s\n",
@@ -190,7 +186,6 @@ main(int argc, char **argv)
 		status = -1;
 		goto terminate;
 	}
-	free(realpath);
 
 	if (username != NULL && groupname == NULL) {
 		qi.name = username;

@@ -52,14 +52,6 @@
 </varlistentry>
 
 <varlistentry>
-<term><option>-R</option>
-</term>
-<listitem>
-<para>changes owner/group recursively.</para>
-</listitem>
-</varlistentry>
-
-<varlistentry>
 <term><option>-?</option></term>
 <listitem>
 <para>Displays a list of command options.</para>

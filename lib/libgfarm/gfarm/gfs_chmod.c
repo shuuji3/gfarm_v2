@@ -8,9 +8,9 @@
 #include "gfutil.h"
 #include "timer.h"
 
-#include "context.h"
 #include "gfs_profile.h"
 #include "gfm_client.h"
+#include "config.h"
 #include "lookup.h"
 
 struct gfm_chmod_closure {
@@ -18,11 +18,10 @@ struct gfm_chmod_closure {
 };
 
 static gfarm_error_t
-gfm_chmod_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_chmod_request(struct gfm_connection *gfm_server, void *closure)
 {
 	struct gfm_chmod_closure *c = closure;
-	gfarm_error_t e = gfm_client_fchmod_request(gfm_server, ctx, c->mode);
+	gfarm_error_t e = gfm_client_fchmod_request(gfm_server, c->mode);
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_warning(GFARM_MSG_1000114,
@@ -31,10 +30,9 @@ gfm_chmod_request(struct gfm_connection *gfm_server,
 }
 
 static gfarm_error_t
-gfm_chmod_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_chmod_result(struct gfm_connection *gfm_server, void *closure)
 {
-	gfarm_error_t e = gfm_client_fchmod_result(gfm_server, ctx);
+	gfarm_error_t e = gfm_client_fchmod_result(gfm_server);
 
 #if 0 /* DEBUG */
 	if (e != GFARM_ERR_NO_ERROR)
@@ -50,11 +48,11 @@ gfs_chmod(const char *path, gfarm_mode_t mode)
 	struct gfm_chmod_closure closure;
 
 	closure.mode = mode;
-	return (gfm_inode_op_modifiable(path, GFARM_FILE_LOOKUP,
+	return (gfm_inode_op(path, GFARM_FILE_LOOKUP,
 	    gfm_chmod_request,
 	    gfm_chmod_result,
 	    gfm_inode_success_op_connection_free,
-	    NULL, NULL,
+	    NULL,
 	    &closure));
 }
 
@@ -64,10 +62,10 @@ gfs_lchmod(const char *path, gfarm_mode_t mode)
 	struct gfm_chmod_closure closure;
 
 	closure.mode = mode;
-	return (gfm_inode_op_no_follow_modifiable(path, GFARM_FILE_LOOKUP,
+	return (gfm_inode_op_no_follow(path, GFARM_FILE_LOOKUP,
 	    gfm_chmod_request,
 	    gfm_chmod_result,
 	    gfm_inode_success_op_connection_free,
-	    NULL, NULL,
+	    NULL,
 	    &closure));
 }

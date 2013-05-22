@@ -20,14 +20,12 @@ SUBDIRS = \
 	gfhost \
 	gfjournal \
 	gfjournaladmin \
-	gfjournaldump \
 	gfkey \
 	gfln \
 	gfls \
 	gfmdhost \
 	gfmkdir \
 	gfmv \
-	gfncopy \
 	gfpath \
 	gfprep \
 	gfquota \
@@ -37,7 +35,6 @@ SUBDIRS = \
 	gfrmdir \
 	gfsched \
 	gfsetfacl \
-	gfspoolpath \
 	gfstat \
 	gfstatus \
 	gfuser \
@@ -47,8 +44,6 @@ SUBDIRS = \
 	gfwhoami \
 	gfxattr \
 	config-gfarm \
-	gfhostgroup \
-	gfrepattr \
 	$(optional_targets)
 
 #	gfexec \

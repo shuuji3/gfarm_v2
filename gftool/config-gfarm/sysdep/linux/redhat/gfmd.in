@@ -126,11 +126,6 @@ case "$SUB_COMMAND" in
 	start
 	RETVAL=$?
 	;;
-  slavestart)
-	OPTIONS="-S $OPTIONS"
-	start
-	RETVAL=$?
-	;;
   stop)
 	stop
 	RETVAL=$?

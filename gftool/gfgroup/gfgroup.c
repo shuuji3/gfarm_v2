@@ -12,7 +12,6 @@
 #include "gfm_client.h"
 #include "lookup.h"
 #include "config.h"
-#include "gfarm_path.h"
 
 #define OP_GROUPNAME	'\0'
 #define OP_LIST_LONG	'l'
@@ -140,8 +139,7 @@ main(int argc, char *argv[])
 	gfarm_error_t e;
 	char op = OP_GROUPNAME, *groupname;
 	int c;
-	const char *path = ".";
-	char *realpath = NULL;
+	const char *path = GFARM_PATH_ROOT;
 
 	e = gfarm_initialize(&argc, &argv);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -169,15 +167,12 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (gfarm_realpath_by_gfarm2fs(path, &realpath) == GFARM_ERR_NO_ERROR)
-		path = realpath;
 	if ((e = gfm_client_connection_and_process_acquire_by_path(path,
 	    &gfm_server)) != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: metadata server for \"%s\": %s\n",
 		    program_name, path, gfarm_error_string(e));
 		exit(1);
 	}
-	free(realpath);
 
 	switch (op) {
 	case OP_GROUPNAME:

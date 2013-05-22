@@ -37,11 +37,8 @@ warning_priority=notice
 rc_reset
 
 case $1 in
-    start|slavestart)
+    start)
 	echo -n "Starting $FILE"
-	if [ $1 = slavestart ]; then
-		OPTIONS="-S $OPTIONS"
-	fi
 	if [ ! -x "$DAEMON" ]; then
 		rc_failed 5 # program is not installed
 	elif "$DAEMON" -P "$PIDFILE" $OPTIONS; then

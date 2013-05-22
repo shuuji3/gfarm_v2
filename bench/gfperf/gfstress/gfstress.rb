@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby
+#!/usr/bin/env ruby 
 
 require "optparse"
 require "pp"
@@ -24,47 +24,40 @@ end
 $config = Hash.new
 $config[:testdir] = "gfarm:///stress"
 $config[:number] = 1
-$config[:timeout] = -1
 opts = OptionParser.new
-opts.on("-t",
-        "--testdir LOCAL_DIR",
+opts.on("-t MANDATORY",
+        "--testdir MANDATORY",
         String,
         "test gfarm url") {|v|
   $config[:testdir] = v
 }
-opts.on("-m",
-        "--gfarm2fs GFARM_DIR",
+opts.on("-m MANDATORY",
+        "--gfarm2fs MANDATORY",
         String,
         "gfarm2fs mountpoint") {|v|
   $config[:gfarm2fs] = v
 }
-opts.on("-n",
-        "--number NUMBER",
+opts.on("-n MANDATORY",
+        "--number MANDATORY",
         Integer,
         "number of multiplex") {|v|
   $config[:number] = v
-}
-opts.on("-T",
-        "--timeout SECONDS",
-        Integer,
-        "timeout (default: infinite)") {|v|
-  $config[:timeout] = v
-}
+} 
 opts.parse!(ARGV)
 
 if (!$config[:gfarm2fs].nil?)
   $config[:fullpath] = make_path()
   $full_path = "#{$config[:fullpath]}/#{$hostname}-#{$pid}"
 end
-
+  
 $top_dir = "#{$config[:testdir]}/#{$hostname}-#{$pid}"
 r = system("gfmkdir -p #{$top_dir}");
 if (r == false)
   exit(1);
 end
-r = system("gfncopy -s 1 #{$top_dir}")
+r = system("echo -n 1 | gfxattr -s #{$top_dir} gfarm.ncopy")
 if (r == false)
-  STDERR.print("gfncopy error!\n")
+  STDERR.print("gfarm.ncopy error!\n")
   exit(1);
 end
 
@@ -137,16 +130,16 @@ class Runner
   end
 
   def run()
-    while (@running)
+    while (@running) 
       @pipe = Array.new
       @pipe[0] = IO.pipe
       @pipe[1] = IO.pipe
       @pipe[2] = IO.pipe
-
+    
       @stdin = @pipe[0][1]
       @stdout = @pipe[1][0]
       @stderr = @pipe[2][0]
-
+      
       break unless (@running)
       @pid = fork {
         @pipe[0][1].close
@@ -197,7 +190,7 @@ class Runner
       if (errstr.length > 0)
         print @command+"\n"
         print errstr
-        @manager.intr
+        @manager.stop
         @running = false
       end
     end
@@ -230,21 +223,10 @@ class Manager
     @runners.each { |r|
       r.start
     }
-    if ($config[:timeout] > 0)
-      print "timeout: #{$config[:timeout]} seconds\n"
-      @timeout_thread = Thread.new {
-        sleep $config[:timeout]
-        print "timeout...\n"
-        @runners.each { |r|
-          r.stop
-        }
-      }
-    end
     return self
   end
 
-  def intr()
-    print "interrupted...\n"
+  def stop()
     @stop_thread = Thread.new {
       @runners.each { |r|
         r.stop
@@ -257,8 +239,7 @@ class Manager
     @runners.each { |r|
       r.wait
     }
-    @stop_thread.join unless (@stop_thread.nil?)
-    @timeout_thread.kill unless (@timeout_thread.nil?)
+    @stop_thread.join unless (@stop_thread)
     return self
   end
 
@@ -269,11 +250,11 @@ print "start at #{Time.now.to_s}\n"
 $manager = Manager.new.init.run
 
 Signal.trap(:INT) {
-  $manager.intr
+  $manager.stop
 }
 
 Signal.trap(:TERM) {
-  $manager.intr
+  $manager.stop
 }
 
 $manager.wait

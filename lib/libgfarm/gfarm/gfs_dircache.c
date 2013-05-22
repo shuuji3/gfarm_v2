@@ -10,7 +10,6 @@
 #include "gfutil.h"
 #include "hash.h"
 
-#include "context.h"
 #include "config.h"
 #include "gfs_dir.h"
 #include "gfs_dirplusxattr.h"
@@ -75,9 +74,9 @@ gfs_stat_cache_init0(struct stat_cache *cache)
 {
 	if (!cache->lifespan_is_set) {
 		/* always reflect gfarm_attr_cache_timeout */
-		cache->lifespan.tv_sec = gfarm_ctxp->attr_cache_timeout /
+		cache->lifespan.tv_sec = gfarm_attr_cache_timeout /
 		    (GFARM_SECOND_BY_MICROSEC / GFARM_MILLISEC_BY_MICROSEC);
-		cache->lifespan.tv_usec = (gfarm_ctxp->attr_cache_timeout -
+		cache->lifespan.tv_usec = (gfarm_attr_cache_timeout -
 		    cache->lifespan.tv_sec *
 		    (GFARM_SECOND_BY_MICROSEC / GFARM_MILLISEC_BY_MICROSEC)) *
 		    GFARM_MILLISEC_BY_MICROSEC;
@@ -113,9 +112,9 @@ gfarm_anyptrs_free_deeply(int n, void **values)
 {
 	int i;
 
-	for (i = 0; i < n; i++)
+	for (i = 0; i < n; i++) {
 		free(values[i]);
-
+	}
 	free(values);
 }
 
@@ -251,9 +250,9 @@ attrvalues_copy(int nattrs, void ***attrvaluesp, size_t **attrsizesp,
 	for (i = 0; i < nattrs; i++) {
 		values[i] = malloc(attrsizes[i]);
 		if (values[i] == NULL) {
-			while (--i >= 0)
+			while (--i >= 0) {
 				free(values[i]);
-
+			}
 			free(values);
 			free(sizes);
 			return (GFARM_ERR_NO_MEMORY);
@@ -263,7 +262,7 @@ attrvalues_copy(int nattrs, void ***attrvaluesp, size_t **attrsizesp,
 	}
 	*attrvaluesp = values;
 	*attrsizesp = sizes;
-	return (GFARM_ERR_NO_ERROR);
+	return (GFARM_ERR_NO_ERROR);		
 }
 
 static gfarm_error_t
@@ -287,7 +286,7 @@ gfs_stat_cache_enter_internal0(struct stat_cache *cache,
 	}
 	gfs_stat_cache_expire_internal0(cache, nowp);
 
-	if (cache->count >= gfarm_ctxp->attr_cache_limit) {
+	if (cache->count >= gfarm_attr_cache_limit) {
 		/* remove the head of the list (i.e. oldest entry) */
 		data = STAT_CACHE_DATA_HEAD(cache)->next;
 		data->prev->next = data->next;
@@ -379,13 +378,11 @@ gfs_stat_cache_purge0(struct stat_cache *cache, const char *path)
 	gfs_stat_cache_expire0(cache);
 	if (!gfarm_hash_iterator_lookup(
 		cache->table, path, strlen(path)+1, &it)) {
-#if 0
 		gflog_debug(GFARM_MSG_1001286,
 			"lookup for path (%s) in stat cache failed: %s",
 			path,
 			gfarm_error_string(
 				GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY));
-#endif
 		return (GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY);
 	}
 	entry = gfarm_hash_iterator_access(&it);
