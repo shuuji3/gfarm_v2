@@ -24,54 +24,11 @@
 #include "gfutil.h"
 #include "thrsubr.h"
 
-#include "context.h"
 #include "liberror.h"
 #include "auth.h"
 
 #define GFARM_AUTH_EXPIRE_DEFAULT	(24 * 60 * 60) /* 1 day */
 #define PATH_URANDOM			"/dev/urandom"
-
-#define staticp	(gfarm_ctxp->auth_common_static)
-
-struct gfarm_auth_common_static {
-	pthread_mutex_t privilege_mutex;
-
-	/* gfarm_auth_sharedsecret_response_data() */
-	pthread_mutex_t openssl_mutex;
-};
-
-gfarm_error_t
-gfarm_auth_common_static_init(struct gfarm_context *ctxp)
-{
-	struct gfarm_auth_common_static *s;
-
-	GFARM_MALLOC(s);
-	if (s == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	gfarm_mutex_init(&s->privilege_mutex,
-	    "gfarm_auth_common_static_init", "privilege mutex");
-	gfarm_mutex_init(&s->openssl_mutex,
-	    "gfarm_auth_common_static_init", "openssl mutex");
-
-	ctxp->auth_common_static = s;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-void
-gfarm_auth_common_static_term(struct gfarm_context *ctxp)
-{
-	struct gfarm_auth_common_static *s = ctxp->auth_common_static;
-
-	if (s == NULL)
-		return;
-
-	gfarm_mutex_destroy(&s->privilege_mutex,
-	    "gfarm_auth_common_static_term", "privilege mutex");
-	gfarm_mutex_destroy(&s->openssl_mutex,
-	    "gfarm_auth_common_static_term", "openssl mutex");
-	free(s);
-}
 
 static int
 skip_space(FILE *fp)
@@ -161,6 +118,7 @@ gfarm_auth_random(void *buffer, size_t length)
 	}
 }
 
+static pthread_mutex_t privilege_mutex = PTHREAD_MUTEX_INITIALIZER;
 static const char privilege_diag[] = "privilege_mutex";
 
 /*
@@ -169,7 +127,7 @@ static const char privilege_diag[] = "privilege_mutex";
 void
 gfarm_auth_privilege_lock(const char *diag)
 {
-	gfarm_mutex_lock(&staticp->privilege_mutex, diag, privilege_diag);
+	gfarm_mutex_lock(&privilege_mutex, diag, privilege_diag);
 }
 
 /*
@@ -178,7 +136,7 @@ gfarm_auth_privilege_lock(const char *diag)
 void
 gfarm_auth_privilege_unlock(const char *diag)
 {
-	gfarm_mutex_unlock(&staticp->privilege_mutex, diag, privilege_diag);
+	gfarm_mutex_unlock(&privilege_mutex, diag, privilege_diag);
 }
 
 /*
@@ -199,7 +157,7 @@ gfarm_auth_shared_key_get(unsigned int *expirep, char *shared_key,
 	gfarm_error_t e = GFARM_ERR_NO_ERROR;
 	FILE *fp = NULL;
 	static char keyfile_basename[] = "/" GFARM_AUTH_SHARED_KEY_BASENAME;
-	char *keyfilename, *allocbuf = NULL;
+	char *keyfilename;
 	unsigned int expire;
 
 	uid_t o_uid;
@@ -210,23 +168,16 @@ gfarm_auth_shared_key_get(unsigned int *expirep, char *shared_key,
 #ifdef __GNUC__ /* workaround gcc warning: might be used uninitialized */
 	o_uid = o_gid = 0;
 #endif
-#ifdef __KERNEL__	/* keyfilename :: multi user */
-	if (!(keyfilename = getenv("GFARM_SHARED_KEY"))) {
-#endif /* __KERNEL__ */
-		GFARM_MALLOC_ARRAY(keyfilename,
-			strlen(home) + sizeof(keyfile_basename));
-		if (keyfilename == NULL) {
-			gflog_debug(GFARM_MSG_1001023,
-				"allocation of 'keyfilename' failed: %s",
-				gfarm_error_string(GFARM_ERR_NO_MEMORY));
-			return (GFARM_ERR_NO_MEMORY);
-		}
-		strcpy(keyfilename, home);
-		strcat(keyfilename, keyfile_basename);
-		allocbuf = keyfilename;
-#ifdef __KERNEL__
+	GFARM_MALLOC_ARRAY(keyfilename, 
+		strlen(home) + sizeof(keyfile_basename));
+	if (keyfilename == NULL) {
+		gflog_debug(GFARM_MSG_1001023,
+			"allocation of 'keyfilename' failed: %s",
+			gfarm_error_string(GFARM_ERR_NO_MEMORY));
+		return (GFARM_ERR_NO_MEMORY);
 	}
-#endif /* __KERNEL__ */
+	strcpy(keyfilename, home);
+	strcat(keyfilename, keyfile_basename);
 
 	if (pwd != NULL) {
 		gfarm_auth_privilege_lock(diag);
@@ -271,7 +222,7 @@ create:
 	if (fp == NULL) {
 		if (e != GFARM_ERR_NO_ERROR &&
 		    e != GFARM_ERRMSG_SHAREDSECRET_KEY_FILE_NOT_EXIST) {
-			gflog_warning(GFARM_MSG_UNFIXED,
+			gflog_warning(GFARM_MSG_1003703,
 			    "%s, create the key again: %s",
 			    gfarm_error_string(e), keyfilename);
 			e = GFARM_ERR_NO_ERROR;
@@ -318,7 +269,7 @@ create:
 		*expirep = expire;
 	}
 finish:
-	free(allocbuf);
+	free(keyfilename);
 	if (pwd != NULL) {
 		if (seteuid(0) == -1 && is_root) /* recover root privilege */
 			gflog_error_errno(GFARM_MSG_1002342, "seteuid(0)");
@@ -349,6 +300,7 @@ gfarm_auth_sharedsecret_response_data(char *shared_key, char *challenge,
 {
 	EVP_MD_CTX mdctx;
 	unsigned int md_len;
+	static pthread_mutex_t openssl_mutex = PTHREAD_MUTEX_INITIALIZER;
 	static const char openssl_diag[] = "openssl_mutex";
 	static const char diag[] = "gfarm_auth_sharedsecret_response_data";
 
@@ -357,18 +309,19 @@ gfarm_auth_sharedsecret_response_data(char *shared_key, char *challenge,
 	 * these OpenSSL functions are not multithread safe,
 	 * at least about openssl-0.9.8e-12.el5_4.1.x86_64 on CentOS 5.4
 	 */
-
-	gfarm_mutex_lock(&staticp->openssl_mutex, diag, openssl_diag);
+	
+	gfarm_mutex_lock(&openssl_mutex, diag, openssl_diag);
 	EVP_DigestInit(&mdctx, EVP_md5());
 	EVP_DigestUpdate(&mdctx, challenge, GFARM_AUTH_CHALLENGE_LEN);
 	EVP_DigestUpdate(&mdctx, shared_key, GFARM_AUTH_SHARED_KEY_LEN);
 	EVP_DigestFinal(&mdctx, (unsigned char *)response, &md_len);
-	gfarm_mutex_unlock(&staticp->openssl_mutex, diag, openssl_diag);
+	gfarm_mutex_unlock(&openssl_mutex, diag, openssl_diag);
 
 	if (md_len != GFARM_AUTH_RESPONSE_LEN) {
-		gflog_fatal(GFARM_MSG_1003263,
+		gflog_error(GFARM_MSG_1003263,
 			"gfarm_auth_sharedsecret_response_data:"
 			"md5 digest length should be %d, but %d\n",
 			GFARM_AUTH_RESPONSE_LEN, md_len);
+		abort();
 	}
 }

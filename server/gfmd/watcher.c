@@ -23,9 +23,9 @@
  */
 
 enum watcher_event_type {
-	WATCHER_READABLE_EVENT,
-	WATCHER_WRITABLE_EVENT,
-	WATCHER_CLOSING_EVENT
+	watcher_readable_event,
+	watcher_writable_event,
+	watcher_closing_event
 };
 
 struct watcher_event {
@@ -37,7 +37,7 @@ struct watcher_event {
 	struct gfarm_event *gev;
 
 	enum watcher_event_type type;
-	struct thread_pool *thrpool; /* not used for WATCHER_CLOSING_EVENT */
+	struct thread_pool *thrpool; /* not used for watcher_closing_event */
 	void *(*handler)(void *);
 	void *closure;
 #define WATCHER_EVENT_IN_QUEUE	1 /* in watcher_request_queue */
@@ -45,7 +45,7 @@ struct watcher_event {
 #define WATCHER_EVENT_INVOKING	4
 	int flags;
 
-	/* WATCHER_CLOSING_EVENT only */
+	/* watcher_closing_event only */
 	struct watcher_event *closing_events, **closing_tail;
 
 	pthread_mutex_t mutex;
@@ -82,11 +82,11 @@ watcher_fd_event_alloc(int fd, enum watcher_event_type type,
 	if (wev == NULL)
 		return (GFARM_ERR_NO_MEMORY);
 
-	if (type == WATCHER_CLOSING_EVENT) {
+	if (type == watcher_closing_event) {
 		wev->gev = NULL;
 	} else if ((wev->gev = gfarm_fd_event_alloc(
-	    type == WATCHER_READABLE_EVENT ? GFARM_EVENT_READ :
-	    type == WATCHER_WRITABLE_EVENT ? GFARM_EVENT_WRITE :
+	    type == watcher_readable_event ? GFARM_EVENT_READ :
+	    type == watcher_writable_event ? GFARM_EVENT_WRITE :
 	    (assert(0), 0),
 	    fd, watcher_event_callback, wev)) == NULL) {
 		free(wev);
@@ -113,26 +113,26 @@ watcher_fd_event_alloc(int fd, enum watcher_event_type type,
 gfarm_error_t
 watcher_fd_readable_event_alloc(int fd, struct watcher_event **wevp)
 {
-	return (watcher_fd_event_alloc(fd, WATCHER_READABLE_EVENT, wevp));
+	return (watcher_fd_event_alloc(fd, watcher_readable_event, wevp));
 }
 
 gfarm_error_t
 watcher_fd_writable_event_alloc(int fd, struct watcher_event **wevp)
 {
-	return (watcher_fd_event_alloc(fd, WATCHER_WRITABLE_EVENT, wevp));
+	return (watcher_fd_event_alloc(fd, watcher_writable_event, wevp));
 }
 
 gfarm_error_t
 watcher_fd_closing_event_alloc(int fd, struct watcher_event **wevp)
 {
-	return (watcher_fd_event_alloc(fd, WATCHER_CLOSING_EVENT, wevp));
+	return (watcher_fd_event_alloc(fd, watcher_closing_event, wevp));
 }
 
 void
 watcher_fd_closing_event_add_relevant_event(
 	struct watcher_event *closing_event, struct watcher_event *wev)
 {
-	assert(closing_event->type == WATCHER_CLOSING_EVENT);
+	assert(closing_event->type == watcher_closing_event);
 
 	wev->next_closing = NULL;
 	*closing_event->closing_tail = wev;
@@ -221,7 +221,7 @@ watcher_request_enqueue(struct watcher_request_queue *wrq,
 	wev->next = &wrq->head;
 	wev->prev = wrq->head.prev;
 
-	assert(wev->type == WATCHER_CLOSING_EVENT ?
+	assert(wev->type == watcher_closing_event ?
 	    thrpool == NULL : thrpool != NULL);
 	wev->thrpool = thrpool;
 	wev->handler = handler;
@@ -304,7 +304,7 @@ watcher_control_callback(int events, int fd, void *closure,
 	/* handle closing events first */
 	list = list0;
 	do {
-		if (list->type == WATCHER_CLOSING_EVENT) {
+		if (list->type == watcher_closing_event) {
 			for (wev = list->closing_events;
 			    wev != NULL; wev = wev->next_closing) {
 
@@ -348,7 +348,7 @@ watcher_control_callback(int events, int fd, void *closure,
 
 	list = list0;
 	do {
-		if (list->type != WATCHER_CLOSING_EVENT) {
+		if (list->type != watcher_closing_event) {
 			err = gfarm_eventqueue_add_event(w->q, list->gev, NULL);
 			if (err == 0) {
 				list->flags |= WATCHER_EVENT_WATCHING;

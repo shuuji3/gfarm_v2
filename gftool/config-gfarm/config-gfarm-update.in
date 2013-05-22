@@ -111,8 +111,8 @@ tf2ed()
 
 display_params()
 {
-    echo "prefix                 [--prefix]: $CONFIG_PREFIX"
-    echo "metadata backend             [-b]: $BACKEND_TYPE"
+    echo     "prefix [--prefix]: $CONFIG_PREFIX"
+    echo     "metadata backend    [-b]: $BACKEND_TYPE"
 
     display_plain_params_backend_$BACKEND_TYPE
     display_plain_params_backend_port_$BACKEND_TYPE

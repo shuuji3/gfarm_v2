@@ -3,7 +3,6 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
@@ -12,11 +11,9 @@
 
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
-#include "metadb_server.h"
-
 #include "quota.h"
+#include "metadb_server.h"
 #include "db_access.h"
 #include "db_ops.h"
 
@@ -64,7 +61,7 @@ empty_host_remove(gfarm_uint64_t seqnum, char *hostname)
 
 static gfarm_error_t
 empty_host_load(void *closure,
-	void (*callback)(void *, struct gfarm_internal_host_info *))
+	void (*callback)(void *, struct gfarm_host_info *))
 {
 	return (GFARM_ERR_NO_ERROR);
 }

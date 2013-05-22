@@ -23,11 +23,6 @@
 #include "gfs_client.h"
 #include "gfs_io.h"
 #include "gfs_pio.h"
-#include "schedule.h"
-#include "context.h"
-#ifdef __KERNEL__
-#include <linux/fs.h>  /* just for SEEK_XXX */
-#endif
 
 #if 0 /* not yet in gfarm v2 */
 
@@ -109,7 +104,6 @@ gfs_pio_local_storage_close(GFS_File gf)
 		e = gfarm_errno_to_error(errno);
 	else
 		e = GFARM_ERR_NO_ERROR;
-#ifndef __KERNEL__
 	/*
 	 * Do not close remote file from a child process because its
 	 * open file count is not incremented.
@@ -125,14 +119,7 @@ gfs_pio_local_storage_close(GFS_File gf)
 		}
 		return (e);
 	}
-#endif /* __KERNEL__ */
 	e2 = gfs_client_close(gfs_server, gf->fd);
-	gfarm_schedule_host_unused(
-	    gfs_client_hostname(gfs_server),
-	    gfs_client_port(gfs_server),
-	    gfs_client_username(gfs_server),
-	    gf->scheduled_age);
-
 	gfs_client_connection_free(gfs_server);
 
 	if (e != GFARM_ERR_NO_ERROR || e2 != GFARM_ERR_NO_ERROR) {
@@ -150,11 +137,11 @@ gfs_pio_local_storage_pwrite(GFS_File gf,
 	const char *buffer, size_t size, gfarm_off_t offset, size_t *lengthp)
 {
 	struct gfs_file_section_context *vc = gf->view_context;
+#if 0 /* XXX FIXME: pwrite(2) on NetBSD-3.0_BETA is broken */
+	int rv = pwrite(vc->fd, buffer, size, offset);
+#else
 	int rv, save_errno;
 
-#ifdef __KERNEL__
-	rv = pwrite(vc->fd, buffer, offset, size);
-#else
 	if (lseek(vc->fd, offset, SEEK_SET) == -1) {
 		save_errno = errno;
 		gflog_debug(GFARM_MSG_1001364,
@@ -188,7 +175,7 @@ gfs_pio_local_storage_write(GFS_File gf,
 	rv = write(vc->fd, buffer, size);
 	if (rv == -1) {
 		save_errno = errno;
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003690,
 			"write() on view context file descriptor failed: %s",
 			strerror(save_errno));
 		return (gfarm_errno_to_error(save_errno));
@@ -204,11 +191,11 @@ gfs_pio_local_storage_pread(GFS_File gf,
 	char *buffer, size_t size, gfarm_off_t offset, size_t *lengthp)
 {
 	struct gfs_file_section_context *vc = gf->view_context;
+#if 0 /* XXX FIXME: pread(2) on NetBSD-3.0_BETA is broken */
+	int rv = pread(vc->fd, buffer, size, offset);
+#else
 	int rv, save_errno;
 
-#ifdef __KERNEL__
-	rv = pread(vc->fd, buffer, offset, size);
-#else
 	if (lseek(vc->fd, offset, SEEK_SET) == -1) {
 		save_errno = errno;
 		gflog_debug(GFARM_MSG_1001366,
@@ -235,12 +222,7 @@ gfs_pio_local_storage_ftruncate(GFS_File gf, gfarm_off_t length)
 {
 	struct gfs_file_section_context *vc = gf->view_context;
 	int rv;
-#ifdef __KERNEL__
-	if (gfarm_ctxp->call_rpc_instead_syscall) {
-		struct gfs_connection *gfs_server = vc->storage_context;
-		rv =  gfs_client_ftruncate(gfs_server, gf->fd, length);
-	} else
-#endif /* __KERNEL__ */
+
 	rv = ftruncate(vc->fd, length);
 	if (rv == -1) {
 		int save_errno = errno;

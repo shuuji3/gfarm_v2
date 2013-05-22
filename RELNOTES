@@ -1,3 +1,193 @@
+Release note for Gfarm 2.5.8.1
+==============================
+
+[2013.5.22]
+
+Updated feature
+* gftest - support relative path and multiple Gfarm file systems when
+  mounted by gfarm2fs
+
+Bug fix
+* gfmd - fix assertion error when the sequence number of operations is
+  larger than 4G
+* gfprep - -x option may cause "file busy" [sf.net trac #689]
+* invalid replica may remain when a replication fails [sf.net trac
+  #680]
+* gfdump.postgresql - fix bashism
+
+Release note for Gfarm 2.5.8
+============================
+
+[2013.4.22]
+
+New command
+* gftest - check entry type
+
+New feature
+* gfprep, gfpcopy - honor write_target_domain directive
+
+Updated feature
+* gfmd init script - kill to immediately stop the gfmd
+* log level adjustment to make ZABBIX alerts usable - step 3 [sf.net
+  trac #679]
+* gfpcopy - preserve the modification time of directories, and honor
+  umask [sf.net trac #662 and #663]
+
+Bug fix
+* no filesystem node happens when updating a file not stored in
+  write_target_domain
+* operation not permitted happens when creating the same sequence of
+  files at the same time [sf.net trac #643]
+* private mode in ubuntu does not work since gfarm-2.5.8-rc3 [sf.net
+  trac #661]
+* replica_check_host_down_thresh does not work [sf.net trac #655]
+* "protocol error" is incorrectly reported even when it is a network
+  error [sf.net trac #658]
+* postgres server for gfarm may not correctly start up on Ubuntu 12.04
+  [sf.net trac #652]
+* gfpcopy cannot copy read-only directories [sf.net trac #660]
+* gfrm -h can remove a replica that may be used for replication
+  [sf.net trac #676]
+* write-mode open may fail due to inappropriate replica scheduling
+  [sf.net trac #682]
+
+Release note for Gfarm 2.5.8-rc3
+================================
+
+[2013.3.27]
+
+New feature
+* support GFARM_FILE_APPEND
+* gfpcopy - copy missing or obsolete files when the target directory
+  exists [sf.net trac #632]
+* gfstress.rb - -T and --timeout option to specify the time for the
+  stress test in seconds.  Default is infinite.
+
+Updated feature
+* gfreg - performance improvement [sf.net trac #484]
+
+Bug fix
+* gfpcopy-test.sh does not report throughput [sf.net trac #628]
+* libgfarm - gfs_realpath() may crash [sf.net trac #591]
+* gfsd - terminates even when there are still opening files in write
+  mode if two or more files are opened in write mode
+* gfsd fails to start when the connection to gfmd is disconnected
+  during the spool check [sf.net trac #587]
+* gfsd - die when unexpected error happens in gfs_server_status since
+  gfmd disconnects the connection [sf.net trac #595]
+* number of replicas may increase when opened in the truncate mode,
+  which is introduced by Gfarm 2.5.7.1  [sf.net trac #583]
+* gfmd crashes when gfmd-initiated replication is invoked against a
+  filesystem node which is down, which is introduced by Gfarm
+  2.5.8-rc1 [sf.net trac #601]
+* potential deadlock in gfmd [sf.net trac #614]
+* gfmd may crash when gfsd is down [sf.net trac #589, #616]
+* fix gfmd slavestart in SuSE and default [sf.net trac #627]
+* failover does not work after accessed by a Gfarm URL [sf.net trac
+  #625]
+* gfmd executed by slavestart (force_slave) crashes when promoting to
+  the master [sf.net trac #635]
+* invalid free() in libgfarm at network interface down, which is
+  introduced by Gfarm 2.5.8-rc2 [sf.net trac #640]
+* replica check may fail by device busy or by already in progress
+  [sf.net trac #648]
+* gfmdhost command can make gfmd crash [sf.net trac #594]
+
+Release note for Gfarm 2.5.8-rc2
+================================
+
+[2013.1.8]
+
+Bug fix
+* libgfarm - gfm_host_is_local() may crash when gfmd connection is
+  disconnected [sf.net trac #580]
+* gfmd - segfault when executing gfwhere against a file including
+  unnecessary copies [sf.net trac #575]
+* gfmd - fix invalid strdup_ck() calls [sf.net trac #460]
+* search from all hosts when there is no candidate in the target
+  domain specified by "write_target_domain"
+* ls fails once after restart or failover of gfmd [sf.net trac #578]
+* master should log a message when a slave is expired [sf.net trac
+  #566]
+* any authenticated user can change metadata server configuration
+  [sf.net trac #572]
+* gfmdhost shows "?" (unknown) when an async slave reconnects [sf.net
+  trac #568]
+* gfprep stops when there there are less available destination hosts
+  than desired [sf.net trac #574]
+
+Release note for Gfarm 2.5.8-rc1
+================================
+
+[2012.12.3]
+
+New feature
+* replica_check - automatic replica creation in case of file system
+  node failure, changing gfarm.ncopy and moving a directory 
+* ganglia plugin to monitor performance
+* gfncopy - set and display NCOPY of file [sf.net trac #497]
+* gfchmod, gfchown, gfchgrp - -R option to operate recursively
+* libgfarm - select near filesystem nodes more reliably [sf.net trac
+  #535]
+* gfspoolpath - show a physical pathname in a spool directory on a
+  filesystem node [st.net trac #493]
+* gfservice - control Gfarm servers from a remote host
+* config-gfmd-iostat, config-gfsd-iostat - set up performance
+  monitoring environment
+
+New configuration directive
+* atime - specify access time update type.  default is relative.
+  [sf.net trac #523]
+* write_local_priority - enables or disables local host affinity
+  scheduling [sf.net trac #125]
+* write_target_domain - specify a target domain for new files to
+  stored
+* spool_check_level - specify spool check level for gfsd [sf.net trac
+  #502]
+* replica_check_minimum_interval - specify the minimum interval for
+  replica_check [sf.net trac #453]
+* schedule_rtt_thresh_diff, schedule_rtt_thresh_ratio - scheduling
+  parameter to decide local networks [sf.net trac #535]
+
+Updated feature
+* support nanosecond for atime, mtime and ctime [sf.net trac #529]
+* gfarm clients - support relative path and multiple Gfarm file
+  systems when mounted by gfarm2fs
+* gfls, gfdf, gfstatus, gfsched - -V option to show Gfarm version
+* gfsd - spool directory consistency check at start-up
+* gfstat - print inum+gen in hex that will help to find files in
+  lost+found
+* gfrm -h, gfrep -x, gfprep -x - prevent to remove file replicas when
+  the total number is less than specified by gfarm.ncopy
+* log level adjustment to make ZABBIX alerts usable - steps 1 and 2
+  [sf.net trac #511, #542]
+* gfmd init script - slavestart to start in slave mode
+* support 1024 or greater number of filesystem nodes [sf.net trac
+  #477]
+
+Bug fix
+* invalid XML value causes gfmd crash [sf.net trac #549]
+* gfmd aborts in journal_file_read_serialized() to send journal to
+  asynchronous slave [sf.net trac #513]
+* cannot set an empty default ACL [sf.net trac #517]
+* incomplete replica is left [sf.net trac #408]
+* obsolete replicas remain existing [sf.net trac #406]
+* local replica may not be selected if there are replicas in the same
+  network [sf.net trac #141]
+* master gfmd incorrectly diagnoses "expired" state about slave gfmd
+  [sf.net trac #374]
+* async slave gfmd loses a connection with master gfmd [sf.net trac
+  #550]
+* unnecessary automatic replication when a file is opened for writing
+  multiple times simultaneously [sf.net trac #438]
+* gfsd stops to work with a message "<err> ![1000551] cannot set
+  canonical hostname of this node", when gfmd is overloaded [sf.net
+  trac #504] 
+* gfls - fix space padding in multicolumn format
+* overflow when parsing int value in the configuration file [sf.net
+  trac #546]
+* installation errors on Mac OS X [sf.net trac #552]
+
 Release note for Gfarm 2.5.7.2
 ==============================
 
@@ -39,7 +229,8 @@ Bug fix
   condition between creating and reading the same file [sf.net trac
   #455]
 * gfmd, gfsd - gfsd -ccc (or -c, -cc) cannot fix invalid files having
-  inconsistent file size on the spool, introduced in 2.5.6
+  inconsistent file size on the spool, introduced in 2.5.6 [sf.net
+  trac #439]
 * gfmd - potential gfmd memory corruption when scheduling file system
   nodes [sf.net trac #449]
 * libgfarm - log original errno if it is not known [sf.net trac #469]
