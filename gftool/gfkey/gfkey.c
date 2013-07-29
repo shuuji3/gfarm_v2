@@ -10,7 +10,6 @@
 
 #include <gfarm/gfarm.h>
 
-#include "context.h"
 #include "auth.h"
 
 char *program_name = "gfkey";
@@ -118,24 +117,24 @@ main(argc, argv)
 	if (log_level != -1)
 		gflog_set_priority_level(log_level);
 
-	e = gfarm_context_init();
-	if (e != GFARM_ERR_NO_ERROR) {
-		fprintf(stderr, "%s: %s\n", program_name,
-		    gfarm_error_string(e));
-		exit(1);
-	}
 	e = gfarm_set_local_user_for_this_local_account();
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: %s\n", program_name,
 		    gfarm_error_string(e));
 		exit(1);
 	}
+	e = gfarm_config_read();
+	if (e != GFARM_ERR_NO_ERROR) {
+		fprintf(stderr, "%s: %s\n", program_name,
+		    gfarm_error_string(e));
+		exit(1);
+	}
 	home = gfarm_get_local_homedir();
-
 	e = gfarm_auth_shared_key_get(&expire, shared_key, home, NULL,
 	    mode, period);
 	if (e != GFARM_ERR_NO_ERROR) {
-		fprintf(stderr, "%s\n", gfarm_error_string(e));
+		fprintf(stderr, "%s: %s\n", program_name,
+		    gfarm_error_string(e));
 		exit(1);
 	}
 	if (do_list) {

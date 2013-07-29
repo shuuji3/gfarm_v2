@@ -4,22 +4,17 @@
 
 #include <pthread.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/tcp.h>	/* TCP_NODELAY */
 #include <netdb.h>		/* getprotobyname() */
 #include <errno.h>
 #include <string.h>
-
 #include <gfarm/gfarm_config.h>
 #include <gfarm/gflog.h>
 #include <gfarm/error.h>
 #include <gfarm/gfarm_misc.h>
-
 #include "gfutil.h"
-
-#include "context.h"
 #include "liberror.h"
 #include "hostspec.h"
 #include "param.h"
@@ -30,21 +25,16 @@ struct gfarm_sockopt_info {
 	int level, option;
 };
 
-struct gfarm_sockopt_info gfarm_sockopt_info_debug = {
-    NULL, SOL_SOCKET,	SO_DEBUG
-};
-struct gfarm_sockopt_info gfarm_sockopt_info_keepalive = {
-    NULL, SOL_SOCKET,	SO_KEEPALIVE
-};
-struct gfarm_sockopt_info gfarm_sockopt_info_sndbuf = {
-    NULL, SOL_SOCKET,	SO_SNDBUF
-};
-struct gfarm_sockopt_info gfarm_sockopt_info_rcvbuf = {
-    NULL, SOL_SOCKET,	SO_RCVBUF
-};
-struct gfarm_sockopt_info gfarm_sockopt_info_tcp_nodelay = {
-    "tcp", 0,		TCP_NODELAY
-};
+struct gfarm_sockopt_info gfarm_sockopt_info_debug =
+    { NULL, SOL_SOCKET,	SO_DEBUG };
+struct gfarm_sockopt_info gfarm_sockopt_info_keepalive =
+    { NULL, SOL_SOCKET,	SO_KEEPALIVE };
+struct gfarm_sockopt_info gfarm_sockopt_info_sndbuf =
+    { NULL, SOL_SOCKET,	SO_SNDBUF };
+struct gfarm_sockopt_info gfarm_sockopt_info_rcvbuf =
+    { NULL, SOL_SOCKET,	SO_RCVBUF };
+struct gfarm_sockopt_info gfarm_sockopt_info_tcp_nodelay =
+    { "tcp", 0,		TCP_NODELAY };
 
 struct gfarm_param_type gfarm_sockopt_type_table[] = {
     { "debug",		1, &gfarm_sockopt_info_debug },
@@ -56,46 +46,13 @@ struct gfarm_param_type gfarm_sockopt_type_table[] = {
 
 #define NSOCKOPTS GFARM_ARRAY_LENGTH(gfarm_sockopt_type_table)
 
-#define staticp	(gfarm_ctxp->sockopt_static)
+struct gfarm_param_config *gfarm_sockopt_config_list = NULL;
+struct gfarm_param_config **gfarm_sockopt_config_last =
+    &gfarm_sockopt_config_list;
 
-struct gfarm_sockopt_static {
-	struct gfarm_param_config *config_list;
-	struct gfarm_param_config **config_last;
-
-	struct gfarm_param_config *listener_config_list;
-	struct gfarm_param_config **listener_config_last;
-};
-
-gfarm_error_t
-gfarm_sockopt_static_init(struct gfarm_context *ctxp)
-{
-	struct gfarm_sockopt_static *s;
-
-	GFARM_MALLOC(s);
-	if (s == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	gfarm_param_config_init(&s->config_list, &s->config_last);
-	gfarm_param_config_init(&s->listener_config_list,
-	    &s->listener_config_last);
-
-	ctxp->sockopt_static = s;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-void
-gfarm_sockopt_static_term(struct gfarm_context *ctxp)
-{
-	struct gfarm_sockopt_static *s = ctxp->sockopt_static;
-	
-	if (s == NULL)
-		return;
-
-	gfarm_param_config_free(&s->config_list, &s->config_last);
-	gfarm_param_config_free(&s->listener_config_list,
-	    &s->listener_config_last);
-	free(s);
-}
+struct gfarm_param_config *gfarm_sockopt_listener_config_list = NULL;
+struct gfarm_param_config **gfarm_sockopt_listener_config_last =
+    &gfarm_sockopt_listener_config_list;
 
 static void
 sockopt_initialize(void)
@@ -205,15 +162,15 @@ gfarm_sockopt_set_option(int fd, char *config)
 gfarm_error_t
 gfarm_sockopt_config_add(char *option, struct gfarm_hostspec *hsp)
 {
-	return (gfarm_sockopt_config_add_internal(&staticp->config_last,
-	    option, hsp));
+	return (gfarm_sockopt_config_add_internal(
+	    &gfarm_sockopt_config_last, option, hsp));
 }
 
 gfarm_error_t
 gfarm_sockopt_listener_config_add(char *option)
 {
 	return (gfarm_sockopt_config_add_internal(
-	    &staticp->listener_config_last, option, NULL));
+	    &gfarm_sockopt_listener_config_last, option, NULL));
 }
 
 static gfarm_error_t
@@ -238,13 +195,13 @@ gfarm_error_t
 gfarm_sockopt_apply_by_name_addr(int fd, const char *name,
 	struct sockaddr *addr)
 {
-	return (gfarm_param_apply_long_by_name_addr(staticp->config_list,
+	return (gfarm_param_apply_long_by_name_addr(gfarm_sockopt_config_list,
 	    name, addr, gfarm_sockopt_set, &fd));
 }
 
 gfarm_error_t
 gfarm_sockopt_apply_listener(int fd)
 {
-	return (gfarm_param_apply_long(staticp->listener_config_list,
+	return (gfarm_param_apply_long(gfarm_sockopt_listener_config_list,
 	    gfarm_sockopt_set, &fd));
 }

@@ -17,19 +17,14 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <netinet/in.h>
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 #include "quota.h"
 #include "metadb_server.h"
@@ -83,18 +78,8 @@ gfarm_none_host_remove(gfarm_uint64_t seqnum, char *hostname)
 
 static gfarm_error_t
 gfarm_none_host_load(void *closure,
-	void (*callback)(void *, struct gfarm_internal_host_info *))
+	void (*callback)(void *, struct gfarm_host_info *))
 {
-	return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
-}
-
-/**********************************************************************/
-
-static gfarm_error_t
-gfarm_none_fsngroup_modify(gfarm_uint64_t seqnum,
-	struct db_fsngroup_modify_arg *arg)
-{
-	free(arg);
 	return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
 }
 
@@ -530,6 +515,4 @@ const struct db_ops db_none_ops = {
 	gfarm_none_mdhost_modify,
 	gfarm_none_mdhost_remove,
 	gfarm_none_mdhost_load,
-
-	gfarm_none_fsngroup_modify,
 };

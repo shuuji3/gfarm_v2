@@ -22,7 +22,6 @@
 
 #include "gfarm_secure_session.h"
 
-#include "context.h"
 #include "liberror.h"
 #include "iobuffer.h"
 #include "gfp_xdr.h"
@@ -54,8 +53,8 @@ gfarm_iobuffer_read_session_x(struct gfarm_iobuffer *b, void *cookie, int fd,
 {
 	struct io_gfsl *io = cookie;
 	int rv;
-	int msec = do_timeout ? gfarm_ctxp->network_receive_timeout * 1000
-		: GFARM_GSS_TIMEOUT_INFINITE;
+	int msec = do_timeout ? gfarm_network_receive_timeout * 1000
+    	    : GFARM_GSS_TIMEOUT_INFINITE;
 
 	if (io->buffer == NULL) {
 		int flag = fcntl(fd, F_GETFL, NULL);
@@ -97,14 +96,14 @@ int
 gfarm_iobuffer_read_timeout_secsession_op(struct gfarm_iobuffer *b,
 	void *cookie, int fd, void *data, int length)
 {
-	return (gfarm_iobuffer_read_session_x(b, cookie, fd, data, length, 1));
+	return gfarm_iobuffer_read_session_x(b, cookie, fd, data, length, 1);
 }
 
 int
 gfarm_iobuffer_read_notimeout_secsession_op(struct gfarm_iobuffer *b,
 	void *cookie, int fd, void *data, int length)
 {
-	return (gfarm_iobuffer_read_session_x(b, cookie, fd, data, length, 0));
+	return gfarm_iobuffer_read_session_x(b, cookie, fd, data, length, 0);
 }
 
 int
@@ -148,7 +147,7 @@ free_secsession(struct io_gfsl *io)
 		gfarmGssPrintMajorStatus(e_major);
 		gfarmGssPrintMinorStatus(e_minor);
 	}
-
+		
 	if (io->buffer != NULL)
 		free(io->buffer);
 	free(io);
@@ -177,7 +176,7 @@ gfp_iobuffer_export_credential_secsession_op(void *cookie)
 	struct io_gfsl *io = cookie;
 	OM_uint32 e_major;
 	gss_cred_id_t cred;
-
+       
 	cred = gfarmSecSessionGetDelegatedCredential(io->session);
 	if (cred == GSS_C_NO_CREDENTIAL)
 		return (GFARM_ERRMSG_GSI_DELEGATED_CREDENTIAL_NOT_EXIST);
@@ -214,6 +213,8 @@ struct gfp_iobuffer_ops gfp_xdr_secsession_iobuffer_ops = {
 	gfp_iobuffer_export_credential_secsession_op,
 	gfp_iobuffer_delete_credential_secsession_op,
 	gfp_iobuffer_env_for_credential_secsession_op,
+	gfarm_iobuffer_read_notimeout_secsession_op,
+	gfarm_iobuffer_write_secsession_op,
 	gfarm_iobuffer_read_timeout_secsession_op,
 	gfarm_iobuffer_read_notimeout_secsession_op,
 	gfarm_iobuffer_write_secsession_op
@@ -279,6 +280,8 @@ static struct gfp_iobuffer_ops gfp_xdr_insecure_gsi_session_iobuffer_ops = {
 	gfp_iobuffer_delete_credential_secsession_op,
 	gfp_iobuffer_env_for_credential_secsession_op,
 	/* NOTE: the following assumes that these functions don't use cookie */
+	gfarm_iobuffer_nonblocking_read_fd_op,
+	gfarm_iobuffer_nonblocking_write_socket_op,
 	gfarm_iobuffer_blocking_read_timeout_fd_op,
 	gfarm_iobuffer_blocking_read_notimeout_fd_op,
 	gfarm_iobuffer_blocking_write_socket_op
