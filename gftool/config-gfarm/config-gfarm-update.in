@@ -16,7 +16,6 @@ datadir="@datadir@"
 config_dir="${datadir}/gfarm/config"
 
 PRIVATE_MODE=false
-PRIVATE_MODE_FOR_DEBIAN=false
 
 PATH="${prefix}/bin:${prefix}/sbin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/ucb:/usr/pkg/bin:/usr/pkg/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
 export PATH
@@ -111,8 +110,8 @@ tf2ed()
 
 display_params()
 {
-    echo "prefix                 [--prefix]: $CONFIG_PREFIX"
-    echo "metadata backend             [-b]: $BACKEND_TYPE"
+    echo     "prefix [--prefix]: $CONFIG_PREFIX"
+    echo     "metadata backend    [-b]: $BACKEND_TYPE"
 
     display_plain_params_backend_$BACKEND_TYPE
     display_plain_params_backend_port_$BACKEND_TYPE

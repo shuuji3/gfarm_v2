@@ -1,19 +1,8 @@
-/*
- * NOTE:
- * only slave gfmd knows this bit representation.
- * clients and master gfmd should NOT assume any bit pattern,
- * except GFARM_DESCRIPTOR_INVALID is an invalid descriptor.
- */
-#define FD_BIT_SLAVE		0x80000000
-#define FD_IS_SLAVE_ONLY(fd)	(((fd) & FD_BIT_SLAVE) != 0)
-
-#define FLAG_IS_SLAVE_ONLY(flag) (((flag) & GFARM_FILE_SLAVE_ONLY) != 0)
-
 struct process;
 
 struct inode;
 struct host;
-struct file_replication;
+struct file_replicating;
 struct replication_info;
 
 struct process *process_lookup(gfarm_pid_t);
@@ -29,7 +18,7 @@ void process_detach_peer(struct process *, struct peer *);
 struct user *process_get_user(struct process *);
 
 gfarm_error_t process_verify_fd(struct process *, int);
-gfarm_error_t process_record_replica_spec(struct process *, int, int, char *);
+gfarm_error_t process_record_desired_number(struct process *, int, int);
 gfarm_error_t process_get_file_inode(struct process *, int,
 	struct inode **);
 gfarm_error_t process_get_file_writable(struct process *, struct peer *, int);
@@ -65,7 +54,6 @@ struct file_opening {
 			struct peer *spool_opener;
 			struct host *spool_host;
 			int desired_replica_number;
-			char *repattr;
 
 			/* only used by client initiated replication */
 			struct replication_info *replica_source;
@@ -73,9 +61,6 @@ struct file_opening {
 		struct opening_dir {
 			gfarm_off_t offset;
 			char *key;
-
-			/* the followings are only used if FD_IS_SLAVE_ONLY */
-			gfarm_uint64_t igen;
 		} d;
 	} u;
 
@@ -104,8 +89,6 @@ struct file_opening {
 
 gfarm_error_t process_open_file(struct process *, struct inode *,
 	gfarm_int32_t, int, struct peer *, struct host *, gfarm_int32_t *);
-gfarm_error_t process_open_slave_file(struct process *, struct inode *,
-	gfarm_int32_t, int, struct peer *, struct host *, gfarm_int32_t *);
 gfarm_error_t process_schedule_file(struct process *,
 	struct peer *, int, gfarm_int32_t *, struct host ***);
 gfarm_error_t process_reopen_file(struct process *,
@@ -127,29 +110,19 @@ gfarm_error_t process_cksum_get(struct process *, struct peer *, int,
 	char **, size_t *, char **, gfarm_int32_t *);
 gfarm_error_t process_get_file_opening(struct process *, int,
 	struct file_opening **);
-gfarm_error_t process_get_slave_file_opening(struct process *, int,
-	struct file_opening **);
 
 struct peer;
-gfarm_error_t gfm_server_process_alloc(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-#ifdef NOT_USED
-gfarm_error_t gfm_server_process_alloc_child(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-#endif
-gfarm_error_t gfm_server_process_free(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_process_set(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
+gfarm_error_t gfm_server_process_alloc(struct peer *, int, int);
+gfarm_error_t gfm_server_process_alloc_child(struct peer *, int, int);
+gfarm_error_t gfm_server_process_free(struct peer *, int, int);
+gfarm_error_t gfm_server_process_set(struct peer *, int, int);
 
-gfarm_error_t gfm_server_bequeath_fd(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
-gfarm_error_t gfm_server_inherit_fd(
-	struct peer *, gfp_xdr_xid_t, size_t *, int, int);
+gfarm_error_t gfm_server_bequeath_fd(struct peer *, int, int);
+gfarm_error_t gfm_server_inherit_fd(struct peer *, int, int);
 
 gfarm_error_t process_prepare_to_replicate(struct process *, struct peer *,
 	struct host *, struct host *, int, gfarm_int32_t,
-	struct file_replication **, struct inode **);
+	struct file_replicating **, struct inode **);
 gfarm_error_t process_replica_adding(struct process *, struct peer *,
 	struct host *, struct host *, int, struct inode **);
 gfarm_error_t process_replica_added(struct process *, struct peer *,

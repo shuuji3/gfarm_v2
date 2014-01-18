@@ -2,12 +2,12 @@
 .\"     Title: gfarm2.conf
 .\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
-.\"      Date: 12 Jun 2013
+.\"      Date: 20 Nov 2012
 .\"    Manual: Gfarm
 .\"    Source: Gfarm
 .\"  Language: English
 .\"
-.TH "GFARM2\&.CONF" "5" "12 Jun 2013" "Gfarm" "Gfarm"
+.TH "GFARM2\&.CONF" "5" "20 Nov 2012" "Gfarm" "Gfarm"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -279,6 +279,23 @@ For example,
 .\}
 .nf
 	spool_check_level disable
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+spool_base_load \fIload\-average\fR
+.RS 4
+This statement specifies the CPU load adding to the real CPU load\&. This option is only available for a gfsd node (or a file system node)\&. The default base load is 0\&.0\&. This option can be used to pretend to be busy or idle to change the scheduling priority\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	spool_base_load 1\&.0
 .fi
 .if n \{\
 .RE
@@ -785,6 +802,13 @@ gsi; and all other hosts will be authenticated by
 gsi\&. Note that two hosts, 192\&.168\&.0\&.100 and 192\&.168\&.0\&.101, will be tested for authentication by gsi only\&.
 .RE
 .PP
+shared_key_file \fIpathname\fR
+.RS 4
+The
+shared_key_file
+statement specifies a pathname of the shared secret key file in sharedsecret authentication\&.
+.RE
+.PP
 sockopt \fIoption\fR\fI[=\fR\fIvalue\fR\fI] [\fR\fILISTENER\fR\fI | \fR\fI\fIHost_specification\fR\fR\fI]\fR
 .RS 4
 The
@@ -1205,43 +1229,9 @@ For example,
 .\}
 .RE
 .PP
-gfs_proto_fhremove_request_window \fInumber\fR
-.RS 4
-This directive specifies maximum number of outstanding replica removal requests from gfmd to gfsd\&. The default is 50\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_fhremove_request_window 50
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-gfs_proto_replication_request_window \fInumber\fR
-.RS 4
-This directive specifies maximum number of outstanding gfmd\-initiated replication requests from gfmd to destination\-side gfsd\&. The default is 20\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_replication_request_window 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 simultaneous_replication_receivers \fInumber\fR
 .RS 4
-This directive is just an alias of the gfs_proto_replication_request_window directive since gfarm\-2\&.6\&. Please use that directive instead\&. This directive remains for compatibility with older versions\&. The default is 20\&.
+This directive specifies maximum number of simultaneous gfmd\-initiated replications to same host\&. The default is 20\&.
 .sp
 For example,
 .sp
@@ -1249,24 +1239,7 @@ For example,
 .RS 4
 .\}
 .nf
-	simultaneous_replication_receivers 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-outstanding_file_replication_limit \fInumber\fR
-.RS 4
-This directive specifies maximum number of outstanding gfmd\-initiated replication requests in whole system\&. This exists to prevent memory shortage of gfmd\&. The default is 4194304 and this value corresponds to approximately 512MB memory\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 .fi
 .if n \{\
 .RE
@@ -1356,23 +1329,6 @@ For example,
 .\}
 .nf
 	attr_cache_timeout 3600000
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-page_cache_timeout \fImilliseconds\fR
-.RS 4
-This directive specifies maximum time until cached pages expire in milliseconds only related to linux kernel driver\&. The default is 1000, i\&.e\&. 1 second\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-        page_cache_timeout 3600000
 .fi
 .if n \{\
 .RE
@@ -1722,27 +1678,6 @@ Example:
 .\}
 .RE
 .PP
-metadb_server_slave_listen \fIvalidity\fR
-.RS 4
-When "enable" is specified, even if the gfmd is set to slave, it receives requests from clients\&. The default is "disable"\&.
-.sp
-NOTE: Please do not set this directive for ordinary use, because this feature is only for development\&.
-.sp
-This parameter is only available in gfmd\&.conf\&.
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	metadb_server_slave_listen enable
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 metadb_server_slave_max_size \fInumber\fR
 .RS 4
 This parameter specifies the maximum number of slave gfmds\&. The default is "32"\&.
@@ -1840,7 +1775,7 @@ Example:
 .PP
 replica_check_host_down_thresh \fIseconds\fR
 .RS 4
-If a gfsd is down, the replica_check assumes that the gfsd is not down until the specified seconds\&. This is useful to maintain a gfsd\&. The default value is 10800 seconds (3 hours)\&.
+This statement specifies an interval to start replica check after a gfsd is down\&. The default value is 10800 seconds (3 hours)\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1859,7 +1794,7 @@ Example:
 .PP
 replica_check_sleep_time \fInanoseconds\fR
 .RS 4
-If this value is increased, the replica_check works more slowly only when the gfmd is busy\&. When the gfmd is not busy, the replica_check works at full speed\&. This directive specifies the nanoseconds to sleep in the replica_check\&. The default value is 100000 nanoseconds (0\&.1 millisecond)\&. The maximum value is 1000000000 nanoseconds (1 second)\&.
+This statement specifies the sleep time in nanoseconds during the replica check when gfmd is busy\&. The default value is 100000 nanoseconds (0\&.1 millisecond)\&. The maximum value is 1000000000 nanoseconds (1 second)\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1878,7 +1813,7 @@ Example:
 .PP
 replica_check_minimum_interval \fIseconds\fR
 .RS 4
-This directive specifies the minimum interval in seconds, for the replica_check to work\&. The default value is 10 seconds, i\&.e\&. the replica_check can work up to one time every 10 seconds\&.
+This statement specifies the minimum interval in seconds, to start the next replica check\&. The default value is 10 seconds\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1912,6 +1847,7 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<spool_server_cred_service_statement> |
 	<spool_server_cred_name_statement> |
 	<spool_check_level_statement> |
+	<spool_base_load_statement> |
 	<metadb_server_host_statement> |
 	<metadb_server_port_statement> |
 	<metadb_server_cred_type_statement> |
@@ -1936,6 +1872,7 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<postgresql_password_statement> |
 	<postgresql_conninfo_statement> |
 	<auth_statement> |
+	<shared_key_file_statement> |
 
 	<sockopt_statement> |
 
@@ -1960,16 +1897,12 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<write_local_priority_statement> |
 	<write_target_domain_statement> |
 	<minimum_free_disk_space_statement> |
-	<gfs_proto_fhremove_request_window_statement> |
-	<gfs_proto_replication_request_window_statement> |
 	<simultaneous_replication_receivers_statement> |
-	<outstanding_file_replication_limit_statement> |
 	<gfsd_connection_cache_statement> |
 	<xmlattr_size_limit_statement> |
 	<xattr_size_limit_statement> |
 	<attr_cache_limit_statement> |
 	<attr_cache_timeout_statement> |
-	<page_cache_timeout_statement> |
 	<log_level_statement> |
 	<log_message_verbose_level_statement> |
 	<log_auth_verbose_statement> |
@@ -1986,7 +1919,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<synchronous_replication_timeout_statement> |
 	<synchronous_journaling_statement> |
 	<metadb_server_force_slave_statement> |
-	<metadb_server_slave_listen_statement> |
 	<metadb_server_slave_max_size_statement> |
 	<metadb_journal_dir_statement> |
 	<metadb_journal_max_size_statement> |
@@ -2093,6 +2025,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "spool_check_level" <spck_level>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<spool_base_load_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"spool_base_load" <load>
 .fi
 .if n \{\
 .RE
@@ -2463,6 +2409,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
+<shared_key_file_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"shared_key_file" <pathname>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 <sockopt_statement> ::=
 .RS 4
 .sp
@@ -2774,34 +2734,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
-<gfs_proto_fhremove_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_fhremove_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<gfs_proto_replication_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_replication_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 <simultaneous_replication_receivers_statement> ::=
 .RS 4
 .sp
@@ -2810,20 +2742,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "simultaneous_replication_receivers" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<outstanding_file_replication_limit_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"outstanding_file_replication_limit" <number>
 .fi
 .if n \{\
 .RE
@@ -2894,20 +2812,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "attr_cache_timeout" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<page_cache_timeout_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"page_cache_timeout" <number>
 .fi
 .if n \{\
 .RE
@@ -3161,20 +3065,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "metadb_server_force_slave" <validity>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<metadb_server_slave_listen_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"metadb_server_slave_listen" <validity>
 .fi
 .if n \{\
 .RE

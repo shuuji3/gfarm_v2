@@ -9,13 +9,14 @@
 #include "gfutil.h"
 
 #include "gfm_client.h"
+#include "config.h"
 #include "lookup.h"
 #include "gfs_io.h"
 
 static gfarm_error_t
 gfm_open_flag_check(int flag)
 {
-	if (flag & ~GFARM_FILE_USER_OPEN_FLAGS)
+	if (flag & ~GFARM_FILE_USER_MODE)
 		return (GFARM_ERR_INVALID_ARGUMENT);
 	if ((flag & GFARM_FILE_ACCMODE) == GFARM_FILE_LOOKUP)
 		return (GFARM_ERR_INVALID_ARGUMENT);
@@ -45,18 +46,17 @@ struct gfm_create_fd_closure {
 };
 
 static gfarm_error_t
-gfm_create_fd_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure,
+gfm_create_fd_request(struct gfm_connection *gfm_server, void *closure,
 	const char *base)
 {
 	struct gfm_create_fd_closure *c = closure;
 	gfarm_error_t e;
 
-	if ((e = gfm_client_create_request(gfm_server, ctx, base,
+	if ((e = gfm_client_create_request(gfm_server, base,
 	    c->flags, c->mode_to_create)) != GFARM_ERR_NO_ERROR) {
 		gflog_warning(GFARM_MSG_1000080, "create(%s) request: %s",
 		    base, gfarm_error_string(e));
-	} else if ((e = gfm_client_get_fd_request(gfm_server, ctx))
+	} else if ((e = gfm_client_get_fd_request(gfm_server))
 	    != GFARM_ERR_NO_ERROR) {
 		gflog_warning(GFARM_MSG_1000081, "get_fd(%s) request: %s",
 		    base, gfarm_error_string(e));
@@ -65,20 +65,19 @@ gfm_create_fd_request(struct gfm_connection *gfm_server,
 }
 
 static gfarm_error_t
-gfm_create_fd_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_create_fd_result(struct gfm_connection *gfm_server, void *closure)
 {
 	struct gfm_create_fd_closure *c = closure;
 	gfarm_error_t e;
 
-	if ((e = gfm_client_create_result(gfm_server, ctx, 
+	if ((e = gfm_client_create_result(gfm_server,
 	    c->inump, c->igenp, &c->mode_created))
 	    != GFARM_ERR_NO_ERROR) {
 #if 0 /* DEBUG */
 		gflog_debug(GFARM_MSG_1000082,
 		    "create() result: %s", gfarm_error_string(e));
 #endif
-	} else if ((e = gfm_client_get_fd_result(gfm_server, ctx, &c->fd))
+	} else if ((e = gfm_client_get_fd_result(gfm_server, &c->fd))
 	    != GFARM_ERR_NO_ERROR) {
 		gflog_warning(GFARM_MSG_1000083,
 		    "get_fd() result: %s", gfarm_error_string(e));
@@ -119,7 +118,7 @@ gfm_create_fd(const char *path, int flags, gfarm_mode_t mode,
 		return (e);
 	}
 
-	closure.flags = flags & GFARM_FILE_USER_MODE;
+	closure.flags = flags;
 	closure.mode_to_create = mode;
 	closure.gfm_serverp = gfm_serverp;
 	closure.fdp = fdp;
@@ -128,11 +127,11 @@ gfm_create_fd(const char *path, int flags, gfarm_mode_t mode,
 	closure.igenp = igenp;
 	closure.urlp = urlp;
 
-	return (gfm_name_op_modifiable(path, GFARM_ERR_IS_A_DIRECTORY,
+	return (gfm_name_op(path, GFARM_ERR_IS_A_DIRECTORY,
 	    gfm_create_fd_request,
 	    gfm_create_fd_result,
 	    gfm_create_fd_success,
-	    NULL, &closure));
+	    &closure));
 }
 
 /*
@@ -149,10 +148,9 @@ struct gfm_open_fd_closure {
 };
 
 static gfarm_error_t
-gfm_open_fd_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_open_fd_request(struct gfm_connection *gfm_server, void *closure)
 {
-	gfarm_error_t e = gfm_client_get_fd_request(gfm_server, ctx);
+	gfarm_error_t e = gfm_client_get_fd_request(gfm_server);
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_warning(GFARM_MSG_1000084,
@@ -161,11 +159,10 @@ gfm_open_fd_request(struct gfm_connection *gfm_server,
 }
 
 static gfarm_error_t
-gfm_open_fd_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_open_fd_result(struct gfm_connection *gfm_server, void *closure)
 {
 	struct gfm_open_fd_closure *c = closure;
-	gfarm_error_t e = gfm_client_get_fd_result(gfm_server, ctx, &c->fd);
+	gfarm_error_t e = gfm_client_get_fd_result(gfm_server, &c->fd);
 
 #if 0 /* DEBUG */
 	if (e != GFARM_ERR_NO_ERROR)
@@ -216,11 +213,11 @@ gfm_open_fd_with_ino(const char *path, int flags,
 	closure.typep = typep;
 	closure.inump = inump;
 	closure.urlp = urlp;
-	return (gfm_inode_op_modifiable(path, flags & GFARM_FILE_USER_MODE,
+	return (gfm_inode_op(path, flags,
 	    gfm_open_fd_request,
 	    gfm_open_fd_result,
 	    gfm_open_fd_success,
-	    NULL, NULL,
+	    NULL,
 	    &closure));
 }
 
@@ -233,10 +230,9 @@ gfm_open_fd(const char *path, int flags,
 }
 
 static gfarm_error_t
-gfm_close_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_close_request(struct gfm_connection *gfm_server, void *closure)
 {
-	gfarm_error_t e = gfm_client_close_request(gfm_server, ctx);
+	gfarm_error_t e = gfm_client_close_request(gfm_server);
 
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_warning(GFARM_MSG_1000086,
@@ -245,10 +241,9 @@ gfm_close_request(struct gfm_connection *gfm_server,
 }
 
 static gfarm_error_t
-gfm_close_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_close_result(struct gfm_connection *gfm_server, void *closure)
 {
-	gfarm_error_t e = gfm_client_close_result(gfm_server, ctx);
+	gfarm_error_t e = gfm_client_close_result(gfm_server);
 
 #if 1 /* DEBUG */
 	if (e != GFARM_ERR_NO_ERROR)
@@ -268,12 +263,6 @@ gfm_close_result(struct gfm_connection *gfm_server,
 gfarm_error_t
 gfm_close_fd(struct gfm_connection *gfm_server, int fd)
 {
-	gfarm_error_t e;
-
-	if ((e = gfm_client_compound_fd_op(gfm_server, fd,
-	    gfm_close_request, gfm_close_result, NULL, NULL))
-	    != GFARM_ERR_NO_ERROR)
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfm_close_fd fd=%d: %s", fd, gfarm_error_string(e));
-	return (e);
+	return (gfm_client_compound_fd_op(gfm_server, fd,
+	    gfm_close_request, gfm_close_result, NULL, NULL));
 }
