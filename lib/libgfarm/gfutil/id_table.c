@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include <gfarm/error.h>
 #include <gfarm/gflog.h>
@@ -69,9 +68,10 @@ gfarm_id_table_alloc(struct gfarm_id_table_entry_ops *entry_ops)
 	/* this assumes sizeof(struct gfarm_id_free_data) is power of 2 */
 	if ((sizeof(struct gfarm_id_free_data) &
 	     (sizeof(struct gfarm_id_free_data) - 1)) != 0) {
-		gflog_fatal(GFARM_MSG_1003251,
+		gflog_error(GFARM_MSG_1003251,
 		    "gfarm_id_table_alloc: unexpected struct size %zd",
 		    sizeof(struct gfarm_id_free_data));
+		abort();
 	}
 	if (entry_ops->entry_size == 0)
 		idtab->entry_size = sizeof(struct gfarm_id_free_data);
@@ -581,28 +581,6 @@ gfarm_id_lookup(struct gfarm_id_table *idtab, gfarm_int32_t id)
 	if (entry != NULL)
 		return (entry->data);
 	return (NULL);
-}
-
-int
-gfarm_id_alloc_at(struct gfarm_id_table *idtab, gfarm_int32_t id,
-	void **entryp)
-{
-	void *entry = gfarm_id_lookup(idtab, id);
-	gfarm_int32_t new_id;
-
-	if (entry != NULL)
-		return (EALREADY);
-	idtab->id_next = id;
-	entry = gfarm_id_alloc(idtab, &new_id);
-	if (entry == NULL)
-		return (ENOMEM);
-	if (new_id != id) {
-		gfarm_id_free(idtab, new_id);
-		return (EINVAL);
-	}
-
-	*entryp = entry;
-	return (0);
 }
 
 int

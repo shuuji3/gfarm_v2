@@ -2,12 +2,12 @@
 .\"     Title: gfarm2.conf
 .\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
-.\"      Date: 12 Nov 2013
+.\"      Date: 20 Nov 2012
 .\"    Manual: Gfarm
 .\"    Source: Gfarm
 .\"  Language: English
 .\"
-.TH "GFARM2\&.CONF" "5" "12 Nov 2013" "Gfarm" "Gfarm"
+.TH "GFARM2\&.CONF" "5" "20 Nov 2012" "Gfarm" "Gfarm"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -249,6 +249,23 @@ gfsd起動時のスプールチェックを有効にします。スプールチ�
 .\}
 .nf
 	spool_check_level disable
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+spool_base_load \fICPU負荷\fR
+.RS 4
+指定されたCPU負荷をgfsdのCPU負荷に加えます。 このオプションはgfsdノード（ファイルシステムノード）でのみ有効です。 デフォルトは0\&.0です。 このオプションにより、スケジューリングの優先度を変更することができます。
+.sp
+例:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	spool_base_load 1\&.0
 .fi
 .if n \{\
 .RE
@@ -684,6 +701,28 @@ gsiの両方を、 それ以外の全てのホストにはgsi認証のみを試�
 gsi認証のみを試みることになります。
 .RE
 .PP
+shared_key_file \fIパス名\fR
+.RS 4
+sharedsecret認証に用いる秘密鍵ファイルのパス名を指定します。
+.RE
+.PP
+digest \fIdigestタイプ\fR
+.RS 4
+チェックサム計算を有効にし、 digestタイプで指定されたチェックサムを計算します。 digestタイプとしては、現在のところ md5 がサポートされています。 この文は gfmd\&.conf に対して有効です。
+.sp
+例:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	digest md5
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 sockopt \fIオプション\fR\fI[=\fR\fI値\fR\fI] [\fR\fILISTENER\fR\fI | \fR\fI\fIホスト指定\fR\fR\fI]\fR
 .RS 4
 通信socket(2)に対して、setsockopt(2)システムコールを使って ソケット・オプションを指定します。
@@ -1048,7 +1087,7 @@ gfarmがファイルを書き込むノードを決める際、できる限りこ
 .PP
 minimum_free_disk_space \fIバイト数\fR
 .RS 4
-ファイルシステムノードで必要な最小限度のディスク空き容量を指定 します。このサイズ以下の空き容量しかないファイルシステムノードは、 ファイル書き込みを行う可能性のある操作を行う際に、選択されにくくなります。 指定はバイト単位で行いますが、数字の末尾に空白を開けずにk/M/G/Tを指定 することで、それぞれ1kバイト／1Mバイト／1Gバイト／1Tバイトを単位とする ことができます。 デフォルトは128Mバイトです。
+ファイルシステムノードで必要な最小限度のディスク空き容量を指定 します。このサイズ以下の空き容量しかないファイルシステムノードは、 ファイル書き込みを行う可能性のある操作を行う際に、選択されにくくなります。 指定はバイト単位で行いますが、数字の末尾に空白を開けずにk/M/G/Tを指定 することで、それぞれ1kバイト／1Mバイト／1Gバイト／1Tバイトを単位とする ことができます。 デフォルトは512Mバイトです。
 .sp
 このパラメータは、gfarm2\&.confとgfmd\&.confの両方で指定する必要があります。 有効にするためには gfmd および Gfarmクライアントを再起動する必要があります。
 .sp
@@ -1065,43 +1104,9 @@ minimum_free_disk_space \fIバイト数\fR
 .\}
 .RE
 .PP
-gfs_proto_fhremove_request_window \fI同時処理数\fR
-.RS 4
-gfmd から gfsd に対する複製ファイル削除を、 同時にいくつまで並行して要求できるかを設定します。 デフォルトは 50 です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_fhremove_request_window 50
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-gfs_proto_replication_request_window \fI同時処理数\fR
-.RS 4
-gfmd 主導の複製処理を、gfmd から複製作成側の gfsd に対して、 同時にいくつまで並行して要求できるかを設定します。 デフォルトは 20 です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_replication_request_window 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 simultaneous_replication_receivers \fI同時処理数\fR
 .RS 4
-gfarm\-2\&.6 以降では、 このパラメータは gfs_proto_replication_request_window と同じ意味となりますので、 そちらを利用してください。 このパラメータは以前のバージョンとの互換性のために残されています。 デフォルトは 20です。
+gfmd 主導の複製処理を、単一複製作成ホストに対して、 同時にいくつまで並行して行なうことを許すかを設定します。 デフォルトは 20です。
 .sp
 例:
 .sp
@@ -1109,24 +1114,7 @@ gfarm\-2\&.6 以降では、 このパラメータは gfs_proto_replication_requ
 .RS 4
 .\}
 .nf
-	simultaneous_replication_receivers 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-outstanding_file_replication_limit \fI同時処理数\fR
-.RS 4
-gfmd 主導の複製処理要求を、システム全体で、 同時にいくつまで未了のまま保持しておけるかを設定します。 このパラメータは、大量の複製要求によるメモリ不足を防ぐために存在します。 デフォルトは 4194304 であり、これはおよそ 512MB のメモリに対応します。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 .fi
 .if n \{\
 .RE
@@ -1216,23 +1204,6 @@ gfarmライブラリが属性をキャッシュしている時間を、ミリ秒
 .\}
 .nf
 	attr_cache_timeout 3600000
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-page_cache_timeout \fIミリ秒数\fR
-.RS 4
-gfarmカーネルドライバにのみ関連する値で、ファイルデータを キャッシュしている時間を、ミリ秒単位で指定します。 デフォルトは 1000ミリ秒すなわち 1秒です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	page_cache_timeout 3600000
 .fi
 .if n \{\
 .RE
@@ -1579,27 +1550,6 @@ enable のとき、デフォルトのマスターgfmdとして設定されてい
 .\}
 .RE
 .PP
-metadb_server_slave_listen \fI有効性\fR
-.RS 4
-enable のとき、スレーブgfmdとして設定されている場合でも、クライアントからの要求を受け付けます。 デフォルトはdisableです。
-.sp
-注意: この機能は開発用に用意されていますので、通常の用途では設定しないでください。
-.sp
-この文はgfmd\&.confのみで有効です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	metadb_server_slave_listen enable
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 metadb_server_slave_max_size \fIノード数\fR
 .RS 4
 スレーブgfmdの最大ノード数を指定します。デフォルトは16です。
@@ -1762,13 +1712,14 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .RS 4
 .\}
 .nf
-<spool_statement> |
+	<spool_statement> |
 	<spool_server_listen_address_statement> |
 	<spool_server_listen_backlog_statement> |
 	<spool_server_cred_type_statement> |
 	<spool_server_cred_service_statement> |
 	<spool_server_cred_name_statement> |
 	<spool_check_level_statement> |
+	<spool_base_load_statement> |
 	<metadb_server_host_statement> |
 	<metadb_server_port_statement> |
 	<metadb_server_cred_type_statement> |
@@ -1793,6 +1744,8 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 	<postgresql_password_statement> |
 	<postgresql_conninfo_statement> |
 	<auth_statement> |
+	<shared_key_file_statement> |
+	<digest_statement> |
 
 	<sockopt_statement> |
 
@@ -1817,16 +1770,12 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 	<write_local_priority_statement> |
 	<write_target_domain_statement> |
 	<minimum_free_disk_space_statement> |
-	<gfs_proto_fhremove_request_window_statement> |
-	<gfs_proto_replication_request_window_statement> |
 	<simultaneous_replication_receivers_statement> |
-	<outstanding_file_replication_limit_statement> |
 	<gfsd_connection_cache_statement> |
 	<xmlattr_size_limit_statement> |
 	<xattr_size_limit_statement> |
 	<attr_cache_limit_statement> |
 	<attr_cache_timeout_statement> |
-	<page_cache_timeout_statement> |
 	<log_level_statement> |
 	<log_message_verbose_level_statement> |
 	<log_auth_verbose_statement> |
@@ -1843,7 +1792,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 	<synchronous_replication_timeout_statement> |
 	<synchronous_journaling_statement> |
 	<metadb_server_force_slave_statement> |
-	<metadb_server_slave_listen_statement> |
 	<metadb_server_slave_max_size_statement> |
 	<metadb_journal_dir_statement> |
 	<metadb_journal_max_size_statement> |
@@ -1950,6 +1898,20 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "spool_check_level" <spck_level>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<spool_base_load_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"spool_base_load" <load>
 .fi
 .if n \{\
 .RE
@@ -2320,6 +2282,34 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .RE
 .PP
+<shared_key_file_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"shared_key_file" <pathname>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<digest_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"digest" <digest_type>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 <sockopt_statement> ::=
 .RS 4
 .sp
@@ -2631,34 +2621,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .RE
 .PP
-<gfs_proto_fhremove_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_fhremove_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<gfs_proto_replication_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_replication_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 <simultaneous_replication_receivers_statement> ::=
 .RS 4
 .sp
@@ -2667,20 +2629,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "simultaneous_replication_receivers" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<outstanding_file_replication_limit_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"outstanding_file_replication_limit" <number>
 .fi
 .if n \{\
 .RE
@@ -2751,20 +2699,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "attr_cache_timeout" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<page_cache_timeout_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"page_cache_timeout" <number>
 .fi
 .if n \{\
 .RE
@@ -3018,20 +2952,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "metadb_server_force_slave" <validity>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<metadb_server_slave_listen_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"metadb_server_slave_listen" <validity>
 .fi
 .if n \{\
 .RE
