@@ -5,7 +5,6 @@ struct gfp_conn_hash_id {
 };
 
 gfarm_error_t gfp_conn_hash_table_init(struct gfarm_hash_table **, int);
-void gfp_conn_hash_table_dispose(struct gfarm_hash_table *);
 gfarm_error_t gfp_conn_hash_enter(struct gfarm_hash_table **, int, size_t,
 	const char *, int, const char *, struct gfarm_hash_entry **, int *);
 gfarm_error_t gfp_conn_hash_enter_noalloc(struct gfarm_hash_table **, int,

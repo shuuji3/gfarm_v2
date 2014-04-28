@@ -26,7 +26,6 @@
 #include "queue.h"
 
 #include "config.h"
-#include "context.h"
 #include "gfarm_path.h"
 #include "gfm_client.h"
 #include "host.h"
@@ -185,7 +184,7 @@ gfprep_usage_common(int error)
 /* "\t[-R <#ratio (throughput: local=remote*ratio)(for -w greedy)>]\n" */
 "\t[-F <#dirents(readahead)>]\n",
 		program_name,
-		gfarm_ctxp->client_parallel_copy,
+		gfarm_client_parallel_copy,
 		GFPREP_PARALLEL_DIRTREE
 		);
 	if (strcmp(program_name, name_gfpcopy) == 0)
@@ -3288,7 +3287,7 @@ main(int argc, char *argv[])
 	}
 
 	if (opt_n_para <= 0)
-		opt_n_para = gfarm_ctxp->client_parallel_copy;
+		opt_n_para = gfarm_client_parallel_copy;
 	if (opt_n_para <= 0) {
 		gfprep_error("client_parallel_copy must be "
 			     "a positive interger");

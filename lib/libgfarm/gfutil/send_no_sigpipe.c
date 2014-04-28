@@ -4,7 +4,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifndef __KERNEL__	/* gfarm_sigpipe_ignore  ???*/
 static int sigpipe_is_ignored = 0;
 
 void
@@ -13,7 +12,6 @@ gfarm_sigpipe_ignore(void)
 	signal(SIGPIPE, SIG_IGN);
 	sigpipe_is_ignored = 1;
 }
-#endif /* __KERNEL__ */
 
 ssize_t
 gfarm_send_no_sigpipe(int fd, const void *data, size_t length)
