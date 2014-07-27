@@ -18,12 +18,11 @@
 #include <gfarm/error.h>
 #include <gfarm/gfarm_misc.h>
 
-#include "gfutil.h"
-
 #include "gfarm_secure_session.h"
 #include "gfarm_auth.h"
 
 #include "liberror.h"
+#include "gfutil.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
 #include "io_gfsl.h"
@@ -32,14 +31,12 @@
 
 #include "gfs_proto.h" /* for GFSD_USERNAME, XXX layering violation */
 
-
-
 /*
  * server side authentication
  */
 
 static gfarm_error_t
-gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
+gfarm_authorize_gsi_common0(struct gfp_xdr *conn, int switch_to,
 	char *service_tag, char *hostname, enum gfarm_auth_method auth_method,
 	gfarm_error_t (*auth_uid_to_global_user)(void *,
 	    enum gfarm_auth_method, const char *, char **), void *closure,
@@ -267,7 +264,6 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 		    userinfo->authData.userAuth.localName);
 		gfarm_set_local_homedir(
 		    userinfo->authData.userAuth.homeDir);
-
 		/*
 		 * set the delegated credential
 		 *
@@ -287,6 +283,23 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 	else
 		free(global_username);
 	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
+	char *service_tag, char *hostname, enum gfarm_auth_method auth_method,
+	gfarm_error_t (*auth_uid_to_global_user)(void *,
+	    enum gfarm_auth_method, const char *, char **), void *closure,
+	enum gfarm_auth_id_type *peer_typep, char **global_usernamep)
+{
+	gfarm_error_t e;
+
+	gfarm_gsi_server_init_count_increment();
+	e = gfarm_authorize_gsi_common0(conn, switch_to,
+	    service_tag, hostname, auth_method, auth_uid_to_global_user,
+	    closure, peer_typep, global_usernamep);
+	gfarm_gsi_server_init_count_decrement();
+	return (e);
 }
 
 /*

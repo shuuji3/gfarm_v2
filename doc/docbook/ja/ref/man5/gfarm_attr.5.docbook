@@ -5,7 +5,7 @@
 
 <refentry id="gfarm-attr.5">
 
-<refentryinfo><date>31 Mar 2014</date></refentryinfo>
+<refentryinfo><date>1 Apr 2011</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfarm_attr</refentrytitle>
@@ -76,18 +76,7 @@ XML拡張属性は，ファイルまたはディレクトリのパーミッシ�
 <term><parameter moreinfo="none">gfarm.ncopy</parameter></term>
 <listitem>
 <para>
-自動ファイル複製作成数を格納します．
-詳細は gfncopy コマンドのマニュアルを参照してください．
-</para>
-</listitem>
-</varlistentry>
-
-<varlistentry>
-<term><parameter moreinfo="none">gfarm.replicainfo</parameter></term>
-<listitem>
-<para>
-ホストグループごとの自動ファイル複製作成数を格納します．
-詳細は gfncopy コマンドのマニュアルを参照してください．
+gfmd で自動的にファイルを複製する際に目標とする複製の合計数を格納します．
 </para>
 </listitem>
 </varlistentry>
@@ -152,8 +141,6 @@ ACL(アクセスコントロールリスト)を格納します．
 <para>
   <citerefentry><refentrytitle>gfxattr</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
   <citerefentry><refentrytitle>gfgetfacl</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
-  <citerefentry><refentrytitle>gfsetfacl</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
-  <citerefentry><refentrytitle>gfncopy</refentrytitle><manvolnum>1</manvolnum></citerefentry>
-</para>
+  <citerefentry><refentrytitle>gfsetfacl</refentrytitle><manvolnum>1</manvolnum></citerefentry></para>
 </refsect1>
 </refentry>

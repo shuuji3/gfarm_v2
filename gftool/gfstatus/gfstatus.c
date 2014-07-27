@@ -7,8 +7,6 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <gfarm/gfarm.h>
-
-#include "context.h"
 #include "config.h"
 #include "auth.h"
 #include "host.h"
@@ -56,7 +54,7 @@ void
 usage(void)
 {
 	fprintf(stderr,
-	    "Usage:\t%s [-P <path>]\n",
+	    "Usage:\t%s [-d] [-V] [-P <path>]\n",
 	    program_name);
 	exit(EXIT_FAILURE);
 }
@@ -65,7 +63,7 @@ int
 main(int argc, char *argv[])
 {
 	gfarm_error_t e, e2;
-	int port, c;
+	int port, c, debug_mode = 0;
 	char *canonical_hostname, *hostname, *realpath = NULL;
 	const char *user, *gfmd_hostname;
 	const char *path = ".";
@@ -78,15 +76,20 @@ main(int argc, char *argv[])
 	if (argc > 0)
 		program_name = basename(argv[0]);
 
-	while ((c = getopt(argc, argv, "dP:?"))
+	while ((c = getopt(argc, argv, "dP:V?"))
 	    != -1) {
 		switch (c) {
 		case 'd':
+			debug_mode = 1;
 			gflog_set_priority_level(LOG_DEBUG);
+			gflog_auth_set_verbose(1);
 			break;
 		case 'P':
 			path = optarg;
 			break;
+		case 'V':
+			fprintf(stderr, "Gfarm version %s\n", gfarm_version());
+			exit(0);
 		case '?':
 			usage();
 		}
@@ -96,7 +99,11 @@ main(int argc, char *argv[])
 
 	e = gfarm_initialize(&argc, &argv);
 	error_check("gfarm_initialize", e);
-
+	if (debug_mode) {
+		/* set again since gfarm_initialize overwrites them */
+		gflog_set_priority_level(LOG_DEBUG);
+		gflog_auth_set_verbose(1);
+	}
 	if (gfarm_realpath_by_gfarm2fs(path, &realpath) == GFARM_ERR_NO_ERROR)
 		path = realpath;
 	if ((e = gfm_client_connection_and_process_acquire_by_path(
@@ -117,7 +124,7 @@ main(int argc, char *argv[])
 	user = gfm_client_username(gfm_server);
 
 	print_user_config_file("user config file  ");
-	print_msg("system config file", gfarm_config_get_filename());
+	print_msg("system config file", gfarm_config_file);
 
 	puts("");
 	print_msg("hostname          ", gfarm_host_get_self_name());
@@ -160,8 +167,8 @@ main(int argc, char *argv[])
 	free(realpath);
 	print_msg("gfmd server name", gfmd_hostname);
 	printf("gfmd server port: %d\n", port);
-	print_msg("gfmd admin user", gfarm_ctxp->metadb_admin_user);
-	print_msg("gfmd admin dn  ", gfarm_ctxp->metadb_admin_user_gsi_dn);
+	print_msg("gfmd admin user", gfarm_metadb_admin_user);
+	print_msg("gfmd admin dn  ", gfarm_metadb_admin_user_gsi_dn);
 
 	gfm_client_connection_free(gfm_server);
 

@@ -12,7 +12,8 @@ int getloadavg(double *, int);
 
 int gfsd_statfs(char *, gfarm_int32_t *,
 	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *,
-	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);
+	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *,
+	int *);
 
 void gfsd_spool_check();
 
@@ -32,3 +33,4 @@ void fatal_full(int, const char *, int, const char *,
 
 void gfsd_local_path(gfarm_ino_t, gfarm_uint64_t, const char *, char **);
 int gfsd_create_ancestor_dir(char *);
+gfarm_error_t gfm_client_replica_lost(gfarm_ino_t, gfarm_uint64_t);

@@ -52,9 +52,3 @@ int gfarm_eventqueue_delete_event(struct gfarm_eventqueue *,
 
 int gfarm_eventqueue_turn(struct gfarm_eventqueue *, const struct timeval *);
 int gfarm_eventqueue_loop(struct gfarm_eventqueue *, const struct timeval *);
-
-#ifdef __KERNEL__
-struct gfarm_event *gfarm_kern_event_alloc(void *,
-	void (*)(int, int, void *, void *), void *);
-int gfarm_kern_eventqueue_getevfd(struct gfarm_eventqueue *);
-#endif /* __KERNEL__ */
