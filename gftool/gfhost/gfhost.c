@@ -28,10 +28,8 @@
 #include "gfm_client.h"
 #include "gfs_client.h"
 #include "lookup.h"
-#include "filesystem.h"
 #include "config.h"
 #include "gfarm_path.h"
-#include "context.h"
 
 char *program_name = "gfhost";
 
@@ -734,8 +732,6 @@ gfarm_paraccess_connect_request(void *closure)
 	struct gfarm_access *a = closure;
 	gfarm_error_t e;
 	struct gfs_client_connect_state *cs;
-	struct gfarm_filesystem *fs =
-	    gfarm_filesystem_get_by_connection(gfm_server);
 
 	e = gfs_client_get_load_result_multiplexed(a->protocol_state,
 	    &a->load);
@@ -745,7 +741,7 @@ gfarm_paraccess_connect_request(void *closure)
 	}
 	e = gfs_client_connect_request_multiplexed(a->pa->q,
 	    a->canonical_hostname, a->port, gfm_client_username(gfm_server),
-	    &a->peer_addr, fs, gfarm_paraccess_connect_finish, a, &cs);
+	    &a->peer_addr, gfarm_paraccess_connect_finish, a, &cs);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfarm_paraccess_callback(a->pa, a, &a->load, NULL, e);
 		return;
@@ -791,7 +787,7 @@ gfarm_paraccess_request(struct gfarm_paraccess *pa,
 	    gfarm_paraccess_connect_request :
 	    gfarm_paraccess_load_finish,
 	    a,
-	    &gls, 1);
+	    &gls);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfarm_paraccess_callback(pa, a, NULL, NULL, e);
 		return (e);
@@ -1431,20 +1427,18 @@ main(int argc, char **argv)
 		char *user = NULL;
 
 		e = gfarm_get_global_username_by_host_for_connection_cache(
-		    gfarm_ctxp->metadb_server_name,
-		    gfarm_ctxp->metadb_server_port, &user);
+		    gfarm_metadb_server_name, gfarm_metadb_server_port,
+		    &user);
 		if (e != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr, "gfarm_get_global_username_by_host_"
 			    "for_connection_cache: %s", gfarm_error_string(e));
 			exit(1);
 		}
 		if ((e = gfm_client_connection_acquire(
-		    gfarm_ctxp->metadb_server_name,
-		    gfarm_ctxp->metadb_server_port, user, &gfm_server))
-		    != GFARM_ERR_NO_ERROR) {
+		    gfarm_metadb_server_name, gfarm_metadb_server_port, user,
+		    &gfm_server)) != GFARM_ERR_NO_ERROR) {
 			fprintf(stderr, "metadata server `%s', port %d: %s\n",
-			    gfarm_ctxp->metadb_server_name,
-			    gfarm_ctxp->metadb_server_port,
+			    gfarm_metadb_server_name, gfarm_metadb_server_port,
 			    gfarm_error_string(e));
 			free(user);
 			exit(1);

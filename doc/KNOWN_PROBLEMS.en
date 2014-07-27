@@ -54,27 +54,7 @@ Please refer the following URL for more detail:
 	for the changes in the RPM:
 		http://rhn.redhat.com/errata/RHBA-2009-0241.html
 
-- gfmd-initiated replication (either an automatic replication by the
-  extended attribute gfarm.ncopy, or a replication which is requested by
-  gfs_replicate_file_to_request()/gfs_replicate_file_from_to_request())
-  may be canceled in some cases, for example, under a heavy load.
-	https://sourceforge.net/apps/trac/gfarm/ticket/245
-
-  Plans for fixes:
-	We are planning a fix until December 2011.
-
 - gfs_pio_sync() doesn't really update the metadata now.
-
-  Plans for fixes:
-	Not determined yet.
-
-- When a gfsd is stopped unexpectedly while the gfsd is being used to access
-  a file via an OPEN operation, the access stops working.
-
-  You have to reopen the file to access it again.
-
-  For example, this symptom happens when the filesystem node, which is
-  running the gfsd, is rebooted.
 
   Plans for fixes:
 	Not determined yet.
@@ -82,7 +62,7 @@ Please refer the following URL for more detail:
 - File view is not implemented.
 
   Plans for fixes:
-	Not determined yet.
+	No plan to support.
 
 - The stat API doesn't return the exact file size until the file is closed.
 
@@ -127,8 +107,7 @@ call
 - There is no way to stop a replication process.
 
   Even if you kill a gfrep command, a network copy process cannot be
-  stopped until the copy completes for the ongoing file fragment.
-  The metadata for the replica won't be updated, though.
+  stopped until the ongoing copy completes.
 
   Plans for fixes:
 	Not determined yet.
@@ -226,7 +205,7 @@ command.
 
 - The following commands are not provided yet:
 
-  gfdump, gfcd, gfpwd, gfsck, gftest
+  gfdump, gfcd, gfpwd
 
   Plans for fixes:
 	Not determined yet.

@@ -18,8 +18,6 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "queue.h"
 #include "gfutil.h"
 #include "thrsubr.h"
@@ -30,6 +28,7 @@
 #include "metadb_common.h"
 #include "xattr_info.h"
 #include "quota_info.h"
+#include "quota.h"
 #include "metadb_server.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
@@ -40,7 +39,6 @@
 #include "gfm_proto.h"
 
 #include "subr.h"
-#include "quota.h"
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_access.h"
@@ -56,14 +54,8 @@
 
 static struct journal_file	*self_jf;
 static const struct db_ops	*journal_apply_ops;
-/*
- * *_op function pointers defined for avoiding to depend other object files
- * because gfjournal command depends db_journal.o.
- */
 static void			(*db_journal_fail_store_op)(void);
 static gfarm_error_t		(*db_journal_sync_op)(gfarm_uint64_t);
-static void			(*db_journal_remove_db_update_info_op)(
-					gfarm_uint64_t, const char *);
 
 struct db_journal_recv_info {
 	gfarm_uint64_t from_sn, to_sn;
@@ -87,8 +79,6 @@ static const char SEQNUM_MUTEX_DIAG[]		= "journal_seqnum_mutex";
 static const char RECVQ_NONEMPTY_COND_DIAG[]	= "journal_recvq_nonempty_cond";
 static const char RECVQ_NONFULL_COND_DIAG[]	= "journal_recvq_nonfull_cond";
 static const char RECVQ_CANCEL_COND_DIAG[]	= "journal_recvq_cancel_cond";
-static const char DB_ACCESS_MUTEX_DIAG[]	= "db_access_mutex";
-
 
 static gfarm_uint64_t journal_seqnum = GFARM_METADB_SERVER_SEQNUM_INVALID;
 static gfarm_uint64_t journal_seqnum_pre = GFARM_METADB_SERVER_SEQNUM_INVALID;
@@ -209,12 +199,7 @@ db_journal_set_sync_op(gfarm_error_t (*func)(gfarm_uint64_t))
 	db_journal_sync_op = func;
 }
 
-void
-db_journal_set_remove_db_update_info_op(void (*func)(gfarm_uint64_t,
-	const char *))
-{
-	db_journal_remove_db_update_info_op = func;
-}
+#define DB_ACCESS_MUTEX_DIAG "db_access_mutex"
 
 gfarm_error_t
 db_journal_terminate(void)
@@ -228,7 +213,7 @@ gfarm_uint64_t
 db_journal_next_seqnum(void)
 {
 	gfarm_uint64_t n;
-	static const char diag[] = "db_journal_next_seqnum";
+	static const char *diag = "db_journal_next_seqnum";
 
 	gfarm_mutex_lock(&journal_seqnum_mutex, diag, SEQNUM_MUTEX_DIAG);
 	n = ++journal_seqnum;
@@ -240,7 +225,7 @@ gfarm_uint64_t
 db_journal_get_current_seqnum(void)
 {
 	gfarm_uint64_t n;
-	static const char diag[] = "db_journal_get_current_seqnum";
+	static const char *diag = "db_journal_get_current_seqnum";
 
 	gfarm_mutex_lock(&journal_seqnum_mutex, diag, SEQNUM_MUTEX_DIAG);
 	n = journal_seqnum;
@@ -251,7 +236,7 @@ db_journal_get_current_seqnum(void)
 static void
 db_journal_subtract_current_seqnum(int n)
 {
-	static const char diag[] = "db_journal_subtract_current_seqnum";
+	static const char *diag = "db_journal_subtract_current_seqnum";
 
 	gfarm_mutex_lock(&journal_seqnum_mutex, diag, SEQNUM_MUTEX_DIAG);
 	journal_seqnum -= n;
@@ -390,14 +375,6 @@ db_journal_host_modify_arg_destroy(struct db_host_modify_arg *arg)
 	gfarm_host_info_free(&arg->hi);
 	db_journal_string_array_free(arg->add_count, arg->add_aliases);
 	db_journal_string_array_free(arg->del_count, arg->del_aliases);
-	free(arg);
-}
-
-static void
-db_journal_fsngroup_modify_arg_destroy(struct db_fsngroup_modify_arg *arg)
-{
-	free(arg->hostname);
-	free(arg->fsngroupname);
 	free(arg);
 }
 
@@ -943,105 +920,6 @@ db_journal_write_host_remove(gfarm_uint64_t seqnum, char *hostname)
 {
 	return (db_journal_write_string(
 		seqnum, GFM_JOURNAL_HOST_REMOVE, hostname));
-}
-
-/**********************************************************/
-/* fsngroup */
-
-#define GFM_JOURNAL_FSNGROUP_CORE_XDR_FMT		"ss"
-
-static gfarm_error_t
-db_journal_write_fsngroup_size_add(enum journal_operation ope,
-	size_t *sizep, void *arg)
-{
-	gfarm_error_t e;
-	struct db_fsngroup_modify_arg *fsnarg =
-		(struct db_fsngroup_modify_arg *)arg;
-
-	if ((e = gfp_xdr_send_size_add(sizep,
-	    GFM_JOURNAL_FSNGROUP_CORE_XDR_FMT,
-	    NON_NULL_STR(fsnarg->hostname),
-	    NON_NULL_STR(fsnarg->fsngroupname))) != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
-			"gfp_xdr_send_size_add", e, ope);
-		return (e);
-	}
-	return (GFARM_ERR_NO_ERROR);
-}
-
-static gfarm_error_t
-db_journal_write_fsngroup_core(enum journal_operation ope, void *arg)
-{
-	gfarm_error_t e;
-	struct db_fsngroup_modify_arg *fsnarg =
-		(struct db_fsngroup_modify_arg *)arg;
-
-	if ((e = gfp_xdr_send(JOURNAL_W_XDR,
-	    GFM_JOURNAL_FSNGROUP_CORE_XDR_FMT,
-	    NON_NULL_STR(fsnarg->hostname),
-	    NON_NULL_STR(fsnarg->fsngroupname))) != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
-			"gfp_xdr_send", e, ope);
-		return (e);
-	}
-	return (GFARM_ERR_NO_ERROR);
-}
-
-static gfarm_error_t
-db_journal_write_fsngroup_modify(gfarm_uint64_t seqnum,
-	struct db_fsngroup_modify_arg *arg)
-{
-	return (db_journal_write(seqnum, GFM_JOURNAL_FSNGROUP_MODIFY, arg,
-		db_journal_write_fsngroup_size_add,
-		db_journal_write_fsngroup_core));
-}
-
-static gfarm_error_t
-db_journal_read_fsngroup_core(struct gfp_xdr *xdr, enum journal_operation ope,
-	struct db_fsngroup_modify_arg *fsnarg)
-{
-	gfarm_error_t e;
-	int eof;
-
-	if ((e = gfp_xdr_recv(xdr, 1, &eof,
-	    GFM_JOURNAL_FSNGROUP_CORE_XDR_FMT,
-	    &fsnarg->hostname,
-	    &fsnarg->fsngroupname)) != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
-			"gfp_xdr_recv", e, ope);
-	}
-	return (e);
-}
-
-static gfarm_error_t
-db_journal_read_fsngroup_modify(struct gfp_xdr *xdr,
-	struct db_fsngroup_modify_arg **argp)
-{
-	gfarm_error_t e;
-	struct db_fsngroup_modify_arg *arg;
-	const enum journal_operation ope = GFM_JOURNAL_FSNGROUP_MODIFY;
-
-	GFARM_MALLOC(arg);
-	if (arg == NULL) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
-		    "GFARM_MALLOC", GFARM_ERR_NO_MEMORY, ope);
-		return (GFARM_ERR_NO_MEMORY);
-	}
-	memset(arg, 0, sizeof(*arg));
-	if ((e = db_journal_read_fsngroup_core(xdr, ope, arg))
-	    != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
-		    "db_journal_read_fsngroup_core", e, ope);
-		goto end;
-	}
-end:
-	if (e == GFARM_ERR_NO_ERROR)
-		*argp = arg;
-	else {
-		db_journal_fsngroup_modify_arg_destroy(arg);
-		*argp = NULL;
-	}
-	return (e);
 }
 
 /**********************************************************/
@@ -3113,9 +2991,9 @@ db_journal_write_mdhost_remove(gfarm_uint64_t seqnum, char *name)
 		seqnum, GFM_JOURNAL_MDHOST_REMOVE, name));
 }
 
-/**********************************************************/
+ /**********************************************************/
 /* nop */
-
+ 
 static gfarm_error_t
 db_journal_read_nop(struct gfp_xdr *xdr,
 	struct db_mdhost_modify_arg **argp)
@@ -3226,10 +3104,6 @@ db_journal_ops_free(void *op_arg, enum journal_operation ope, void *obj)
 	case GFM_JOURNAL_SYMLINK_REMOVE: /* db_inode_inum_arg */
 	case GFM_JOURNAL_MDHOST_REMOVE: /* char[] */
 		free(obj);
-		break;
-	case GFM_JOURNAL_FSNGROUP_MODIFY:
-		db_journal_fsngroup_modify_arg_destroy(
-			(struct db_fsngroup_modify_arg *)obj);
 		break;
 	default:
 		break;
@@ -3358,10 +3232,6 @@ db_journal_read_ops(void *op_arg, struct gfp_xdr *xdr,
 		e = db_journal_read_mdhost_modify(xdr,
 			(struct db_mdhost_modify_arg **)objp);
 		break;
-	case GFM_JOURNAL_FSNGROUP_MODIFY:
-		e = db_journal_read_fsngroup_modify(xdr,
-			(struct db_fsngroup_modify_arg **)objp);
-		break;
 	case GFM_JOURNAL_NOP:
 		e = db_journal_read_nop(xdr,
 			(struct db_mdhost_modify_arg **)objp);
@@ -3477,8 +3347,6 @@ db_journal_ops_call(const struct db_ops *ops, gfarm_uint64_t seqnum,
 		e = ops->mdhost_modify(seqnum, obj); break;
 	case GFM_JOURNAL_MDHOST_REMOVE:
 		e = ops->mdhost_remove(seqnum, obj); break;
-	case GFM_JOURNAL_FSNGROUP_MODIFY:
-		e = ops->fsngroup_modify(seqnum, obj); break;
 	case GFM_JOURNAL_NOP:
 		e = GFARM_ERR_NO_ERROR; break;
 	default:
@@ -3525,7 +3393,7 @@ db_journal_apply_op(void *op_arg, gfarm_uint64_t seqnum,
 	gfarm_error_t e = GFARM_ERR_NO_ERROR;
 	struct db_journal_rec *ai, *tai;
 	struct db_journal_rec_list *c = closure;
-	static const char diag[] = "db_journal_apply_op";
+	static const char *diag = "db_journal_apply_op";
 
 	*needs_freep = 0;
 	GFARM_MALLOC(ai);
@@ -3660,7 +3528,7 @@ db_journal_store_thread(void *arg)
 		journal_file_main_reader(self_jf);
 	struct db_journal_rec *rec;
 	struct db_journal_rec_list recs;
-	static const char diag[] = "db_journal_store_thread";
+	static const char *diag = "db_journal_store_thread";
 
 	for (;;) {
 		GFARM_STAILQ_INIT(&recs);
@@ -3935,7 +3803,7 @@ db_journal_recvq_enter(gfarm_uint64_t from_sn, gfarm_uint64_t to_sn,
 {
 	gfarm_error_t e;
 	struct db_journal_recv_info *ri;
-	static const char diag[] = "db_journal_recvq_enter";
+	static const char *diag = "db_journal_recvq_enter";
 
 	GFARM_MALLOC(ri);
 	if (ri == NULL) {
@@ -3975,7 +3843,7 @@ db_journal_recvq_delete(struct db_journal_recv_info **rip)
 {
 	struct db_journal_recv_info *ri, *rii, *ri_last = NULL;
 	gfarm_uint64_t next_sn;
-	static const char diag[] = "db_journal_recvq_delete";
+	static const char *diag = "db_journal_recvq_delete";
 
 	next_sn = db_journal_get_current_seqnum() + 1;
 
@@ -4018,7 +3886,7 @@ found:
 void
 db_journal_cancel_recvq()
 {
-	static const char diag[] = "db_journal_recvq_cancel";
+	static const char *diag = "db_journal_recvq_cancel";
 
 	gfarm_mutex_lock(&journal_recvq_mutex, diag, RECVQ_MUTEX_DIAG);
 	journal_recvq_cancel = 1;
@@ -4036,7 +3904,7 @@ db_journal_recvq_proc(int *canceledp)
 	gfarm_error_t e;
 	gfarm_uint64_t last_seqnum;
 	struct db_journal_recv_info *ri;
-	static const char diag[] = "db_journal_recvq_proc";
+	static const char *diag = "db_journal_recvq_proc";
 
 	if ((e = db_journal_recvq_delete(&ri)) != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -4054,10 +3922,8 @@ db_journal_recvq_proc(int *canceledp)
 	}
 	if ((e = journal_file_write_raw(self_jf, ri->recs_len, ri->recs,
 	    &last_seqnum, &journal_slave_transaction_nesting))
-	    == GFARM_ERR_NO_ERROR) {
+	    == GFARM_ERR_NO_ERROR)
 		journal_seqnum = last_seqnum;
-		db_journal_remove_db_update_info_op(journal_seqnum, diag);
-	}
 	free(ri->recs);
 	free(ri);
 	if (gfarm_get_journal_sync_file())
@@ -4087,7 +3953,7 @@ db_journal_recvq_thread(void *arg)
 
 static gfarm_error_t
 db_journal_host_load(void *closure,
-	void (*callback)(void *, struct gfarm_internal_host_info *))
+	void (*callback)(void *, struct gfarm_host_info *))
 {
 	return (store_ops->host_load(closure, callback));
 }
@@ -4300,6 +4166,4 @@ struct db_ops db_journal_ops = {
 	db_journal_write_mdhost_modify,
 	db_journal_write_mdhost_remove,
 	db_journal_mdhost_load,
-
-	db_journal_write_fsngroup_modify,
 };
