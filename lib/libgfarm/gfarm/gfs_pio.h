@@ -3,7 +3,7 @@
  *
  * This defines internal structure of gfs_pio module.
  *
- * Only gfs_pio_section.c, gfs_pio_{local,remote}.c, gfs_pio.c and context.c
+ * Only gfs_pio_{global,section}.c, gfs_pio_{local,remote}.c and gfs_pio.c
  * are allowed to include this header file.
  * Every other modules shouldn't include this.
  */
@@ -26,15 +26,14 @@ struct gfs_pio_ops {
 	gfarm_error_t (*view_reopen)(GFS_File);
 	gfarm_error_t (*view_write)(GFS_File,
 		const char *, size_t, size_t *, gfarm_off_t *, gfarm_off_t *);
+	gfarm_error_t (*view_cksum)(GFS_File,
+		const char *, struct gfs_stat_cksum *);
 };
 
 struct gfm_connection;
 struct gfs_file {
 	struct gfs_pio_ops *ops;
 	void *view_context;
-
-	/* XXX should be a per view_context variable to support global view */
-	gfarm_uint64_t scheduled_age;
 
 	struct gfm_connection *gfm_server;
 	int fd;
@@ -79,19 +78,12 @@ gfarm_error_t gfs_pio_set_view_default(GFS_File);
 #if 0 /* not yet in gfarm v2 */
 gfarm_error_t gfs_pio_set_view_global(GFS_File, int);
 #endif /* not yet in gfarm v2 */
+char *gfs_pio_url(GFS_File);
 struct gfs_connection;
 gfarm_error_t gfs_pio_open_local_section(GFS_File, struct gfs_connection *);
 gfarm_error_t gfs_pio_open_remote_section(GFS_File, struct gfs_connection *);
 gfarm_error_t gfs_pio_internal_set_view_section(GFS_File, char *);
 gfarm_error_t gfs_pio_reconnect(GFS_File);
-gfarm_error_t gfs_pio_view_fd(GFS_File gf, int *fdp);
-gfarm_error_t gfs_pio_create_igen(const char *url, int flags, gfarm_mode_t mode,
-        GFS_File *gfp, gfarm_ino_t *inop, gfarm_uint64_t *genp);
-gfarm_error_t gfs_pio_append(GFS_File gf, void *buffer, int size, int *np, 
-                gfarm_off_t *offp, gfarm_off_t *fsizep);
-
-
-struct gfs_connection;
 
 struct gfs_storage_ops {
 	gfarm_error_t (*storage_close)(GFS_File);
@@ -107,6 +99,8 @@ struct gfs_storage_ops {
 	gfarm_error_t (*storage_reopen)(GFS_File);
 	gfarm_error_t (*storage_write)(GFS_File,
 		const char *, size_t, size_t *, gfarm_off_t *, gfarm_off_t *);
+	gfarm_error_t (*storage_cksum)(GFS_File,
+		const char *, char *, size_t, size_t *);
 };
 
 #define GFS_DEFAULT_DIGEST_NAME	"md5"
@@ -120,13 +114,11 @@ struct gfs_file_section_context {
 	char *section;
 	char *canonical_hostname;
 #endif /* not yet in gfarm v2 */
-	int fd; /* local file descriptor. i.e. never used in remote case */
+	int fd; /* this isn't used for remote case, but only local case */
 	pid_t pid;
 
-#ifdef EVP_MD_CTX_FLAG_ONESHOT /* for kernel mode */
 	/* for checksum, maintained only if GFS_FILE_MODE_CALC_DIGEST */
 	EVP_MD_CTX md_ctx;
-#endif
 };
 
 /*
