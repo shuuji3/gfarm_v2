@@ -9,8 +9,6 @@
 
 #include "nanosec.h"
 
-#include "timespec.h"
-
 int
 gfarm_timespec_cmp(
 	const struct gfarm_timespec *t1, const struct gfarm_timespec *t2)

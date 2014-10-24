@@ -190,16 +190,15 @@ set_last_defaults_postgresql()
 	7.*) # -w option makes "pg_ctl start" ask password on PostgreSQL-7.4
 		WAIT_F='' ;;
 	esac
-	# postgresql in debian needs to specify unix_socket_directory
-	# start up in user mode, which makes -w option ineffective
+	: ${PGSQL_OPTIONS:=$WAIT_F'-s -m fast -D $PGDATA -l $PGDATA/logfile'}
+	# postgresql in debian needs to change the directory of the
+	# unix-domain socket in private mode
 	if $PRIVATE_MODE; then
 		case X$LINUX_RC_TYPE in
 		Xdebian)
-			PRIVATE_MODE_FOR_DEBIAN=true
-			WAIT_F='' ;;
+			PGSQL_OPTIONS="$PGSQL_OPTIONS -o '-k /tmp'" ;;
 		esac
 	fi
-	: ${PGSQL_OPTIONS:=$WAIT_F'-s -m fast -D $PGDATA -l $PGDATA/logfile'}
 }
 
 #
@@ -220,41 +219,6 @@ _EOF_
 make_configuration_directory_postgresql()
 {
 	:
-}
-
-make_configuration_file_private_for_debian_postgresql()
-{
-	cp -p "$BACKEND_DATA_DIR"/postgresql.conf \
-	      "$BACKEND_DATA_DIR"/postgresql.conf.org
-
-	$awk '
-	BEGIN {
-		# In PostgreSQL 9.3, 'unix_socket_directory' has been renamed
-		# to 'unix_socket_directories'.
-		if ('$BACKEND_VERSION' >= 9.3)
-			unix_socket_dir_param = "unix_socket_directories"
-		else
-			unix_socket_dir_param = "unix_socket_directory"
-	}
-	/^[ 	]*#*[ 	]*unix_socket_director(y|ies)[ 	]*=/ {
-		if (/^[ 	]*unix_socket_director(y|ies)/) {
-			print "#" $0
-		} else {
-			print $0
-		}
-		# prevent access except $BACKEND_ADMIN_USER
-		if (!unix_socket_directory_done) {
-			print unix_socket_dir_param " = '"'$BACKEND_DATA_DIR'"'"
-			unix_socket_directory_done = 1
-		}
-		next
-	}
-	{print}
-	END {
-		if (!unix_socket_directory_done)
-			print unix_socket_dir_param " = '"'$BACKEND_DATA_DIR'"'"
-	}'	 "$BACKEND_DATA_DIR"/postgresql.conf.org \
-		>"$BACKEND_DATA_DIR"/postgresql.conf
 }
 
 make_configuration_file_postgresql()
@@ -379,10 +343,6 @@ _EOF_
 	echo "# TYPE	DATABASE	USER	IP-ADDRESS IP-MASK	METHOD"
 	echo "host	$DB_NAME		$BACKEND_USER	0.0.0.0	0.0.0.0	md5"
 	) > "$BACKEND_DATA_DIR"/pg_hba.conf
-
-	if $PRIVATE_MODE_FOR_DEBIAN; then
-		make_configuration_file_private_for_debian_postgresql
-	fi
 }
 
 apply_configuration_postgresql()
@@ -435,8 +395,11 @@ apply_configuration_postgresql()
 		} else {
 			print $0
 		}
-		print unix_socket_dir_param " = '"'$BACKEND_DATA_DIR'"'"
-		unix_socket_directory_done = 1
+		if (!unix_socket_directory_done) {
+			# prevent access except $BACKEND_ADMIN_USER
+			print unix_socket_dir_param " = '"'$BACKEND_DATA_DIR'"'"
+			unix_socket_directory_done = 1
+		}
 		next
 	}
 	/^[ 	]*#*[ 	]*client_min_messages[ 	]*=/ {

@@ -20,7 +20,6 @@
 #include "gfs_client.h"
 #include "gfs_io.h"
 #include "gfs_pio.h"
-#include "schedule.h"
 
 static gfarm_error_t
 gfs_pio_remote_storage_close(GFS_File gf)
@@ -38,12 +37,6 @@ gfs_pio_remote_storage_close(GFS_File gf)
 	if (vc->pid != getpid())
 		return (GFARM_ERR_NO_ERROR);
 	e = gfs_client_close(gfs_server, gf->fd);
-	gfarm_schedule_host_unused(
-	    gfs_client_hostname(gfs_server),
-	    gfs_client_port(gfs_server),
-	    gfs_client_username(gfs_server),
-	    gf->scheduled_age);
-
 	vc->storage_context = NULL;
 	gfs_client_connection_free(gfs_server);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -140,6 +133,16 @@ gfs_pio_remote_storage_fstat(GFS_File gf, struct gfs_stat *st)
 }
 
 static gfarm_error_t
+gfs_pio_remote_storage_cksum(GFS_File gf, const char *type,
+	char *cksum, size_t size, size_t *lenp)
+{
+	struct gfs_file_section_context *vc = gf->view_context;
+	struct gfs_connection *gfs_server = vc->storage_context;
+
+	return (gfs_client_cksum(gfs_server, gf->fd, type, cksum, size, lenp));
+}
+
+static gfarm_error_t
 gfs_pio_remote_storage_reopen(GFS_File gf)
 {
 	gfarm_error_t e;
@@ -172,6 +175,7 @@ struct gfs_storage_ops gfs_pio_remote_storage_ops = {
 	gfs_pio_remote_storage_fstat,
 	gfs_pio_remote_storage_reopen,
 	gfs_pio_remote_storage_write,
+	gfs_pio_remote_storage_cksum,
 };
 
 gfarm_error_t

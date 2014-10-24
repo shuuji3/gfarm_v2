@@ -4,8 +4,8 @@
 #define GFARM_INTERNAL_USE
 #include <gfarm/gfarm.h>
 
-#include "context.h"
 #include "gfm_client.h"
+#include "config.h"
 #include "lookup.h"
 
 struct gfm_rename_closure {
@@ -15,12 +15,10 @@ struct gfm_rename_closure {
 };
 
 static gfarm_error_t
-gfm_rename_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure,
+gfm_rename_request(struct gfm_connection *gfm_server, void *closure,
 	const char *sname, const char *dname)
 {
-	gfarm_error_t e = gfm_client_rename_request(gfm_server, ctx,
-	    sname, dname);
+	gfarm_error_t e = gfm_client_rename_request(gfm_server, sname, dname);
 	if (e != GFARM_ERR_NO_ERROR)
 		gflog_debug(GFARM_MSG_1002670,
 		    "rename(%s, %s) request: %s", sname, dname,
@@ -29,19 +27,18 @@ gfm_rename_request(struct gfm_connection *gfm_server,
 }
 
 static gfarm_error_t
-gfm_rename_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_rename_result(struct gfm_connection *gfm_server, void *closure)
 {
 	int src_port;
 	struct gfm_rename_closure *c = closure;
 
-	gfarm_error_t e = gfm_client_rename_result(gfm_server, ctx);
+	gfarm_error_t e = gfm_client_rename_result(gfm_server);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002671,
 		    "rename result: %s",
 		    gfarm_error_string(e));
 	} else {
-		if (gfarm_ctxp->file_trace) {
+		if (gfarm_file_trace) {
 			gfm_client_source_port(gfm_server, &src_port);
 			gflog_trace(GFARM_MSG_1003271,
 			    "%s/%s/%s/%d/MOVE/%s/%d/////\"%s\"///\"%s\"",
@@ -56,13 +53,6 @@ gfm_rename_result(struct gfm_connection *gfm_server,
 	return (e);
 }
 
-static int
-gfm_rename_must_be_warned(gfarm_error_t e, void *closure)
-{
-	/* error returned from inode_lookup_basename() */
-	return (GFARM_ERR_NO_SUCH_FILE_OR_DIRECTORY);
-}
-
 gfarm_error_t
 gfs_rename(const char *src, const char *dst)
 {
@@ -72,10 +62,9 @@ gfs_rename(const char *src, const char *dst)
 	closure.src = src;
 	closure.dst = dst;
 
-	e = gfm_name2_op_modifiable(src, dst, GFARM_FILE_SYMLINK_NO_FOLLOW,
+	e = gfm_name2_op(src, dst, GFARM_FILE_SYMLINK_NO_FOLLOW,
 	    NULL, gfm_rename_request, gfm_rename_result,
-	    gfm_name2_success_op_connection_free, NULL,
-	    gfm_rename_must_be_warned, &closure);
+	    gfm_name2_success_op_connection_free, NULL, &closure);
 	if (e != GFARM_ERR_NO_ERROR) {
 		if (e == GFARM_ERR_PATH_IS_ROOT)
 			e = GFARM_ERR_OPERATION_NOT_PERMITTED;

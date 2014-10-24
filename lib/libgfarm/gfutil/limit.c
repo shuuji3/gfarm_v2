@@ -17,10 +17,6 @@
 #include <gfarm/gflog.h>
 #include "gfutil.h"
 
-#ifdef __KERNEL__	/* HAVE_SETRLIMIT */
-#undef HAVE_SETRLIMIT
-#endif /* __KERNEL__ */
-
 /*
  * - Set file descriptor limit to min(*file_table_size_p, hard_limit).
  * - Return file descriptor limit to *file_table_size_p.
