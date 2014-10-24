@@ -2,6 +2,7 @@ DOCBOOK = \
 	gfchgrp.1 \
 	gfchmod.1 \
 	gfchown.1 \
+	gfcksum.1 \
 	gfdf.1 \
 	gfedquota.1 \
 	gfexport.1 \
@@ -9,6 +10,7 @@ DOCBOOK = \
 	gfgetfacl.1 \
 	gfgroup.1 \
 	gfhost.1 \
+	gfjournaladmin.1 \
 	gfkey.1 \
 	gfln.1 \
 	gfls.1 \
@@ -27,6 +29,8 @@ DOCBOOK = \
 	gfsetfacl.1 \
 	gfstat.1 \
 	gfstatus.1 \
+	gfsudo.1 \
+	gftest.1 \
 	gfusage.1 \
 	gfuser.1 \
 	gfwhere.1 \
@@ -48,11 +52,7 @@ DOCBOOK = \
 	gfspoolpath.1 \
 	gfstress.rb.1 \
 	gfservice.1 \
-	gfservice-agent.1 \
-	gfhostgroup.1 \
-	gfjournal.1 \
-	gfjournaladmin.1
-
+	gfservice-agent.1
 
 #	gfarm_agent.1 \
 #	gfcd.1 \

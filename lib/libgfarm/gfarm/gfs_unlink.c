@@ -5,42 +5,16 @@
 #include <stddef.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include <stdlib.h>
 
 #include <gfarm/gfarm.h>
 
 #include "gfutil.h"
 #include "timer.h"
 
-#include "context.h"
 #include "gfs_profile.h"
 
-#define staticp	(gfarm_ctxp->gfs_unlink_static)
-
-struct gfarm_gfs_unlink_static {
-	double unlink_time;
-};
-
-gfarm_error_t
-gfarm_gfs_unlink_static_init(struct gfarm_context *ctxp)
-{
-	struct gfarm_gfs_unlink_static *s;
-
-	GFARM_MALLOC(s);
-	if (s == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	s->unlink_time = 0;
-
-	ctxp->gfs_unlink_static = s;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-void
-gfarm_gfs_unlink_static_term(struct gfarm_context *ctxp)
-{
-	free(ctxp->gfs_unlink_static);
-}
+static double gfs_unlink_time;
+static unsigned long long gfs_unlink_count;
 
 gfarm_error_t
 gfs_unlink(const char *path)
@@ -50,7 +24,6 @@ gfs_unlink(const char *path)
 	int is_dir;
 	gfarm_timerval_t t1, t2;
 
-	GFARM_KERNEL_UNUSE2(t1, t2);
 	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
 	gfs_profile(gfarm_gettimerval(&t1));
 
@@ -75,7 +48,8 @@ gfs_unlink(const char *path)
 	/* XXX FIXME there is race condition here */
 
 	gfs_profile(gfarm_gettimerval(&t2));
-	gfs_profile(staticp->unlink_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_unlink_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_unlink_count++);
 
 	return (gfs_remove(path));
 }
@@ -84,5 +58,7 @@ void
 gfs_unlink_display_timers(void)
 {
 	gflog_info(GFARM_MSG_1000157,
-	    "gfs_unlink      : %g sec", staticp->unlink_time);
+	    "gfs_unlink time  : %g sec", gfs_unlink_time);
+	gflog_info(GFARM_MSG_1003837,
+	    "gfs_unlink count : %llu", gfs_unlink_count);
 }

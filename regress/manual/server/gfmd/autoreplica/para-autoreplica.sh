@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ##### parameters #####
-MAXRETRY=4 # sec.
+MAXRETRY=30 # sec.
 DEBUG=1
 
 ##### arguments #####
@@ -90,6 +90,7 @@ test_overwrite() {
   F=$GFILE-$N
   req_ok=0
   size=17
+  tmp_gfwhere=${TMPFILE}-${N}-gfwhere
   tmp_data=${TMPFILE}-${N}-data
   tmp_data2=${TMPFILE}-${N}-data2
 
@@ -117,18 +118,45 @@ test_overwrite() {
       my_unlock
     fi
 
-    gfncopy -w $F
-    if [ $? -ne 0 ]; then
-      my_lock
-      echo [$N:$i]@$h: replicas were not created
-      gfwhere -al $F
-      my_unlock
-      kill $parent_pid
-      exit 1
-    fi
-
+    gfwhere $F > $tmp_gfwhere
+    nrep=`cat $tmp_gfwhere | wc -w`
+    for ((nretry = 1; $nrep != $n_copy && $intr == 0; nretry++)) {
+      if ((nretry > 120)); then  # 120 sec.
+        my_lock
+        echo [$N:$i] timeout
+        gfstat $F
+        gfwhere -al $F
+        my_unlock
+        kill $parent_pid
+        exit 1
+      fi
+      if (($DEBUG != 0)); then
+        my_print [$N:$i] waiting $nretry : `date`
+      fi
+      sleep 1
+      if (($req_ok == 0)); then
+        if (($nretry >= $MAXRETRY)); then
+          my_lock
+          echo [$N:$i] cannot request,
+          echo gfmd.conf may need to increase simultaneous_replication_receivers
+          gfstat $F
+          gfwhere -al $F
+          my_unlock
+          kill $parent_pid
+          exit 1
+        fi
+        nrep=`gfwhere -i $F | wc -w`
+        if (($nrep == $n_copy)); then
+          req_ok=1
+        fi
+      fi
+      if (($req_ok == 1)); then
+        gfwhere $F > $tmp_gfwhere
+        nrep=`cat $tmp_gfwhere | wc -w`
+      fi
+    }
     ### compare data
-    for h in `gfwhere $F`; do
+    for h in `cat $tmp_gfwhere`; do
       gfexport -s ${size} -o $offset -h $h $F > $tmp_data2
       cmp $tmp_data $tmp_data2 > /dev/null 2>&1
       if [ $? -ne 0 ]; then
@@ -149,10 +177,8 @@ test_overwrite() {
         my_unlock
       fi
     done
-
-    num=`gfncopy -c $F`
     if (($DEBUG != 0 && $intr == 0)); then
-      my_print [$N:$i] OK num=$num
+      my_print [$N:$i] OK
     fi
   }
   exit 0
@@ -162,7 +188,7 @@ set_ncopy() {
   if gfncopy -s $1 $2; then
     :
    else
-    echo failed gfncopy -s
+    echo failed gfxattr -s
     clean_test
     exit $exit_fail
   fi
