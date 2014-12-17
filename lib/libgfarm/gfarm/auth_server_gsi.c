@@ -32,20 +32,18 @@
 
 #include "gfs_proto.h" /* for GFSD_USERNAME, XXX layering violation */
 
-
-
 /*
  * server side authentication
  */
 
 static gfarm_error_t
-gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
+gfarm_authorize_gsi_common0(struct gfp_xdr *conn, int switch_to,
 	char *service_tag, char *hostname, enum gfarm_auth_method auth_method,
 	gfarm_error_t (*auth_uid_to_global_user)(void *,
 	    enum gfarm_auth_method, const char *, char **), void *closure,
 	enum gfarm_auth_id_type *peer_typep, char **global_usernamep)
 {
-	int fd = gfp_xdr_fd(conn);
+	int gsi_errno = 0, fd = gfp_xdr_fd(conn);
 	gfarm_error_t e, e2;
 	char *global_username = NULL, *aux = NULL;
 	OM_uint32 e_major, e_minor;
@@ -122,7 +120,8 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 		}
 	}
 
-	session = gfarmSecSessionAccept(fd, cred, NULL, &e_major, &e_minor);
+	session = gfarmSecSessionAccept(fd, cred, NULL,
+	    &gsi_errno, &e_major, &e_minor);
 	if (cred != GSS_C_NO_CREDENTIAL) {
 		OM_uint32 e_major2, e_minor2;
 
@@ -139,8 +138,13 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 			gflog_info(GFARM_MSG_1000718,
 			    "%s: Can't accept session because of:",
 			    hostname);
-			gfarmGssPrintMajorStatus(e_major);
-			gfarmGssPrintMinorStatus(e_minor);
+			if (gsi_errno != 0) {
+				gflog_info(GFARM_MSG_1004003, "%s",
+				    strerror(gsi_errno));
+			} else {
+				gfarmGssPrintMajorStatus(e_major);
+				gfarmGssPrintMinorStatus(e_minor);
+			}
 			gflog_info(GFARM_MSG_1000719,
 			    "GSI authentication error: %s", hostname);
 		}
@@ -152,6 +156,8 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 		 * gfarm_gsi_server_finalize() here, which causes the
 		 * data race.  Instead, deliver SIGHUP to gfmd.
 		 */
+		if (gsi_errno != 0)
+			return (gfarm_errno_to_error(gsi_errno));
 		return (GFARM_ERR_AUTHENTICATION);
 	}
 
@@ -267,7 +273,6 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 		    userinfo->authData.userAuth.localName);
 		gfarm_set_local_homedir(
 		    userinfo->authData.userAuth.homeDir);
-
 		/*
 		 * set the delegated credential
 		 *
@@ -287,6 +292,23 @@ gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
 	else
 		free(global_username);
 	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+gfarm_authorize_gsi_common(struct gfp_xdr *conn, int switch_to,
+	char *service_tag, char *hostname, enum gfarm_auth_method auth_method,
+	gfarm_error_t (*auth_uid_to_global_user)(void *,
+	    enum gfarm_auth_method, const char *, char **), void *closure,
+	enum gfarm_auth_id_type *peer_typep, char **global_usernamep)
+{
+	gfarm_error_t e;
+
+	gfarm_gsi_server_init_count_increment();
+	e = gfarm_authorize_gsi_common0(conn, switch_to,
+	    service_tag, hostname, auth_method, auth_uid_to_global_user,
+	    closure, peer_typep, global_usernamep);
+	gfarm_gsi_server_init_count_decrement();
+	return (e);
 }
 
 /*

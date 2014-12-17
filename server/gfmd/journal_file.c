@@ -37,12 +37,14 @@
 #include <gfarm/gfarm_misc.h>
 #include <gfarm/gflog.h>
 
+#include "gfutil.h"
 #include "queue.h"
 
 #include "crc32.h"
 #include "iobuffer.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
+#include "auth.h"
 #include "gfm_proto.h"
 
 #include "subr.h"
@@ -1004,7 +1006,7 @@ journal_find_rw_pos(int rfd, int wfd, size_t file_size,
 	    (min_seqnum == GFARM_UINT64_MAX || db_seqnum + 1 < min_seqnum ||
 	    max_seqnum < db_seqnum)) {
 		e = GFARM_ERR_EXPIRED;
-		gflog_debug(GFARM_MSG_1003421,
+		gflog_info(GFARM_MSG_1003421,
 		    "%s: seqnum=%llu min_seqnum=%llu max_seqnum=%llu",
 		    gfarm_error_string(e),
 		    (unsigned long long)db_seqnum,
@@ -1276,11 +1278,11 @@ journal_file_reader_new(struct journal_file *jf, int fd,
 
 gfarm_error_t
 journal_file_open(const char *path, size_t max_size,
-	gfarm_uint64_t db_seqnum, struct journal_file **jfp, int flags)
+	gfarm_uint64_t cur_seqnum, struct journal_file **jfp, int flags)
 {
 	gfarm_error_t e;
 	struct stat st;
-	int rfd = -1, wfd = -1;
+	int rfd = -1, wfd = -1, rv, save_errno;
 	size_t cur_size = 0;
 	off_t rpos = 0, wpos = 0;
 	gfarm_uint64_t rlap = 0, wlap = 0;
@@ -1298,10 +1300,13 @@ journal_file_open(const char *path, size_t max_size,
 		return (e);
 	}
 	memset(jf, 0, sizeof(*jf));
-	errno = 0;
-	if (stat(path, &st) == -1) {
-		if (errno != ENOENT) {
-			e = gfarm_errno_to_error(errno);
+	gfarm_privilege_lock(diag);
+	rv = stat(path, &st);
+	save_errno = errno;
+	gfarm_privilege_unlock(diag);
+	if (rv == -1) {
+		if (save_errno != ENOENT) {
+			e = gfarm_errno_to_error(save_errno);
 			gflog_error(GFARM_MSG_1002892,
 			    "stat : %s",
 			    gfarm_error_string(e));
@@ -1314,8 +1319,12 @@ journal_file_open(const char *path, size_t max_size,
 			gflog_warning(GFARM_MSG_1002893,
 			    "invalid journal file size : %lu",
 			    (unsigned long)cur_size);
-			if (unlink(path) == -1) {
-				e = gfarm_errno_to_error(errno);
+			gfarm_privilege_lock(diag);
+			rv = unlink(path);
+			save_errno = errno;
+			gfarm_privilege_unlock(diag);
+			if (rv == -1) {
+				e = gfarm_errno_to_error(save_errno);
 				gflog_warning(GFARM_MSG_1002894,
 				    "failed to unlink %s: %s", path,
 				    gfarm_error_string(e));
@@ -1346,9 +1355,12 @@ journal_file_open(const char *path, size_t max_size,
 		cur_size : max_size;
 
 	if ((flags & GFARM_JOURNAL_RDWR) != 0) {
+		gfarm_privilege_lock(diag);
 		wfd = open(path, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR);
+		save_errno = errno;
+		gfarm_privilege_unlock(diag);
 		if (wfd < 0) {
-			e = gfarm_errno_to_error(errno);
+			e = gfarm_errno_to_error(save_errno);
 			gflog_error(GFARM_MSG_1002897,
 			    "open for write: %s",
 			    gfarm_error_string(e));
@@ -1356,9 +1368,12 @@ journal_file_open(const char *path, size_t max_size,
 		}
 		fsync(wfd);
 	}
+	gfarm_privilege_lock(diag);
 	rfd = open(path, O_RDONLY);
+	save_errno = errno;
+	gfarm_privilege_unlock(diag);
 	if (rfd < 0) {
-		e = gfarm_errno_to_error(errno);
+		e = gfarm_errno_to_error(save_errno);
 		gflog_error(GFARM_MSG_1002898,
 		    "open for read: %s",
 		    gfarm_error_string(e));
@@ -1366,7 +1381,7 @@ journal_file_open(const char *path, size_t max_size,
 	}
 	if (cur_size > 0) {
 		if ((e = journal_find_rw_pos(rfd, wfd, cur_size,
-		    db_seqnum, &rpos, &rlap, &wpos, &wlap,
+		    cur_seqnum, &rpos, &rlap, &wpos, &wlap,
 		    &tail)) != GFARM_ERR_NO_ERROR)
 			goto error;
 	} else {
@@ -1376,7 +1391,6 @@ journal_file_open(const char *path, size_t max_size,
 				goto error;
 		}
 		wpos = JOURNAL_FILE_HEADER_SIZE;
-		errno = 0;
 		if (lseek(rfd, wpos, SEEK_SET) < 0) {
 			e = gfarm_errno_to_error(errno);
 			goto error;
@@ -1435,7 +1449,7 @@ journal_file_reader_reopen_if_needed(struct journal_file *jf,
 	int *initedp)
 {
 	gfarm_error_t e, e2;
-	int fd = -1;
+	int fd = -1, save_errno;
 	off_t rpos, wpos;
 	gfarm_uint64_t rlap, wlap, cur_wlap;
 	off_t tail;
@@ -1460,7 +1474,11 @@ journal_file_reader_reopen_if_needed(struct journal_file *jf,
 
 	/* *readerp is invalidated or non-initialized */
 
-	if ((fd = open(jf->path, O_RDONLY)) == -1) {
+	gfarm_privilege_lock(diag);
+	fd = open(jf->path, O_RDONLY);
+	save_errno = errno;
+	gfarm_privilege_unlock(diag);
+	if (fd == -1) {
 		e = gfarm_errno_to_error(errno);
 		gflog_debug(GFARM_MSG_1003422,
 		    "open: %s", gfarm_error_string(e));
@@ -1486,7 +1504,7 @@ journal_file_reader_reopen_if_needed(struct journal_file *jf,
 			rlap = cur_wlap;
 	}
 
-	if (*readerp)
+	if (*readerp != NULL)
 		e = journal_file_reader_init(jf, fd, rpos, rlap, 0, *readerp);
 	else
 		e = journal_file_reader_new(jf, fd, rpos, rlap, 0, readerp);

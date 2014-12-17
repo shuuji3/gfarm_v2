@@ -7,16 +7,7 @@
 .\"    Source: Gfarm
 .\"  Language: English
 .\"
-.TH "GFARM2\&.CONF" "5" "12 Jun 2013" "Gfarm" "Gfarm"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
+.TH "GFARM2\&.CONF" "5" "16 Jul 2014" "Gfarm" "Gfarm"
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -33,9 +24,9 @@ gfarm2.conf \- Gfarm configuration file
 .PP
 gfarm2\&.conf is a text file that contains a Gfarm configuration\&. Gfarm server processes gfmd and gfsd refer to %%SYSCONFDIR%%/gfmd\&.conf and %%SYSCONFDIR%%/gfarm2\&.conf, respectively, by default\&. Since this configuration file is only read at startup, it is necessary to restart servers when the contents of the configuration file are updated\&.
 .PP
-Application programs, such as gfls and gfhost, refer to both %%SYSCONFDIR%%/gfarm2\&.conf, and a file specified by an environment variable, GFARM_CONFIG_FILE\&. If both configuration files exist, the file specified by the environment variable, GFARM_CONFIG_FILE, is read first\&. Both files have the same grammar\&. If the environment variable GFARM_CONFIG_FILE doesn\*(Aqt exist, ~/\&.gfarm2rc in a user\*(Aqs home directory is used instead\&.
+Application programs, such as gfls and gfhost, refer to both %%SYSCONFDIR%%/gfarm2\&.conf, and a file specified by an environment variable, GFARM_CONFIG_FILE\&. If both configuration files exist, the file specified by the environment variable, GFARM_CONFIG_FILE, is read first\&. Both files have the same grammar\&. If the environment variable GFARM_CONFIG_FILE doesn\'t exist, ~/\&.gfarm2rc in a user\'s home directory is used instead\&.
 .PP
-Each line of gfarm2\&.conf consists of one statement\&. When the line ends with the character ``\e\*(Aq\*(Aq, the line continues for the next line\&. A word beginning with ``#\*(Aq\*(Aq causes that word and all remaining characters on that line to be ignored\&.
+Each line of gfarm2\&.conf consists of one statement\&. When the line ends with the character ``\e\'\', the line continues for the next line\&. A word beginning with ``#\'\' causes that word and all remaining characters on that line to be ignored\&.
 .SH "HOST_SPECIFICATION"
 .PP
 \fIHost_specification\fR
@@ -111,9 +102,9 @@ spool_server_listen_backlog \fInumber\fR
 .RS 4
 This statement specifies the second parameter of the
 \fBlisten\fR(2)
-system call that gfsd invokes\&. The default value is SOMAXCONN (typically 128, but depends on the OS) on OSes which define this symbol in <sys/socket\&.h>, or 5 if it\*(Aqs undefined\&.
+system call that gfsd invokes\&. The default value is SOMAXCONN (typically 128, but depends on the OS) on OSes which define this symbol in <sys/socket\&.h>, or 5 if it\'s undefined\&.
 .sp
-On an environment which has many gfarm clients, it\*(Aqs recommened to increase this value after increasing system limit\&.
+On an environment which has many gfarm clients, it\'s recommened to increase this value after increasing system limit\&.
 .sp
 This parameter is only available in gfarm2\&.conf, and ignored in gfmd\&.conf\&.
 .sp
@@ -136,9 +127,9 @@ This statement specifies the type of credential used by gfsd for GSI authenticat
 sharedsecret
 authentication\&.
 .sp
-If this statement isn\*(Aqt used on the server side, the server uses a host certificate, if the server is invoked with root privileges\&. Or, if the server is invoked as a non\-privileged user, the server uses the user\*(Aqs certificate\&.
+If this statement isn\'t used on the server side, the server uses a host certificate, if the server is invoked with root privileges\&. Or, if the server is invoked as a non\-privileged user, the server uses the user\'s certificate\&.
 .sp
-If this statement isn\*(Aqt used on the client side, the client assumes that the server that the client is going to connect is using a host certificate of the server host\&. Thus, if the server is not invoked with root privileges, but invoked with user privileges where the user is the same as the user who invoked the client, the client side needs to specify the following one line\&.
+If this statement isn\'t used on the client side, the client assumes that the server that the client is going to connect is using a host certificate of the server host\&. Thus, if the server is not invoked with root privileges, but invoked with user privileges where the user is the same as the user who invoked the client, the client side needs to specify the following one line\&.
 .sp
 Example:
 .sp
@@ -154,7 +145,7 @@ Example:
 .sp
 The possible types of
 \fIcred_type\fR
-are ``self\*(Aq\*(Aq, ``host\*(Aq\*(Aq, ``user\*(Aq\*(Aq and ``mechanism\-specific\*(Aq\*(Aq\&. And those are used with the
+are ``self\'\', ``host\'\', ``user\'\' and ``mechanism\-specific\'\'\&. And those are used with the
 spool_server_cred_service
 and
 spool_server_cred_name
@@ -173,7 +164,7 @@ host
 .RS 4
 This keyword specifies that a host certificate or a service certificate is used\&. To choose a service certificate, the name of the service may be specified by the
 spool_server_cred_service
-statement\&. If ``host\*(Aq\*(Aq is specified as the service name, a host certificate in the file ``/etc/grid\-security/hostcert\&.pem\*(Aq\*(Aq will be used\&. If any server name other than ``host\*(Aq\*(Aq is specified, a service certificate in the file ``/etc/grid\-security/SERVICE/SERVICEcert\&.pem\*(Aq\*(Aq will be used\&. If the service name is omitted, ``host\*(Aq\*(Aq will be used as the service name by default\&. Only the Common Name field of a certificate will be used to check the server\*(Aqs identity for both a host certificate and a service certificate\&. And the Common Name field must be in the ``CN=SERVERNAME/HOSTNAME\*(Aq\*(Aq format\&. Also, the hostname must match the canonical name configured by the
+statement\&. If ``host\'\' is specified as the service name, a host certificate in the file ``/etc/grid\-security/hostcert\&.pem\'\' will be used\&. If any server name other than ``host\'\' is specified, a service certificate in the file ``/etc/grid\-security/SERVICE/SERVICEcert\&.pem\'\' will be used\&. If the service name is omitted, ``host\'\' will be used as the service name by default\&. Only the Common Name field of a certificate will be used to check the server\'s identity for both a host certificate and a service certificate\&. And the Common Name field must be in the ``CN=SERVERNAME/HOSTNAME\'\' format\&. Also, the hostname must match the canonical name configured by the
 \fBgfhost\fR
 command exactly\&. Alias hostnames are not allowed\&.
 .sp
@@ -201,7 +192,7 @@ statement\&. If the account name is omitted, the user who invoked the command wi
 spool_server_cred_service
 statement, if you are using a user certificate\&.
 .sp
-To map from the account name to a Distinguished Name of a certificate, file ``/etc/grid\-security/grid\-mapfile\*(Aq\*(Aq is used\&. Thus, if there isn\*(Aqt such a file, or if the user isn\*(Aqt specified in this file, this feature cannot be used\&.
+To map from the account name to a Distinguished Name of a certificate, file ``/etc/grid\-security/grid\-mapfile\'\' is used\&. Thus, if there isn\'t such a file, or if the user isn\'t specified in this file, this feature cannot be used\&.
 .sp
 This feature corresponds to the GSS_C_NT_USER_NAME feature in GSSAPI (RFC2743/RFC2744)\&.
 .sp
@@ -223,7 +214,7 @@ mechanism\-specific
 .RS 4
 This keyword specifies that
 spool_server_cred_name
-is treated as a raw X\&.509 Distinguished Name serving as a server\*(Aqs certificate\&. You must not specify a service name using a
+is treated as a raw X\&.509 Distinguished Name serving as a server\'s certificate\&. You must not specify a service name using a
 spool_server_cred_service
 statement, if you are using this type\&.
 .sp
@@ -246,7 +237,7 @@ Example:
 .PP
 spool_server_cred_service \fIcred_service\fR
 .RS 4
-This statement specifies the service name of a service certificate used by gfsd for GSI authentication, when ``host\*(Aq\*(Aq is specified in
+This statement specifies the service name of a service certificate used by gfsd for GSI authentication, when ``host\'\' is specified in
 spool_server_cred_type
 statement\&. This is ignored when you are using
 sharedsecret
@@ -279,6 +270,23 @@ For example,
 .\}
 .nf
 	spool_check_level disable
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+spool_base_load \fIload\-average\fR
+.RS 4
+This statement specifies the CPU load adding to the real CPU load\&. This option is only available for a gfsd node (or a file system node)\&. The default base load is 0\&.0\&. This option can be used to pretend to be busy or idle to change the scheduling priority\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	spool_base_load 1\&.0
 .fi
 .if n \{\
 .RE
@@ -336,7 +344,7 @@ statement on the configuration of this statement\&.
 .PP
 metadb_server_cred_service \fIcred_service\fR
 .RS 4
-This statement specifies the service name of a service certificate used by gfmd for GSI authentication, when ``host\*(Aq\*(Aq is specified in
+This statement specifies the service name of a service certificate used by gfmd for GSI authentication, when ``host\'\' is specified in
 metadb_server_cred_type
 statement\&. This is ignored when you are using
 sharedsecret
@@ -360,7 +368,7 @@ metadb_server_listen_backlog \fInumber\fR
 .RS 4
 This statement specifies the second parameter of the
 \fBlisten\fR(2)
-system call that gfmd invokes\&. The default value is SOMAXCONN (typically 128, but depends on the OS) on OSes which define this symbol in <sys/socket\&.h>, or 5 if it\*(Aqs undefined\&.
+system call that gfmd invokes\&. The default value is SOMAXCONN (typically 128, but depends on the OS) on OSes which define this symbol in <sys/socket\&.h>, or 5 if it\'s undefined\&.
 .sp
 This parameter is only available in gfmd\&.conf, and ignored in gfarm2\&.conf\&.
 .sp
@@ -379,7 +387,7 @@ For example,
 .PP
 metadb_server_max_descriptors \fInumber\fR
 .RS 4
-This directive specifies the number of file descriptor limit for the gfmd metadata server process\&. If not specified, the default limit is min(OS\*(Aqs hard limit, 131072)\&. You may have to increase this value on a larger configuration, or decrease on a smaller configuration\&. See Gfarm FAQ to see how to calculate this value\&.
+This directive specifies the number of file descriptor limit for the gfmd metadata server process\&. If not specified, the default limit is min(OS\'s hard limit, 131072)\&. You may have to increase this value on a larger configuration, or decrease on a smaller configuration\&. See Gfarm FAQ to see how to calculate this value\&.
 .sp
 This parameter is only available in gfmd\&.conf, and ignored in gfarm2\&.conf\&.
 .sp
@@ -785,6 +793,42 @@ gsi; and all other hosts will be authenticated by
 gsi\&. Note that two hosts, 192\&.168\&.0\&.100 and 192\&.168\&.0\&.101, will be tested for authentication by gsi only\&.
 .RE
 .PP
+shared_key_file \fIpathname\fR
+.RS 4
+The
+shared_key_file
+statement specifies a pathname of the shared secret key file in sharedsecret authentication\&.
+.RE
+.PP
+digest \fIdigest_type\fR
+.RS 4
+The
+digest
+statement enables the checksum calculation, and specifies the digest type of the checksum\&. The digest_type parameter is a lower\-case name which is supported by the OpenSSL library on the filesystem nodes\&. For example, "md5", "sha256"\&. Or, if
+client_digest_check
+is enabled, the digest_type has to be supported on clients as well\&.
+.sp
+This directive is only available in gfmd\&.conf, and ignored in gfarm2\&.conf\&.
+.sp
+NOTE: Even if checksum calculation is enabled by this directive, the digest checksum is not calculated when a client accesses a file replica which is managed by a local gfsd\&. This is because only gfsd calculates the checksum by default, but the client directly reads/writes the file replica in the local access case\&. To calculate the checksum of local files, You have to either disable the direct access feature by the
+direct_local_access
+statement, or enable the client\-side checksum calculation feature by the
+client_digest_check
+statement\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	digest md5
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 sockopt \fIoption\fR\fI[=\fR\fIvalue\fR\fI] [\fR\fILISTENER\fR\fI | \fR\fI\fIHost_specification\fR\fR\fI]\fR
 .RS 4
 The
@@ -1012,7 +1056,7 @@ For example,
 .PP
 schedule_concurrency_per_net \fInumber\fR
 .RS 4
-This directive specifies the number how many filesystem nodes will be used in same network at measuring network latency for each network of filesystem nodes\&. It may be better to increase this parameter, if many filesystem nodes are stopping, or many filesystem nodes are under higher load\&. If this parameter is increased, it\*(Aqs recommened to increase schedule_concurrency parameter too\&. The default number is 3\&.
+This directive specifies the number how many filesystem nodes will be used in same network at measuring network latency for each network of filesystem nodes\&. It may be better to increase this parameter, if many filesystem nodes are stopping, or many filesystem nodes are under higher load\&. If this parameter is increased, it\'s recommened to increase schedule_concurrency parameter too\&. The default number is 3\&.
 .sp
 For example,
 .sp
@@ -1097,7 +1141,7 @@ For example,
 .PP
 schedule_rtt_thresh_diff \fImicroseconds\fR
 .RS 4
-This parameter specifies the threshold time of network latency which divides the domains of scheduling priority\&. If a network latency difference from nearer network is larger than this value, the network\*(Aqs scheduling priority is lowered\&. There is a similar parameter schedule_rtt_thresh_ratio, and the scheduling priority is lowered if the network latency exceeds one of the parameters\&. The default is 1000 microseconds\&. i\&.e\&. 1 millisecond\&.
+This parameter specifies the threshold time of network latency which divides the domains of scheduling priority\&. If a network latency difference from nearer network is larger than this value, the network\'s scheduling priority is lowered\&. There is a similar parameter schedule_rtt_thresh_ratio, and the scheduling priority is lowered if the network latency exceeds one of the parameters\&. The default is 1000 microseconds\&. i\&.e\&. 1 millisecond\&.
 .sp
 For example,
 .sp
@@ -1114,7 +1158,7 @@ For example,
 .PP
 schedule_rtt_thresh_ratio \fIratio\fR
 .RS 4
-This parameter specifies the threshold ratio of network latency which divides the domains of scheduling priority\&. If a network latency is larger than this ratio from nearer network, the network\*(Aqs scheduling priority is lowered\&. There is a similar parameter schedule_rtt_thresh_diff, and the scheduling priority is lowered if the network latency exceeds one of the parameters\&. The default ratio is 4\&.0\&.
+This parameter specifies the threshold ratio of network latency which divides the domains of scheduling priority\&. If a network latency is larger than this ratio from nearer network, the network\'s scheduling priority is lowered\&. There is a similar parameter schedule_rtt_thresh_diff, and the scheduling priority is lowered if the network latency exceeds one of the parameters\&. The default ratio is 4\&.0\&.
 .sp
 For example,
 .sp
@@ -1187,7 +1231,7 @@ For example,
 .PP
 minimum_free_disk_space \fIbytes\fR
 .RS 4
-This directive specifies free disk space (in bytes) which is required on filesystem nodes\&. The Gfarm scheduler excludes filesystem nodes which have less free space than this parameter, when it schedules nodes for jobs which may write files\&. The free space value may have a suffix like ``k\*(Aq\*(Aq (kilo bytes), ``M\*(Aq\*(Aq (mega bytes), ``G\*(Aq\*(Aq (giga bytes) and ``T\*(Aq\*(Aq (tera bytes)\&. The default size is 128M bytes\&.
+This directive specifies free disk space (in bytes) which is required on filesystem nodes\&. The Gfarm scheduler excludes filesystem nodes which have less free space than this parameter, when it schedules nodes for jobs which may write files\&. The free space value may have a suffix like ``k\'\' (kilo bytes), ``M\'\' (mega bytes), ``G\'\' (giga bytes) and ``T\'\' (tera bytes)\&. The default size is 512M bytes\&.
 .sp
 This directive has to be specified in both gfarm2\&.conf and gfmd\&.conf\&. After restarting the gfmd and the Gfarm client, it is effective\&.
 .sp
@@ -1204,9 +1248,16 @@ For example,
 .\}
 .RE
 .PP
-gfs_proto_fhremove_request_window \fInumber\fR
+direct_local_access \fIvalidity\fR
 .RS 4
-This directive specifies maximum number of outstanding replica removal requests from gfmd to gfsd\&. The default is 50\&.
+When a Gfarm client accesses a file replica which is stored by the local gfsd, the client bypasses the gfsd and directly accesses the file replica for reading/writing the file contents to reduce the overhead\&. This directive is used to disable this feature\&. It is useful to make the local gfsd calculate the checksum of the local file replica\&. Please see the
+digest
+directive for detail\&.
+.sp
+The default is
+enable\&.
+.sp
+This directive is only available for clients in gfarm2\&.conf\&. Both gfsd and gfmd ignore this setting in gfarm2\&.conf and gfmd\&.conf\&.
 .sp
 For example,
 .sp
@@ -1214,24 +1265,7 @@ For example,
 .RS 4
 .\}
 .nf
-	gfs_proto_fhremove_request_window 50
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-gfs_proto_replication_request_window \fInumber\fR
-.RS 4
-This directive specifies maximum number of outstanding gfmd\-initiated replication requests from gfmd to destination\-side gfsd\&. The default is 20\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_replication_request_window 20
+	direct_local_access disable
 .fi
 .if n \{\
 .RE
@@ -1240,7 +1274,7 @@ For example,
 .PP
 simultaneous_replication_receivers \fInumber\fR
 .RS 4
-This directive is just an alias of the gfs_proto_replication_request_window directive since gfarm\-2\&.6\&. Please use that directive instead\&. This directive remains for compatibility with older versions\&. The default is 20\&.
+This directive specifies maximum number of simultaneous gfmd\-initiated replications to same host\&. The default is 20\&.
 .sp
 For example,
 .sp
@@ -1248,24 +1282,7 @@ For example,
 .RS 4
 .\}
 .nf
-	simultaneous_replication_receivers 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-outstanding_file_replication_limit \fInumber\fR
-.RS 4
-This directive specifies maximum number of outstanding gfmd\-initiated replication requests in whole system\&. This exists to prevent memory shortage of gfmd\&. The default is 4194304 and this value corresponds to approximately 512MB memory\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 .fi
 .if n \{\
 .RE
@@ -1371,7 +1388,7 @@ For example,
 .RS 4
 .\}
 .nf
-        page_cache_timeout 3600000
+	page_cache_timeout 3600000
 .fi
 .if n \{\
 .RE
@@ -1380,7 +1397,7 @@ For example,
 .PP
 log_level \fIpriority_level\fR
 .RS 4
-This directive specifies a level of log priority\&. The log output, which priority is inferior to this level, will not be sent to syslog or standard error\&. The priority levels are "emerg", "alert", "crit", "err", "warning", "notice", "info" and "debug" in highest first order\&. The default level is "info"\&. It\*(Aqs not recommended to specify a level higher or equal to "crit"\&.
+This directive specifies a level of log priority\&. The log output, which priority is inferior to this level, will not be sent to syslog or standard error\&. The priority levels are "emerg", "alert", "crit", "err", "warning", "notice", "info" and "debug" in highest first order\&. The default level is "info"\&. It\'s not recommended to specify a level higher or equal to "crit"\&.
 .sp
 For example,
 .sp
@@ -1510,7 +1527,7 @@ When a Gfarm application program crashes (received SIGSEGV, SIGBUG, etc\&.), a d
 .RE
 .\}
 .sp
-"%e" and "%p" are expanded to an actual program name and a process ID, respectively\&. If you\*(Aqd like to use "%" character itself in the command line, type "%%"\&.
+"%e" and "%p" are expanded to an actual program name and a process ID, respectively\&. If you\'d like to use "%" character itself in the command line, type "%%"\&.
 .sp
 This directive is available in both gfarm2\&.conf and gfmd\&.conf\&. If this directive is omitted, no debug command is executed\&.
 .RE
@@ -1549,6 +1566,23 @@ For example,
 .\}
 .RE
 .PP
+gfsd_connection_timeout \fIseconds\fR
+.RS 4
+This directive specifies the timeout to connect to a gfsd\&. The default is 30 seconds\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	gfsd_connection_timeout 30
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 atime \fItype\fR
 .RS 4
 When "disable" is specified, atime (access time) is not updated\&. When "relative" is specified, atime is only updated if the previous atime is earlier than the current mtime (modify time) or ctime (change time), or if the previous atime is more than 1 day old\&. When "strict" is specified, atime is always updated\&. The default setting is "relative"\&.
@@ -1568,9 +1602,32 @@ For example,
 .\}
 .RE
 .PP
+client_digest_check \fIvalidity\fR
+.RS 4
+When "enable" is specified, the Gfarm client library (libgfarm) calculates checksum while accessing a whole file sequentially, and verify the result against a value which is set in the metadata of the file\&. Also, libgfarm sets the calculated checksum to the metadata, if checksum isn\'t set in the metadata, and the file is opened for writing\&.
+.sp
+The default value is disable\&.
+.sp
+This directive is only available for clients in gfarm2\&.conf\&. Both gfsd and gfmd ignore this setting in gfarm2\&.conf and gfmd\&.conf\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	client_digest_check enable
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 client_file_bufsize \fIbytes\fR
 .RS 4
 This directive specifies the file buffer size in bytes used in the Gfarm client library (libgfarm)\&. The default size is 1048568 bytes (= 1MiB \- 8B)\&. The file buffer size should be less than the default value not for deterioration of remote access performance for version 2\&.5\&.0 or earlier\&.
+.sp
+This directive is only available for clients in gfarm2\&.conf\&. Both gfsd and gfmd ignore this setting in gfarm2\&.conf and gfmd\&.conf\&.
 .sp
 For example,
 .sp
@@ -1718,27 +1775,6 @@ Example:
 .\}
 .RE
 .PP
-metadb_server_slave_listen \fIvalidity\fR
-.RS 4
-When "enable" is specified, even if the gfmd is set to slave, it receives requests from clients\&. The default is "disable"\&.
-.sp
-NOTE: Please do not set this directive for ordinary use, because this feature is only for development\&.
-.sp
-This parameter is only available in gfmd\&.conf\&.
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	metadb_server_slave_listen enable
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 metadb_server_slave_max_size \fInumber\fR
 .RS 4
 This parameter specifies the maximum number of slave gfmds\&. The default is "32"\&.
@@ -1798,7 +1834,7 @@ Example:
 .PP
 metadb_journal_recvq_size \fIsize\fR
 .RS 4
-This parameter specifies the maximum number of on\-memory records of the journal data that the slave gfmd receives from the master gfmd\&. If it reaches this value, the slave gfmd gives up and exits, because the gfmd thinks that it\*(Aqs too slow to apply the journal data to the backend database\&. The default value is 100000\&.
+This parameter specifies the maximum number of on\-memory records of the journal data that the slave gfmd receives from the master gfmd\&. If it reaches this value, the slave gfmd gives up and exits, because the gfmd thinks that it\'s too slow to apply the journal data to the backend database\&. The default value is 100000\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1836,7 +1872,7 @@ Example:
 .PP
 replica_check_host_down_thresh \fIseconds\fR
 .RS 4
-If a gfsd is down, the replica_check assumes that the gfsd is not down until the specified seconds\&. This is useful to maintain a gfsd\&. The default value is 10800 seconds (3 hours)\&.
+This statement specifies an interval to start replica check after a gfsd is down\&. The default value is 10800 seconds (3 hours)\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1855,7 +1891,7 @@ Example:
 .PP
 replica_check_sleep_time \fInanoseconds\fR
 .RS 4
-If this value is increased, the replica_check works more slowly only when the gfmd is busy\&. When the gfmd is not busy, the replica_check works at full speed\&. This directive specifies the nanoseconds to sleep in the replica_check\&. The default value is 100000 nanoseconds (0\&.1 millisecond)\&. The maximum value is 1000000000 nanoseconds (1 second)\&.
+This statement specifies the sleep time in nanoseconds during the replica check when gfmd is busy\&. The default value is 100000 nanoseconds (0\&.1 millisecond)\&. The maximum value is 1000000000 nanoseconds (1 second)\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1874,7 +1910,7 @@ Example:
 .PP
 replica_check_minimum_interval \fIseconds\fR
 .RS 4
-This directive specifies the minimum interval in seconds, for the replica_check to work\&. The default value is 10 seconds, i\&.e\&. the replica_check can work up to one time every 10 seconds\&.
+This statement specifies the minimum interval in seconds, to start the next replica check\&. The default value is 10 seconds\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1901,13 +1937,14 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .RS 4
 .\}
 .nf
-<spool_statement> |
+	<spool_statement> |
 	<spool_server_listen_address_statement> |
 	<spool_server_listen_backlog_statement> |
 	<spool_server_cred_type_statement> |
 	<spool_server_cred_service_statement> |
 	<spool_server_cred_name_statement> |
 	<spool_check_level_statement> |
+	<spool_base_load_statement> |
 	<metadb_server_host_statement> |
 	<metadb_server_port_statement> |
 	<metadb_server_cred_type_statement> |
@@ -1932,6 +1969,8 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<postgresql_password_statement> |
 	<postgresql_conninfo_statement> |
 	<auth_statement> |
+	<shared_key_file_statement> |
+	<digest_statement> |
 
 	<sockopt_statement> |
 
@@ -1956,16 +1995,13 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<write_local_priority_statement> |
 	<write_target_domain_statement> |
 	<minimum_free_disk_space_statement> |
-	<gfs_proto_fhremove_request_window_statement> |
-	<gfs_proto_replication_request_window_statement> |
+	<direct_local_access_statement> |
 	<simultaneous_replication_receivers_statement> |
-	<outstanding_file_replication_limit_statement> |
 	<gfsd_connection_cache_statement> |
 	<xmlattr_size_limit_statement> |
 	<xattr_size_limit_statement> |
 	<attr_cache_limit_statement> |
 	<attr_cache_timeout_statement> |
-	<page_cache_timeout_statement> |
 	<log_level_statement> |
 	<log_message_verbose_level_statement> |
 	<log_auth_verbose_statement> |
@@ -1974,6 +2010,7 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<debug_command_statement> |
 
 	<atime_statement> |
+	<client_digest_check_statement> |
 	<client_file_bufsize_statement> |
 	<client_parallel_copy_statement> |
 	<profile_statement> |
@@ -1982,7 +2019,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<synchronous_replication_timeout_statement> |
 	<synchronous_journaling_statement> |
 	<metadb_server_force_slave_statement> |
-	<metadb_server_slave_listen_statement> |
 	<metadb_server_slave_max_size_statement> |
 	<metadb_journal_dir_statement> |
 	<metadb_journal_max_size_statement> |
@@ -2089,6 +2125,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "spool_check_level" <spck_level>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<spool_base_load_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"spool_base_load" <load>
 .fi
 .if n \{\
 .RE
@@ -2459,6 +2509,34 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
+<shared_key_file_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"shared_key_file" <pathname>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<digest_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"digest" <digest_type>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 <sockopt_statement> ::=
 .RS 4
 .sp
@@ -2770,28 +2848,14 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
-<gfs_proto_fhremove_request_window_statement> ::=
+<direct_local_access_statement> ::=
 .RS 4
 .sp
 .if n \{\
 .RS 4
 .\}
 .nf
-"gfs_proto_fhremove_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<gfs_proto_replication_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_replication_request_window" <number>
+"direct_local_access" <validity>
 .fi
 .if n \{\
 .RE
@@ -2806,20 +2870,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "simultaneous_replication_receivers" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<outstanding_file_replication_limit_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"outstanding_file_replication_limit" <number>
 .fi
 .if n \{\
 .RE
@@ -2890,20 +2940,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "attr_cache_timeout" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<page_cache_timeout_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"page_cache_timeout" <number>
 .fi
 .if n \{\
 .RE
@@ -3022,6 +3058,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
+<gfsd_connection_timeout_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"gfsd_connection_timeout" <number>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 <atime_statement> ::=
 .RS 4
 .sp
@@ -3030,6 +3080,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "atime" <atime_type>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<client_digest_check_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"client_digest_check" <validity>
 .fi
 .if n \{\
 .RE
@@ -3157,20 +3221,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "metadb_server_force_slave" <validity>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<metadb_server_slave_listen_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"metadb_server_slave_listen" <validity>
 .fi
 .if n \{\
 .RE

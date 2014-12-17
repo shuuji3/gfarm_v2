@@ -2,6 +2,7 @@ DOCBOOK = \
 	gfchgrp.1 \
 	gfchmod.1 \
 	gfchown.1 \
+	gfcksum.1 \
 	gfdf.1 \
 	gfedquota.1 \
 	gfexport.1 \
@@ -27,6 +28,8 @@ DOCBOOK = \
 	gfsetfacl.1 \
 	gfstat.1 \
 	gfstatus.1 \
+	gfsudo.1 \
+	gftest.1 \
 	gfusage.1 \
 	gfuser.1 \
 	gfwhere.1 \

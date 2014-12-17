@@ -16,7 +16,6 @@ datadir="@datadir@"
 config_dir="${datadir}/gfarm/config"
 
 PRIVATE_MODE=false
-PRIVATE_MODE_FOR_DEBIAN=false
 
 PATH="${prefix}/bin:${prefix}/sbin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/ucb:/usr/pkg/bin:/usr/pkg/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
 export PATH
@@ -57,6 +56,7 @@ usage()
 	echo >&2 "	[-P backend_prefix]	- installation prefix of the backend program"
 	echo >&2 "	[-l metadata_directory]	- backend database data directory"
 	echo >&2 "	[-f backend_file]"
+	echo >&2 "	[-o backend_option]"
 	echo >&2 "	[-j metadb_journal_dir] - metadata journal directory"
 	update_usage_$BACKEND_TYPE ||
 		echo >&2 "	no option for backend=$BACKEND_TYPE"
@@ -111,8 +111,8 @@ tf2ed()
 
 display_params()
 {
-    echo "prefix                 [--prefix]: $CONFIG_PREFIX"
-    echo "metadata backend             [-b]: $BACKEND_TYPE"
+    echo     "prefix [--prefix]: $CONFIG_PREFIX"
+    echo     "metadata backend    [-b]: $BACKEND_TYPE"
 
     display_plain_params_backend_$BACKEND_TYPE
     display_plain_params_backend_port_$BACKEND_TYPE
@@ -179,6 +179,9 @@ while [ $# -gt 0 ] ; do
 		;;
 	  -f) shift; [ $# -ge 1 ] || usage
 		BACKEND_OPTIONS="$BACKEND_OPTIONS -f $1"
+		;;
+	  -o) shift; [ $# -ge 1 ] || usage
+		BACKEND_OPTIONS="$BACKEND_OPTIONS $1"
 		;;
 	  -j) shift; [ $# -ge 1 ] || usage
 		METADATA_JOURNAL_DIR=$1

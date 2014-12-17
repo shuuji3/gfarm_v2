@@ -3661,15 +3661,14 @@ main(int argc, char *argv[])
 			if (entry->src_d_type == GFS_DT_REG) {
 				if (entry->dst_exist) {
 					if (entry->dst_d_type == GFS_DT_REG) {
-						if (entry->src_size ==
-						    entry->dst_size &&
-						    ((!opt_force_copy &&
-						      entry->src_m_sec <=
-						      entry->dst_m_sec)
-						     ||
-						     (opt_force_copy &&
-						      entry->src_m_sec ==
-						      entry->dst_m_sec))) {
+						if ((!opt_force_copy &&
+						     entry->src_m_sec <=
+						     entry->dst_m_sec) ||
+						    (opt_force_copy &&
+						     entry->src_size ==
+						     entry->dst_size &&
+						     entry->src_m_sec ==
+						     entry->dst_m_sec)) {
 							gfprep_verbose(
 							  "already exists: %s",
 							  dst_url);
@@ -3792,7 +3791,8 @@ main(int argc, char *argv[])
 
 		/* ----- a file ----- */
 		/* select a file within specified src  */
-		if (hash_src && (hash_srcname || opt_src_domain)) {
+		if (hash_src && (hash_srcname || opt_src_domain ||
+		    opt_migrate)) {
 			int found = 0;
 
 			for (i = 0; i < entry->src_ncopy; i++) {
