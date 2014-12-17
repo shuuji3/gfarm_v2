@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/socket.h> /* gfs_client.h needs socklen_t */
 #include <errno.h>
@@ -18,16 +19,20 @@
 #include <gfarm/gfarm.h>
 
 #include "queue.h"
+#include "timer.h"
 
 #include "gfs_proto.h"	/* GFS_PROTO_FSYNC_* */
 #include "gfs_client.h"
 #include "gfs_io.h"
 #include "gfs_pio.h"
-#include "schedule.h"
-#include "context.h"
-#ifdef __KERNEL__
-#include <linux/fs.h>  /* just for SEEK_XXX */
-#endif
+#include "gfs_profile.h"
+
+static double gfs_pio_local_write_time;
+static double gfs_pio_local_read_time;
+static unsigned long long gfs_pio_local_write_size;
+static unsigned long long gfs_pio_local_read_size;
+static unsigned long long gfs_pio_local_write_count;
+static unsigned long long gfs_pio_local_read_count;
 
 #if 0 /* not yet in gfarm v2 */
 
@@ -109,7 +114,6 @@ gfs_pio_local_storage_close(GFS_File gf)
 		e = gfarm_errno_to_error(errno);
 	else
 		e = GFARM_ERR_NO_ERROR;
-#ifndef __KERNEL__
 	/*
 	 * Do not close remote file from a child process because its
 	 * open file count is not incremented.
@@ -125,14 +129,7 @@ gfs_pio_local_storage_close(GFS_File gf)
 		}
 		return (e);
 	}
-#endif /* __KERNEL__ */
 	e2 = gfs_client_close(gfs_server, gf->fd);
-	gfarm_schedule_host_unused(
-	    gfs_client_hostname(gfs_server),
-	    gfs_client_port(gfs_server),
-	    gfs_client_username(gfs_server),
-	    gf->scheduled_age);
-
 	gfs_client_connection_free(gfs_server);
 
 	if (e != GFARM_ERR_NO_ERROR || e2 != GFARM_ERR_NO_ERROR) {
@@ -151,29 +148,25 @@ gfs_pio_local_storage_pwrite(GFS_File gf,
 {
 	struct gfs_file_section_context *vc = gf->view_context;
 	int rv, save_errno;
+	gfarm_timerval_t t1, t2;
 
-#ifdef __KERNEL__
-	rv = pwrite(vc->fd, buffer, offset, size);
-#else
-	if (lseek(vc->fd, offset, SEEK_SET) == -1) {
-		save_errno = errno;
-		gflog_debug(GFARM_MSG_1001364,
-			"lseek() on view context file descriptor failed: %s",
-			strerror(save_errno));
-		return (gfarm_errno_to_error(save_errno));
-	}
-
-	rv = write(vc->fd, buffer, size);
-#endif
-
+	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
+	gfs_profile(gfarm_gettimerval(&t1));
+	if (gf->open_flags & GFARM_FILE_APPEND)
+		rv = write(vc->fd, buffer, size);
+	else
+		rv = pwrite(vc->fd, buffer, size, offset);
 	if (rv == -1) {
 		save_errno = errno;
-		gflog_debug(GFARM_MSG_1001365,
-			"write() on view context file descriptor failed: %s",
+		gflog_debug(GFARM_MSG_1003822, "pwrite: %s",
 			strerror(save_errno));
 		return (gfarm_errno_to_error(save_errno));
 	}
 	*lengthp = rv;
+	gfs_profile(gfarm_gettimerval(&t2));
+	gfs_profile(gfs_pio_local_write_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_pio_local_write_size += rv);
+	gfs_profile(gfs_pio_local_write_count++);
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -188,7 +181,7 @@ gfs_pio_local_storage_write(GFS_File gf,
 	rv = write(vc->fd, buffer, size);
 	if (rv == -1) {
 		save_errno = errno;
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003690,
 			"write() on view context file descriptor failed: %s",
 			strerror(save_errno));
 		return (gfarm_errno_to_error(save_errno));
@@ -205,28 +198,22 @@ gfs_pio_local_storage_pread(GFS_File gf,
 {
 	struct gfs_file_section_context *vc = gf->view_context;
 	int rv, save_errno;
+	gfarm_timerval_t t1, t2;
 
-#ifdef __KERNEL__
-	rv = pread(vc->fd, buffer, offset, size);
-#else
-	if (lseek(vc->fd, offset, SEEK_SET) == -1) {
-		save_errno = errno;
-		gflog_debug(GFARM_MSG_1001366,
-			"lseek() on view context file descriptor failed: %s",
-			strerror(save_errno));
-		return (gfarm_errno_to_error(save_errno));
-	}
-	rv = read(vc->fd, buffer, size);
-#endif
-
+	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
+	gfs_profile(gfarm_gettimerval(&t1));
+	rv = pread(vc->fd, buffer, size, offset);
 	if (rv == -1) {
 		save_errno = errno;
-		gflog_debug(GFARM_MSG_1001367,
-			"read() on view context file descriptor failed: %s",
+		gflog_debug(GFARM_MSG_1003823, "pread: %s",
 			strerror(save_errno));
 		return (gfarm_errno_to_error(save_errno));
 	}
 	*lengthp = rv;
+	gfs_profile(gfarm_gettimerval(&t2));
+	gfs_profile(gfs_pio_local_read_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_pio_local_read_size += rv);
+	gfs_profile(gfs_pio_local_read_count++);
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -235,12 +222,7 @@ gfs_pio_local_storage_ftruncate(GFS_File gf, gfarm_off_t length)
 {
 	struct gfs_file_section_context *vc = gf->view_context;
 	int rv;
-#ifdef __KERNEL__
-	if (gfarm_ctxp->call_rpc_instead_syscall) {
-		struct gfs_connection *gfs_server = vc->storage_context;
-		rv =  gfs_client_ftruncate(gfs_server, gf->fd, length);
-	} else
-#endif /* __KERNEL__ */
+
 	rv = ftruncate(vc->fd, length);
 	if (rv == -1) {
 		int save_errno = errno;
@@ -313,6 +295,16 @@ gfs_pio_local_storage_fstat(GFS_File gf, struct gfs_stat *st)
 }
 
 static gfarm_error_t
+gfs_pio_local_storage_cksum(GFS_File gf, const char *type,
+	char *cksum, size_t size, size_t *lenp)
+{
+	struct gfs_file_section_context *vc = gf->view_context;
+	struct gfs_connection *gfs_server = vc->storage_context;
+
+	return (gfs_client_cksum(gfs_server, gf->fd, type, cksum, size, lenp));
+}
+
+static gfarm_error_t
 gfs_pio_local_storage_reopen(GFS_File gf)
 {
 	gfarm_error_t e;
@@ -344,6 +336,7 @@ struct gfs_storage_ops gfs_pio_local_storage_ops = {
 	gfs_pio_local_storage_fstat,
 	gfs_pio_local_storage_reopen,
 	gfs_pio_local_storage_write,
+	gfs_pio_local_storage_cksum,
 };
 
 gfarm_error_t
@@ -364,4 +357,21 @@ gfs_pio_open_local_section(GFS_File gf, struct gfs_connection *gfs_server)
 	vc->storage_context = gfs_server;
 	vc->pid = getpid();
 	return (GFARM_ERR_NO_ERROR);
+}
+
+void
+gfs_pio_local_display_timers(void)
+{
+	gflog_info(GFARM_MSG_1003824,
+	    "local read time   : %g sec", gfs_pio_local_read_time);
+	gflog_info(GFARM_MSG_1003825,
+	    "local read size   : %llu", gfs_pio_local_read_size);
+	gflog_info(GFARM_MSG_1003826,
+	    "local read count  : %llu", gfs_pio_local_read_count);
+	gflog_info(GFARM_MSG_1003827,
+	    "local write time  : %g sec", gfs_pio_local_write_time);
+	gflog_info(GFARM_MSG_1003828,
+	    "local write size  : %llu", gfs_pio_local_write_size);
+	gflog_info(GFARM_MSG_1003829,
+	    "local write count : %llu", gfs_pio_local_write_count);
 }

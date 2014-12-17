@@ -35,11 +35,7 @@ enum gfs_proto_command {
 
 	GFS_PROTO_REPLICA_ADD,			/* for COMPAT_GFARM_2_3 */
 	GFS_PROTO_REPLICA_ADD_FROM,		/* for COMPAT_GFARM_2_3 */
-#if 0
 	GFS_PROTO_REPLICA_RECV,
-#else
-	GFS_PROTO_FHOPEN,
-#endif
 
 	GFS_PROTO_STATFS,
 	GFS_PROTO_COMMAND,
@@ -55,9 +51,14 @@ enum gfs_proto_command {
 	/* from client */
 	GFS_PROTO_PROCESS_RESET,
 	GFS_PROTO_WRITE,
+	GFS_PROTO_CKSUM,
 };
 
-#define GFS_PROTO_MAX_IOSIZE	(1024 * 1024)
+/*
+ * For better remote read performance, subtract 8 byte (errno and the
+ * size of data of gfs_client_pread) to fill up the iobuffer.
+ */
+#define GFS_PROTO_MAX_IOSIZE	(1048576 - 8)
 
 /*
  * sub protocols of GFS_PROTO_COMMAND
