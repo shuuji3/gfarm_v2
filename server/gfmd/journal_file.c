@@ -170,7 +170,7 @@ static const char *journal_operation_names[] = {
 	"MDHOST_MODIFY",
 	"MDHOST_REMOVE",
 
-	"FSNGROUP_MODIFY",
+	"MDHOST_REMOVE",
 	"NOP",
 };
 
@@ -202,7 +202,7 @@ int
 journal_file_is_waiting_until_nonempty(struct journal_file *jf)
 {
 	int r;
-	static const char diag[] = "journal_file_is_waiting_until_nonempty";
+	static const char *diag = "journal_file_is_waiting_until_nonempty";
 
 	journal_file_mutex_lock(jf, diag);
 	r = jf->wait_until_nonempty;
@@ -294,7 +294,7 @@ journal_file_reader_committed_pos(struct journal_file_reader *reader,
     off_t *rposp, gfarm_uint64_t *rlapp)
 {
 	struct journal_file *jf = reader->file;
-	static const char diag[] = "journal_file_reader_committed_pos";
+	static const char *diag = "journal_file_reader_committed_pos";
 
 	journal_file_mutex_lock(jf, diag);
 	journal_file_reader_committed_pos_unlocked(reader, rposp, rlapp);
@@ -324,7 +324,7 @@ void
 journal_file_reader_commit_pos(struct journal_file_reader *reader)
 {
 	struct journal_file *jf = reader->file;
-	static const char diag[] = "journal_file_reader_commit_pos";
+	static const char *diag = "journal_file_reader_commit_pos";
 	off_t pos;
 
 	pos = reader->committed_pos + reader->uncommitted_len;
@@ -358,7 +358,7 @@ journal_file_reader_is_expired(struct journal_file_reader *reader)
 {
 	int r;
 	struct journal_file *jf = reader->file;
-	static const char diag[] = "journal_file_reader_is_expired";
+	static const char *diag = "journal_file_reader_is_expired";
 
 	journal_file_mutex_lock(jf, diag);
 	r = journal_file_reader_is_expired_unlocked(reader);
@@ -695,7 +695,7 @@ journal_file_reader_writer_wait(struct journal_file_reader *reader,
 	struct journal_file *jf, size_t rec_len)
 {
 	struct journal_file_writer *writer = &jf->writer;
-	static const char diag[] = "journal_file_reader_adjust_pos";
+	static const char *diag = "journal_file_reader_adjust_pos";
 	off_t wpos, rpos;
 	gfarm_uint64_t wlap, rlap;
 	int needed, waited = 0;
@@ -1137,6 +1137,24 @@ journal_env_for_credential_fd_op(void *cookie)
 }
 
 static int
+journal_nonblocking_read_err_op(struct gfarm_iobuffer *b,
+	void *cookie, int fd, void *data, int length)
+{
+	errno = EPERM;
+	gfarm_iobuffer_set_error(b, gfarm_errno_to_error(errno));
+	return (-1);
+}
+
+static int
+journal_nonblocking_write_err_op(struct gfarm_iobuffer *b,
+	void *cookie, int fd, void *data, int length)
+{
+	errno = EPERM;
+	gfarm_iobuffer_set_error(b, gfarm_errno_to_error(errno));
+	return (-1);
+}
+
+static int
 journal_blocking_read_op(struct gfarm_iobuffer *b,
 	void *cookie, int fd, void *data, int length)
 {
@@ -1262,6 +1280,8 @@ static struct gfp_iobuffer_ops journal_iobuffer_ops = {
 	journal_export_credential_fd_op,
 	journal_delete_credential_fd_op,
 	journal_env_for_credential_fd_op,
+	journal_nonblocking_read_err_op,
+	journal_nonblocking_write_err_op,
 	journal_blocking_read_op,
 	journal_blocking_read_op,
 	journal_blocking_write_op
@@ -1332,7 +1352,7 @@ journal_file_reader_new(struct journal_file *jf, int fd,
 
 gfarm_error_t
 journal_file_open(const char *path, size_t max_size,
-	gfarm_uint64_t db_seqnum, struct journal_file **jfp, int flags)
+	gfarm_uint64_t cur_seqnum, struct journal_file **jfp, int flags)
 {
 	gfarm_error_t e;
 	struct stat st;
@@ -1344,7 +1364,7 @@ journal_file_open(const char *path, size_t max_size,
 	struct journal_file *jf;
 	struct journal_file_reader *reader = NULL;
 	struct gfp_xdr *writer_xdr = NULL;
-	static const char diag[] = "journal_file_open";
+	static const char *diag = "journal_file_open";
 
 	GFARM_MALLOC(jf);
 	if (jf == NULL) {
@@ -1422,7 +1442,7 @@ journal_file_open(const char *path, size_t max_size,
 	}
 	if (cur_size > 0) {
 		if ((e = journal_find_rw_pos(rfd, wfd, cur_size,
-		    db_seqnum, &rpos, &rlap, &wpos, JOURNAL_INITIAL_WLAP,
+		    cur_seqnum, &rpos, &rlap, &wpos, JOURNAL_INITIAL_WLAP,
 		    &tail)) != GFARM_ERR_NO_ERROR)
 			goto error;
 	} else {
@@ -1474,11 +1494,11 @@ journal_file_open(const char *path, size_t max_size,
 
 	return (GFARM_ERR_NO_ERROR);
 error:
-	if (rfd >= 0)
+	if (rfd > 0)
 		close(rfd);
 	if (writer_xdr)
 		gfp_xdr_free(writer_xdr);
-	else if (wfd >= 0)
+	else if (wfd > 0)
 		close(wfd);
 	free(jf);
 	if (reader != NULL)
@@ -1498,7 +1518,7 @@ journal_file_reader_reopen_if_needed(struct journal_file *jf,
 	gfarm_uint64_t rlap;
 	off_t tail;
 	struct journal_file_writer *writer = &jf->writer;
-	static const char diag[] = "journal_file_reader_reopen";
+	static const char *diag = "journal_file_reader_reopen";
 
 	journal_file_mutex_lock(jf, diag);
 
@@ -1564,7 +1584,7 @@ journal_file_wait_until_empty(struct journal_file *jf)
 {
 	struct journal_file_writer *writer = &jf->writer;
 	struct journal_file_reader *reader = journal_file_main_reader(jf);
-	static const char diag[] = "journal_file_wait_until_empty";
+	static const char *diag = "journal_file_wait_until_empty";
 #ifdef DEBUG_JOURNAL
 	gflog_debug(GFARM_MSG_1002899,
 	    "wait until applying all rest journal records");
@@ -1585,7 +1605,7 @@ journal_file_close(struct journal_file *jf)
 #if 0
 	struct journal_file_reader *reader, *reader2;
 #endif
-	static const char diag[] = "journal_file_close";
+	static const char *diag = "journal_file_close";
 
 	if (jf == NULL)
 		return;
@@ -1701,7 +1721,7 @@ journal_file_write(struct journal_file *jf, gfarm_uint64_t seqnum,
 	struct journal_file_writer *writer = &jf->writer;
 	struct gfp_xdr *xdr = writer->xdr;
 	gfarm_uint32_t crc;
-	static const char diag[] = "journal_file_write";
+	static const char *diag = "journal_file_write";
 	struct journal_file_reader *reader;
 	int waited;
 
@@ -1712,7 +1732,7 @@ journal_file_write(struct journal_file *jf, gfarm_uint64_t seqnum,
 	if ((e = size_add_op(ope, &data_len, arg)) != GFARM_ERR_NO_ERROR) {
 		GFLOG_ERROR_WITH_SN(GFARM_MSG_1002904,
 		    "size_add_op", e, seqnum, ope);
-		return (e);
+		goto end;
 	}
 
 	journal_file_mutex_lock(jf, diag);
@@ -1768,6 +1788,8 @@ journal_file_write(struct journal_file *jf, gfarm_uint64_t seqnum,
 unlock:
 	gfp_xdr_end_sendbuffer_pindown(xdr);
 	journal_file_mutex_unlock(jf, diag);
+end:
+	free(arg);
 	return (e);
 }
 
@@ -1881,7 +1903,7 @@ journal_file_read(struct journal_file_reader *reader, void *op_arg,
 	void *obj = NULL;
 	struct journal_file *jf = reader->file;
 	struct gfp_xdr *xdr = reader->xdr;
-	static const char diag[] = "journal_file_read";
+	static const char *diag = "journal_file_read";
 	size_t avail;
 	size_t min_rec_size = journal_rec_header_size()
 		+ sizeof(gfarm_uint32_t);
@@ -1975,7 +1997,7 @@ journal_file_read_serialized(struct journal_file_reader *reader,
 	struct journal_file *jf = reader->file;
 	struct gfp_xdr *xdr = reader->xdr;
 	size_t avail, header_size = journal_rec_header_size();
-	static const char diag[] = "journal_file_read_serialized";
+	static const char *diag = "journal_file_read_serialized";
 
 	*eofp = 0;
 	errno = 0;
@@ -2059,7 +2081,7 @@ void
 journal_file_wait_for_read_completion(struct journal_file_reader *reader)
 {
 	struct journal_file *jf = reader->file;
-	static const char diag[] = "journal_file_wait_for_read_completion";
+	static const char *diag = "journal_file_wait_for_read_completion";
 
 	journal_file_mutex_lock(jf, diag);
 	journal_file_reader_set_flag(reader, JOURNAL_FILE_READER_F_DRAIN, 1);
@@ -2113,7 +2135,7 @@ journal_file_write_raw(struct journal_file *jf, int recs_len,
 	enum journal_operation ope;
 	struct journal_file_writer *writer = &jf->writer;
 	size_t header_size = journal_rec_header_size();
-	static const char diag[] = "journal_file_write_raw";
+	static const char *diag = "journal_file_write_raw";
 	struct journal_file_reader *reader;
 	int waited;
 

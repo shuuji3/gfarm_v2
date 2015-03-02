@@ -67,10 +67,8 @@ Gfarm ファイルシステムの導入にあたり，まず，メタデータ�
 IP     port      IP     port
 ------ --------- ------ --------- ----- -------------------------------
 gfmd   ephemeral gfmd   gfmd_port TCP   metadata replication
-gfmd   ephemeral gfsd   gfsd_port UDP   gfmd failover notification 要求
 gfsd   ephemeral gfmd   gfmd_port TCP   metadata access 
 gfsd   ephemeral gfsd   gfsd_port TCP   data replication
-gfsd   gfsd_port gfmd   ephemeral UDP   gfmd failover notification 応答
 gfsd   gfsd_port client ephemeral UDP   gfsd health check 応答
 client ephemeral gfmd   gfmd_port TCP   metadata access 
 client ephemeral gfsd   gfsd_port TCP   data access
@@ -271,7 +269,11 @@ GSI 認証の場合は，gfsd 用のサービス証明書を取得します．
 
   証明書は /etc/grid-security/gfsd/gfsd{cert,key}.pem に置き，ディレク
   トリとファイルのオーナを _gfarmfs とします．gfsdkey.pem のファイルモー
-  ドは 0400 とします．
+  ドは 0400 とします．複数の gfsd を異なる仮想IPアドレスを用い同一ホス
+  トで立ち上げたい場合は以下の config-gfsd に対し -l オプションでホスト
+  名，あるいはIPアドレスを指定します．その場合，証明書は
+  /etc/grid-security/gfsd-<ホスト名 or IPアドレス>/gfsd{cert,key}.pem
+  に置きます．
 
 次に，メタデータサーバで生成された <sysconfdir>/etc/gfarm2.conf ファイ
 ルをファイルシステムノードの <sysconfdir>/etc にコピーします．
@@ -493,6 +495,16 @@ realname などに space を含む場合は，ダブルクオートなどで括�
 	$ gfmkdir /home/taro
 	$ gfchown taro /home/taro
 
+共有鍵認証の場合は，ユーザのローカルアカウントを全メタデータサーバ，全
+ファイルシステムノードに作成します．ローカルアカウント名が Gfarm のグ
+ローバルなユーザ名と異なる場合は，そのホストではユーザのマップファイル
+が必要になります．ユーザ用の共有鍵を作成し、その鍵を全メタデータサーバ，
+全ファイルシステムノードのユーザのホームディレクトリにコピーします．コ
+ピーした共有鍵のオーナがユーザであることを確認してください．
+
+GSI 認証の場合は，全メタデータサーバ，全ファイルシステムノードの 
+grid-mapfile に，ユーザの Subject DN を登録し，nobody にマップします．
+
 ● 管理者権限，root 権限をもつユーザの登録
 ==========================================
 
@@ -594,9 +606,9 @@ Gfarm ファイルシステムでは，ファイルはどこかのファイル�
 以下は /（root ディレクトリ）の拡張属性 gfarm.ncopy に 2 を指定する例
 です．
 
-	$ echo -n 2 | gfxattr -s / gfarm.ncopy
+	$ gfncopy -s 2 /
 
 このとき，これ以降に作成されたファイルは自動的にファイル複製が二つ作成
-されます．ただし，ファイル作成時に十分な数のファイルシステムノードが存
-在しない場合，過度に負荷が高い場合には作成されないこともありますので，
-確実に作成するためには gfrep コマンドと併用してください．
+されます．ファイルシステムノードが故障して，必要な複製数が足りなくなっ
+た場合，replica_check_host_down_threshで指定される時間後に自動的に必要
+数の複製が作成されます．デフォルトは3時間後です．

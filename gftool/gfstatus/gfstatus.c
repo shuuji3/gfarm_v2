@@ -4,11 +4,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <libgen.h>
 #include <gfarm/gfarm.h>
-
-#include "context.h"
 #include "config.h"
 #include "auth.h"
 #include "host.h"
@@ -52,11 +51,67 @@ print_user_config_file(char *msg)
 		printf("%s\n", rc);
 }
 
+static void
+print_config_int(int print_type, const char *type, int value)
+{
+	if (print_type)
+		printf("%s: %d\n", type, value);
+	else
+		printf("%d\n", value);
+}
+
+static void
+print_config_string(int print_type, const char *type, const char *string)
+{
+	if (string == NULL)
+		string = "";
+	if (print_type)
+		printf("%s: %s\n", type, string);
+	else
+		puts(string);
+}
+
+static void
+print_config_enabled(int print_type, const char *type, int enabled)
+{
+	print_config_string(print_type, type,
+	    enabled ? "enabled" : "disabled");
+}
+
+static gfarm_error_t
+print_configurations(int argc, char **argv)
+{
+	gfarm_error_t e = GFARM_ERR_NO_ERROR;
+	int i, print_type = 1;
+	const char *type;
+
+	if (argc <= 1)
+		print_type = 0;
+
+	for (i = 0; i < argc; i++) {
+		type = argv[i];
+		if (strcmp(type, "digest") == 0) {
+			print_config_string(print_type, type, gfarm_digest);
+		} else if (strcmp(type, "direct_local_access") == 0) {
+			print_config_enabled(print_type, type,
+			    gfarm_direct_local_access);
+		} else if (strcmp(type, "client_file_bufsize") == 0) {
+			print_config_int(print_type, type,
+			    gfarm_client_file_bufsize);
+		} else {
+			fprintf(stderr,
+			    "%s: unsupported configuration directive\n", type);
+			e = GFARM_ERR_NO_SUCH_OBJECT;
+		}
+	}
+	return (e);
+}
+
 void
 usage(void)
 {
 	fprintf(stderr,
-	    "Usage:\t%s [-P <path>]\n",
+	    "Usage:\t%s [-d] [-V] [-P <path>]\n",
 	    program_name);
 	exit(EXIT_FAILURE);
 }
@@ -65,7 +120,7 @@ int
 main(int argc, char *argv[])
 {
 	gfarm_error_t e, e2;
-	int port, c;
+	int port, c, debug_mode = 0;
 	char *canonical_hostname, *hostname, *realpath = NULL;
 	const char *user, *gfmd_hostname;
 	const char *path = ".";
@@ -78,15 +133,20 @@ main(int argc, char *argv[])
 	if (argc > 0)
 		program_name = basename(argv[0]);
 
-	while ((c = getopt(argc, argv, "dP:?"))
+	while ((c = getopt(argc, argv, "dP:V?"))
 	    != -1) {
 		switch (c) {
 		case 'd':
+			debug_mode = 1;
 			gflog_set_priority_level(LOG_DEBUG);
+			gflog_auth_set_verbose(1);
 			break;
 		case 'P':
 			path = optarg;
 			break;
+		case 'V':
+			fprintf(stderr, "Gfarm version %s\n", gfarm_version());
+			exit(0);
 		case '?':
 			usage();
 		}
@@ -96,6 +156,18 @@ main(int argc, char *argv[])
 
 	e = gfarm_initialize(&argc, &argv);
 	error_check("gfarm_initialize", e);
+	if (debug_mode) {
+		/* set again since gfarm_initialize overwrites them */
+		gflog_set_priority_level(LOG_DEBUG);
+		gflog_auth_set_verbose(1);
+	}
+	if (argc > 0) {
+		e = print_configurations(argc, argv);
+		e2 = gfarm_terminate();
+		error_check("gfarm_terminate", e2);
+
+		exit(e == GFARM_ERR_NO_ERROR ? 0 : 1);
+	}
 
 	if (gfarm_realpath_by_gfarm2fs(path, &realpath) == GFARM_ERR_NO_ERROR)
 		path = realpath;
@@ -117,7 +189,7 @@ main(int argc, char *argv[])
 	user = gfm_client_username(gfm_server);
 
 	print_user_config_file("user config file  ");
-	print_msg("system config file", gfarm_config_get_filename());
+	print_msg("system config file", gfarm_config_file);
 
 	puts("");
 	print_msg("hostname          ", gfarm_host_get_self_name());
@@ -160,8 +232,8 @@ main(int argc, char *argv[])
 	free(realpath);
 	print_msg("gfmd server name", gfmd_hostname);
 	printf("gfmd server port: %d\n", port);
-	print_msg("gfmd admin user", gfarm_ctxp->metadb_admin_user);
-	print_msg("gfmd admin dn  ", gfarm_ctxp->metadb_admin_user_gsi_dn);
+	print_msg("gfmd admin user", gfarm_metadb_admin_user);
+	print_msg("gfmd admin dn  ", gfarm_metadb_admin_user_gsi_dn);
 
 	gfm_client_connection_free(gfm_server);
 

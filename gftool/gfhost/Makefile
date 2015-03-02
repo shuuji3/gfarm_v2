@@ -27,5 +27,4 @@ $(OBJS): $(DEPGFARMINC) \
 	$(GFARMLIB_SRCDIR)/gfm_client.h \
 	$(GFARMLIB_SRCDIR)/gfs_client.h \
 	$(GFARMLIB_SRCDIR)/lookup.h \
-	$(GFARMLIB_SRCDIR)/filesystem.h \
 	$(GFARMLIB_SRCDIR)/config.h

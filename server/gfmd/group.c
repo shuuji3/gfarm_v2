@@ -11,7 +11,7 @@
 #include "gfutil.h"
 #include "hash.h"
 
-#include "context.h"
+#include "config.h"	/* gfarm_metadb_admin_user */
 #include "gfp_xdr.h"
 #include "auth.h"
 #include "gfm_proto.h"
@@ -23,8 +23,6 @@
 #include "group.h"
 #include "peer.h"
 #include "quota.h"
-#include "mdhost.h"
-#include "relay.h"
 
 #define GROUP_HASHTAB_SIZE	3079	/* prime number */
 
@@ -233,12 +231,11 @@ group_lookup_or_enter_invalid(const char *groupname)
 	gfarm_error_t e;
 	struct group *g = group_lookup_including_invalid(groupname);
 	char *n;
-	static const char diag[] = "group_lookup_or_enter_invalid";
 
 	if (g != NULL)
 		return (g);
 
-	n = strdup_ck(groupname, diag);
+	n = strdup(groupname);
 	if (n == NULL) {
 		gflog_error(GFARM_MSG_1002758,
 		    "group_lookup_or_enter_invalid(%s): no memory", groupname);
@@ -439,15 +436,15 @@ group_init(void)
 		    ADMIN_GROUP_NAME);
 
 		gi.groupname = strdup_ck(ADMIN_GROUP_NAME, diag);
-		gi.nusers = gfarm_ctxp->metadb_admin_user == NULL ? 1 : 2;
+		gi.nusers = gfarm_metadb_admin_user == NULL ? 1 : 2;
 		GFARM_MALLOC_ARRAY(gi.usernames, gi.nusers);
 		if (gi.usernames == NULL)
 			gflog_fatal(GFARM_MSG_1002316,
 			    "creating group %s: no memory", gi.groupname);
 		gi.usernames[0] = strdup_ck(ADMIN_USER_NAME, diag);
-		if (gfarm_ctxp->metadb_admin_user != NULL)
+		if (gfarm_metadb_admin_user != NULL)
 			gi.usernames[1] =
-			    strdup_ck(gfarm_ctxp->metadb_admin_user, diag);
+			    strdup_ck(gfarm_metadb_admin_user, diag);
 
 		/*
 		 * We have to call this before group_add_one(),
@@ -462,9 +459,9 @@ group_init(void)
 		group_add_one(NULL, &gi); /* this should always success */
 	} else {
 		group_add_user_and_record(admin, ADMIN_USER_NAME);
-		if (gfarm_ctxp->metadb_admin_user != NULL)
+		if (gfarm_metadb_admin_user != NULL)
 			group_add_user_and_record(admin,
-			    gfarm_ctxp->metadb_admin_user);
+			    gfarm_metadb_admin_user);
 	}
 
 	if ((admin = group_lookup(ROOT_GROUP_NAME)) == NULL) {
@@ -527,14 +524,10 @@ group_info_send(struct gfp_xdr *client, struct group *g)
 }
 
 gfarm_error_t
-gfm_server_group_info_get_all(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_group_info_get_all(struct peer *peer, int from_client, int skip)
 {
-	struct peer *mhpeer;
 	struct gfp_xdr *client = peer_get_conn(peer);
-	gfarm_error_t e_ret, e_rpc;
-	int size_pos;
+	gfarm_error_t e;
 	struct gfarm_hash_iterator it;
 	gfarm_int32_t ngroups;
 	struct group **gp;
@@ -542,14 +535,6 @@ gfm_server_group_info_get_all(
 
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
-
-	e_rpc = wait_db_update_info(peer, DBUPDATE_GROUP, diag);
-	if (e_rpc != GFARM_ERR_NO_ERROR) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "%s: failed to wait for the backend DB to be updated: %s",
-		    diag, gfarm_error_string(e_rpc));
-	}
-
 	/* XXX FIXME too long giant lock */
 	giant_lock();
 
@@ -561,55 +546,47 @@ gfm_server_group_info_get_all(
 		if (group_is_valid(*gp))
 			++ngroups;
 	}
-
-	e_ret = gfm_server_put_reply_begin(peer, &mhpeer, xid, &size_pos, diag,
-	    e_rpc, "i", ngroups);
-	if (e_ret != GFARM_ERR_NO_ERROR) {
+	e = gfm_server_put_reply(peer, diag,
+	    GFARM_ERR_NO_ERROR, "i", ngroups);
+	if (e != GFARM_ERR_NO_ERROR) {
 		giant_unlock();
 		gflog_debug(GFARM_MSG_1001526,
 		    "gfm_server_put_reply(%s): %s",
-		    diag, gfarm_error_string(e_ret));
-		return (e_ret);
+		    diag, gfarm_error_string(e));
+		return (e);
 	}
 	for (gfarm_hash_iterator_begin(group_hashtab, &it);
 	     !gfarm_hash_iterator_is_end(&it);
 	     gfarm_hash_iterator_next(&it)) {
 		gp = gfarm_hash_entry_data(gfarm_hash_iterator_access(&it));
 		if (group_is_valid(*gp)) {
-			/* XXXRELAY FIXME */
-			e_ret = group_info_send(client, *gp);
-			if (e_ret != GFARM_ERR_NO_ERROR) {
+			e = group_info_send(client, *gp);
+			if (e != GFARM_ERR_NO_ERROR) {
 				gflog_debug(GFARM_MSG_1001527,
 					"group_info_send() failed: %s",
-					gfarm_error_string(e_ret));
+					gfarm_error_string(e));
 				giant_unlock();
-				gfm_server_put_reply_end(peer, mhpeer, diag,
-				    size_pos);
-				return (e_ret);
+				return (e);
 			}
 		}
 	}
 	giant_unlock();
-	gfm_server_put_reply_end(peer, mhpeer, diag, size_pos);
-	return (e_ret);
+	return (GFARM_ERR_NO_ERROR);
 }
 
 gfarm_error_t
-gfm_server_group_info_get_by_names(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_group_info_get_by_names(struct peer *peer,
 	int from_client, int skip)
 {
-	struct peer *mhpeer;
 	struct gfp_xdr *client = peer_get_conn(peer);
 	gfarm_error_t e;
-	int size_pos;
 	gfarm_int32_t ngroups;
 	char *groupname, **groups;
 	int i, j, eof, no_memory = 0;
 	struct group *g;
 	static const char diag[] = "GFM_PROTO_GROUP_INFO_GET_BY_NAMES";
 
-	e = gfm_server_get_request(peer, sizep, diag, "i", &ngroups);
+	e = gfm_server_get_request(peer, diag, "i", &ngroups);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
 
@@ -647,17 +624,8 @@ gfm_server_group_info_get_by_names(
 		goto free_groups;
 	}
 
-	if (no_memory) {
-		e = GFARM_ERR_NO_MEMORY;
-	} else if ((e = wait_db_update_info(peer, DBUPDATE_GROUP, diag))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_error(GFARM_MSG_UNFIXED,
-		    "%s: failed to wait for the backend DB to be updated: %s",
-		    diag, gfarm_error_string(e));
-	}
-
-	e = gfm_server_put_reply_begin(peer, &mhpeer, xid, &size_pos, diag,
-	    e, "");
+	e = gfm_server_put_reply(peer, diag,
+		no_memory ? GFARM_ERR_NO_MEMORY : GFARM_ERR_NO_ERROR, "");
 	/* if network error doesn't happen, `e' holds RPC result here */
 	if (e != GFARM_ERR_NO_ERROR)
 		goto free_groups;
@@ -669,11 +637,13 @@ gfm_server_group_info_get_by_names(
 		if (g == NULL) {
 			gflog_debug(GFARM_MSG_1003466,
 			    "%s: group lookup <%s>: failed", diag, groups[i]);
-			e = gfp_xdr_send(client, "i", GFARM_ERR_NO_SUCH_GROUP);
+			e = gfm_server_put_reply(peer, diag,
+			    GFARM_ERR_NO_SUCH_GROUP, "");
 		} else {
 			gflog_debug(GFARM_MSG_1003467,
 			    "%s: group lookup <%s>: ok", diag, groups[i]);
-			e = gfp_xdr_send(client, "i", GFARM_ERR_NO_ERROR);
+			e = gfm_server_put_reply(peer, diag,
+			    GFARM_ERR_NO_ERROR, "");
 			if (e == GFARM_ERR_NO_ERROR)
 				e = group_info_send(client, g);
 		}
@@ -686,13 +656,52 @@ gfm_server_group_info_get_by_names(
 	 */
 	giant_unlock();
 
-	gfm_server_put_reply_end(peer, mhpeer, diag, size_pos);
-
 free_groups:
 	if (groups != NULL) {
 		for (i = 0; i < ngroups; i++)
 			free(groups[i]);
 		free(groups);
+	}
+	return (e);
+}
+
+static gfarm_error_t
+get_group(struct peer *peer, const char *diag, struct gfarm_group_info *gp)
+{
+	gfarm_error_t e;
+	int i, eof;
+
+	e = gfm_server_get_request(peer, diag, "si",
+		&gp->groupname, &gp->nusers);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001531,
+			"%s request failure: %s", diag, gfarm_error_string(e));
+		return (e);
+	}
+	if (gp->nusers <= 0) {
+		gp->usernames = NULL;
+	} else {
+		GFARM_MALLOC_ARRAY(gp->usernames, gp->nusers);
+		if (gp->usernames == NULL) {
+			gflog_debug(GFARM_MSG_1001532,
+				"allocation of usernames failed");
+			free(gp->groupname);
+			return (GFARM_ERR_NO_MEMORY);
+		}
+	}
+	for (i = 0; i < gp->nusers; ++i) {
+		e = gfp_xdr_recv(peer_get_conn(peer), 0, &eof, "s",
+			&gp->usernames[i]);
+		if (e != GFARM_ERR_NO_ERROR) {
+			gflog_debug(GFARM_MSG_1001533,
+				"gfp_xdr_recv(usernames) failed: %s",
+				gfarm_error_string(e));
+			for (--i; i >= 0; --i)
+				free(&gp->usernames[i]);
+			free(gp->usernames);
+			free(gp->groupname);
+			return (e);
+		}
 	}
 	return (e);
 }
@@ -732,216 +741,66 @@ group_user_check(struct gfarm_group_info *gi, const char *diag)
 	return (e);
 }
 
-/*
- * Closure for
- *     gfm_server_group_info_set_request()
- *     gfm_server_group_info_set_reply()
- *     gfm_server_group_info_set()
- *     gfm_server_group_info_modify()
- *
- * They are protocol handlers for
- *     GFM_PROTO_GROUP_INFO_SET
- *     GFM_PROTO_GROUP_INFO_MODIFY
- */
-struct group_info_closure {
-	struct gfarm_group_info group_info;
-	gfarm_error_t error;
-};
-
-static void
-group_info_closure_init(struct group_info_closure *gic)
-{
-	gic->group_info.usernames = NULL;
-	gic->group_info.groupname = NULL;
-	gic->group_info.nusers = 0;
-	gic->error = GFARM_ERR_NO_ERROR;
-}
-
-static gfarm_error_t
-group_info_closure_alloc_nusers(struct group_info_closure *gic, int nusers)
-{
-	char **usernames;
-
-	GFARM_REALLOC_ARRAY(usernames, gic->group_info.usernames, nusers);
-	if (usernames == NULL) {
-		gflog_debug(GFARM_MSG_1001532,
-		    "allocation of usernames failed");
-		return (GFARM_ERR_NO_MEMORY);
-	}
-	memset(usernames, 0, sizeof(*usernames) * nusers);
-	gic->group_info.usernames = usernames;
-	gic->group_info.nusers = nusers;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-static struct gfarm_group_info *
-group_info_closure_get_group_info(struct group_info_closure *gic)
-{
-	return (&gic->group_info);
-}
-
-static gfarm_error_t
-group_info_closure_get_error(struct group_info_closure *gic)
-{
-	return (gic->error);
-}
-
-static void
-group_info_closure_set_error(struct group_info_closure *gic, gfarm_error_t e)
-{
-	gic->error = e;
-}
-
-static void
-group_info_closure_term(struct group_info_closure *gic)
-{
-	if (gic == NULL)
-		return;
-	gfarm_group_info_free(&gic->group_info);
-}
-
-/*
- * Both GFM_PROTO_GROUP_INFO_SET and GFM_PROTO_GROUP_INFO_MODIFY use
- * this function to receive a request.
- */
-static gfarm_error_t
-gfm_server_group_info_set_request(enum request_reply_mode mode,
-	struct peer *peer, size_t *sizep, int skip, struct relayed_request *r,
-	void *closure, const char *diag)
-{
-	gfarm_error_t e_ret, e_rpc = GFARM_ERR_NO_ERROR;
-	struct gfarm_group_info *gi;
-	int nusers;
-	char *username;
-	char *groupname;
-	int i;
-
-	gi = group_info_closure_get_group_info(closure);
-	if (mode == RELAY_TRANSFER) {
-		groupname = gi->groupname;
-		nusers = gi->nusers;
-	}
-	e_ret = gfm_server_relay_get_request_dynarg(peer, sizep, skip, r, diag,
-	    "si", &groupname, &nusers);
-	if (e_ret != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_1001531, "%s request failure: %s",
-		    diag, gfarm_error_string(e_ret));
-		return (e_ret);
-	}
-	gi->groupname = groupname;
-	if (mode != RELAY_TRANSFER && nusers > 0)
-		e_rpc = group_info_closure_alloc_nusers(closure, nusers);
-
-	for (i = 0; i < nusers; ++i) {
-		if (gi->usernames == NULL)
-			username = NULL;
-		else
-			username = gi->usernames[i];
-
-		e_ret = gfm_server_relay_get_request_dynarg(peer, sizep, skip,
-		    r, diag, "s", &username);
-		if (e_ret != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001533,
-				"gfp_xdr_recv(usernames) failed: %s",
-				gfarm_error_string(e_ret));
-			return (e_ret);
-		}
-
-		if (gi->usernames == NULL)
-			free(username);
-		else
-			gi->usernames[i] = username;
-	}
-
-	group_info_closure_set_error(closure, e_rpc);
-	return (e_ret);
-}
-
 gfarm_error_t
-gfm_server_group_info_set_reply(enum request_reply_mode mode,
-	struct peer *peer, size_t *sizep, int skip, void *closure,
-	const char *diag)
-{
-	gfarm_error_t e_ret;
-	gfarm_error_t e_rpc = group_info_closure_get_error(closure);
-	struct gfarm_group_info *gi =
-	    group_info_closure_get_group_info(closure);
-	struct user *user = peer_get_user(peer);
-	int from_client = 
-	    (peer_get_auth_id_type(peer) == GFARM_AUTH_ID_TYPE_USER);
-
-	if (skip)
-		return (GFARM_ERR_NO_ERROR);
-
-	if (mode != RELAY_TRANSFER) {
-		giant_lock();
-		if (e_rpc != GFARM_ERR_NO_ERROR) {
-			;
-		} else if (!from_client || user == NULL ||
-		    !user_is_admin(user)) {
-			gflog_debug(GFARM_MSG_1001535,
-			    "operation is not permitted for user");
-			e_rpc = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		} else if (group_lookup(gi->groupname) != NULL) {
-			gflog_debug(GFARM_MSG_1001536,
-			    "group already exists");
-			e_rpc = GFARM_ERR_ALREADY_EXISTS;
-		} else if (strlen(gi->groupname) > GFARM_GROUP_NAME_MAX) {
-			gflog_debug(GFARM_MSG_1003469,
-			    "%s: too long group name: \"%s\"",
-			    diag, gi->groupname);
-			e_rpc = GFARM_ERR_INVALID_ARGUMENT;
-		} else if ((e_rpc = group_user_check(gi, diag))
-		    != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001537,
-			    "group_user_check() failed: %s",
-			    gfarm_error_string(e_rpc));
-			/*
-			 * We have to call db_group_add() before
-			 * group_info_add(), because group_info_add()
-			 * frees the memory of 'gi'.
-			 */
-		} else if ((e_rpc = db_group_add(gi)) != GFARM_ERR_NO_ERROR) {
-			gflog_error(GFARM_MSG_1000254,
-			    "failed to store group '%s' to storage: %s",
-			    gi->groupname, gfarm_error_string(e_rpc));
-		} else {
-			e_rpc = group_info_add(gi);
-			if (e_rpc != GFARM_ERR_NO_ERROR) {
-				gflog_debug(GFARM_MSG_1002317,
-				    "%s: group_info_add(): %s",
-				    diag, gfarm_error_string(e_rpc));
-			}
-		}
-		giant_unlock();
-		group_info_closure_set_error(closure, e_rpc);
-	}
-
-	e_ret = gfm_server_relay_put_reply_dynarg(peer, sizep, diag, e_rpc,
-	    "");
-	return (e_ret);
-}
-
-gfarm_error_t
-gfm_server_group_info_set(struct peer *peer, gfp_xdr_xid_t xid,
-	size_t *sizep, int from_client, int skip)
+gfm_server_group_info_set(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
-	struct group_info_closure closure;
+	struct gfarm_group_info gi;
+	struct user *user = peer_get_user(peer);
+	int need_free;
 	static const char diag[] = "GFM_PROTO_GROUP_INFO_SET";
 
-	group_info_closure_init(&closure);
-	if ((e = gfm_server_relay_request_reply(peer, xid, skip,
-	    gfm_server_group_info_set_request, gfm_server_group_info_set_reply,
-	    GFM_PROTO_GROUP_INFO_SET, &closure, diag))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED, "%s: %s",
-		    diag, gfarm_error_string(e));
-	} else
-		e = group_info_closure_get_error(&closure);
-
-	group_info_closure_term(&closure);
-	return (e);
+	e = get_group(peer, diag, &gi);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001534,
+			"get_group() failed: %s", gfarm_error_string(e));
+		return (e);
+	}
+	if (skip) {
+		gfarm_group_info_free(&gi);
+		return (GFARM_ERR_NO_ERROR);
+	}
+	need_free = 1;
+	giant_lock();
+	if (!from_client || user == NULL || !user_is_admin(user)) {
+		gflog_debug(GFARM_MSG_1001535,
+			"operation is not permitted for user");
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+	} else if (group_lookup(gi.groupname) != NULL) {
+		gflog_debug(GFARM_MSG_1001536,
+			"group already exists");
+		e = GFARM_ERR_ALREADY_EXISTS;
+	} else if (strlen(gi.groupname) > GFARM_GROUP_NAME_MAX) {
+		gflog_debug(GFARM_MSG_1003469,
+		    "%s: too long group name: \"%s\"",
+		    diag, gi.groupname);
+		e = GFARM_ERR_INVALID_ARGUMENT;
+	} else if ((e = group_user_check(&gi, diag)) != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001537,
+			"group_user_check() failed: %s",
+			gfarm_error_string(e));
+	/*
+	 * We have to call this before group_info_add(),
+	 * because group_info_add_and() frees the memory of gi
+	 */
+	} else if ((e = db_group_add(&gi)) != GFARM_ERR_NO_ERROR) {
+		gflog_error(GFARM_MSG_1000254,
+		    "failed to store group '%s' to storage: %s",
+		    gi.groupname, gfarm_error_string(e));
+	} else {
+		e = group_info_add(&gi);
+		if (e != GFARM_ERR_NO_ERROR) {
+			/* cannot use gi.groupname, since it's freed here */
+			gflog_debug(GFARM_MSG_1002317,
+			    "%s: group_info_add(): %s",
+			    diag, gfarm_error_string(e));
+		}
+		need_free = 0;
+	}
+	if (need_free)
+		gfarm_group_info_free(&gi);
+	giant_unlock();
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 void
@@ -976,80 +835,49 @@ group_modify(struct group *group, struct gfarm_group_info *gi,
 }
 
 gfarm_error_t
-gfm_server_group_info_modify_reply(enum request_reply_mode mode,
-	struct peer *peer, size_t *sizep, int skip, void *closure,
-	const char *diag)
-{
-	gfarm_error_t e_ret;
-	gfarm_error_t e_rpc = group_info_closure_get_error(closure);
-	struct gfarm_group_info *gi =
-	    group_info_closure_get_group_info(closure);
-	struct user *user = peer_get_user(peer);
-	int from_client = 
-	    (peer_get_auth_id_type(peer) == GFARM_AUTH_ID_TYPE_USER);
-	struct group *group;
-
-	if (skip)
-		return (GFARM_ERR_NO_ERROR);
-
-	if (mode != RELAY_TRANSFER) {
-		giant_lock();
-		if (e_rpc != GFARM_ERR_NO_ERROR) {
-			;
-		} else if (!from_client || user == NULL ||
-		    !user_is_admin(user)) {
-			gflog_debug(GFARM_MSG_1001540,
-			    "operation is not permitted for user");
-			e_rpc = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		} else if ((group = group_lookup(gi->groupname)) == NULL) {
-			gflog_debug(GFARM_MSG_1001541,
-			    "group_lookup() failed");
-			e_rpc = GFARM_ERR_NO_SUCH_GROUP;
-		} else if ((e_rpc = group_user_check(gi, diag))
-		    != GFARM_ERR_NO_ERROR) {
-			gflog_debug(GFARM_MSG_1001542,
-			    "group_user_check() failed: %s",
-			    gfarm_error_string(e_rpc));
-		} else {
-			group_modify(group, gi, diag);
-			/* change all entries */
-			e_rpc = db_group_modify(gi, 0, 0, NULL, 0, NULL);
-			if (e_rpc != GFARM_ERR_NO_ERROR) {
-				gflog_error(GFARM_MSG_1000257,
-				    "failed to modify group '%s' in db: %s",
-				    gi->groupname, gfarm_error_string(e_rpc));
-			}
-		}
-		giant_unlock();
-		group_info_closure_set_error(closure, e_rpc);
-	}
-
-	e_ret = gfm_server_relay_put_reply_dynarg(peer, sizep, diag, e_rpc,
-	    "");
-	return (e_ret);
-}
-
-gfarm_error_t
-gfm_server_group_info_modify(struct peer *peer, gfp_xdr_xid_t xid,
-	size_t *sizep, int from_client, int skip)
+gfm_server_group_info_modify(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
-	struct group_info_closure closure;
+	struct gfarm_group_info gi;
+	struct user *user = peer_get_user(peer);
+	struct group *group;
 	static const char diag[] = "GFM_PROTO_GROUP_INFO_MODIFY";
 
-	group_info_closure_init(&closure);
-	if ((e = gfm_server_relay_request_reply(peer, xid, skip,
-	    gfm_server_group_info_set_request,
-	    gfm_server_group_info_modify_reply,
-	    GFM_PROTO_GROUP_INFO_MODIFY, &closure, diag))
-	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED, "%s: %s",
-		    diag, gfarm_error_string(e));
-	} else
-		e = group_info_closure_get_error(&closure);
-
-	group_info_closure_term(&closure);
-	return (e);
+	e = get_group(peer, diag, &gi);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001539,
+			"get_group() failed: %s",
+			gfarm_error_string(e));
+		return (e);
+	}
+	if (skip) {
+		gfarm_group_info_free(&gi);
+		return (GFARM_ERR_NO_ERROR);
+	}
+	giant_lock();
+	if (!from_client || user == NULL || !user_is_admin(user)) {
+		gflog_debug(GFARM_MSG_1001540,
+			"operation is not permitted for user");
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+	} else if ((group = group_lookup(gi.groupname)) == NULL) {
+		gflog_debug(GFARM_MSG_1001541,
+			"group_lookup() failed");
+		e = GFARM_ERR_NO_SUCH_GROUP;
+	} else if ((e = group_user_check(&gi, diag)) != GFARM_ERR_NO_ERROR)
+		gflog_debug(GFARM_MSG_1001542,
+			"group_user_check() failed: %s", gfarm_error_string(e));
+	else {
+		group_modify(group, &gi, diag);
+		/* change all entries */
+		e = db_group_modify(&gi, 0, 0, NULL, 0, NULL);
+		if (e != GFARM_ERR_NO_ERROR)
+			gflog_error(GFARM_MSG_1000257,
+			    "failed to modify group '%s' in db: %s",
+			    gi.groupname, gfarm_error_string(e));
+	}
+	gfarm_group_info_free(&gi);
+	giant_unlock();
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 /* this interface is exported for a use from a private extension */
@@ -1073,53 +901,44 @@ gfarm_error_t (*group_info_remove)(const char *, const char *) =
 	group_info_remove_default;
 
 gfarm_error_t
-gfm_server_group_info_remove(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_group_info_remove(struct peer *peer, int from_client, int skip)
 {
 	char *groupname;
 	gfarm_error_t e;
 	struct user *user = peer_get_user(peer);
-	struct relayed_request *relay;
 	static const char diag[] = "GFM_PROTO_GROUP_INFO_REMOVE";
 
-	e = gfm_server_relay_get_request(peer, sizep, skip, &relay, diag,
-	    GFM_PROTO_GROUP_INFO_REMOVE, "s", &groupname);
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "s", &groupname);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1001543,
+			"group_info_remove request failed: %s",
+			gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(groupname);
 		return (GFARM_ERR_NO_ERROR);
 	}
-
-	if (relay != NULL) {
-		free(groupname);
-	} else {
-		giant_lock();
-		if (!from_client || user == NULL || !user_is_admin(user)) {
-			gflog_debug(GFARM_MSG_1001544,
-			    "operation is not permitted for user");
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		} else if (strcmp(groupname, ADMIN_GROUP_NAME) == 0 ||
-			   strcmp(groupname, ROOT_GROUP_NAME) == 0) {
-			gflog_debug(GFARM_MSG_1002211,
-			    "%s: administrator group \"%s\" "
-			    "should not be deleted", diag, groupname);
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-		} else
-			e = group_info_remove(groupname, diag);
-		free(groupname);
-		giant_unlock();
-	}
-
-	return (gfm_server_relay_put_reply(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	giant_lock();
+	if (!from_client || user == NULL || !user_is_admin(user)) {
+		gflog_debug(GFARM_MSG_1001544,
+			"operation is not permitted for user");
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+	} else if (strcmp(groupname, ADMIN_GROUP_NAME) == 0 ||
+	    strcmp(groupname, ROOT_GROUP_NAME) == 0) {
+		gflog_debug(GFARM_MSG_1002211,
+		    "%s: administrator group \"%s\" should not be deleted",
+		    diag, groupname);
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+	} else
+		e = group_info_remove(groupname, diag);
+	free(groupname);
+	giant_unlock();
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_group_info_add_users(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_group_info_add_users(struct peer *peer, int from_client, int skip)
 {
 	gfarm_error_t e;
 	static const char diag[] = "GFM_PROTO_GROUP_INFO_ADD_USERS";
@@ -1127,15 +946,14 @@ gfm_server_group_info_add_users(
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000259, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_group_info_remove_users(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_group_info_remove_users(struct peer *peer,
 	int from_client, int skip)
 {
 	gfarm_error_t e;
@@ -1144,15 +962,14 @@ gfm_server_group_info_remove_users(
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000260, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 gfarm_error_t
-gfm_server_group_names_get_by_users(
-	struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
+gfm_server_group_names_get_by_users(struct peer *peer,
 	int from_client, int skip)
 {
 	gfarm_error_t e;
@@ -1161,7 +978,7 @@ gfm_server_group_names_get_by_users(
 	/* XXX - NOT IMPLEMENTED */
 	gflog_error(GFARM_MSG_1000261, "%s: not implemented", diag);
 
-	e = gfm_server_put_reply(peer, xid, sizep, diag,
+	e = gfm_server_put_reply(peer, diag,
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED, "");
 	return (e != GFARM_ERR_NO_ERROR ? e :
 	    GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);

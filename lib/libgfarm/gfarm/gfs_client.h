@@ -33,23 +33,19 @@ struct gfm_connection; /* XXX */
 gfarm_error_t gfs_client_connection_acquire_by_host(
 	struct gfm_connection *, const char *, /* XXX */
 	int, struct gfs_connection **, const char *);
-gfarm_error_t gfs_client_connection_and_process_acquire(
-	struct gfm_connection **, const char *,
-	int, struct gfs_connection **, const char *);
 void gfs_client_connection_free(struct gfs_connection *);
 gfarm_error_t gfs_client_connect(const char *, int, const char *,
 	struct sockaddr *, struct gfs_connection **);
 void gfs_client_connection_gc(void);
+int gfs_client_sockaddr_is_local(struct sockaddr *);
 int gfs_client_connection_is_local(struct gfs_connection *);
 
 gfarm_error_t gfs_client_connection_enter_cache(struct gfs_connection *);
-gfarm_error_t gfs_client_connection_enter_cache_tail(struct gfs_connection *);
 
-struct gfarm_filesystem;
 gfarm_error_t gfs_client_connect_request_multiplexed(
 	struct gfarm_eventqueue *, const char *, int, const char *,
-	struct sockaddr *, struct gfarm_filesystem *fs,
-	void (*)(void *), void *, struct gfs_client_connect_state **);
+	struct sockaddr *, void (*)(void *), void *,
+	struct gfs_client_connect_state **);
 gfarm_error_t gfs_client_connect_result_multiplexed(
 	struct gfs_client_connect_state *,
 	struct gfs_connection **);
@@ -80,6 +76,8 @@ gfarm_error_t gfs_client_fstat(struct gfs_connection *, gfarm_int32_t,
 	gfarm_off_t *,
 	gfarm_int64_t *, gfarm_int32_t *,
 	gfarm_int64_t *, gfarm_int32_t *);
+gfarm_error_t gfs_client_cksum(struct gfs_connection *,
+	gfarm_int32_t, const char *, char *, size_t, size_t *);
 gfarm_error_t gfs_client_cksum_set(struct gfs_connection *, gfarm_int32_t,
 	const char *, size_t, const char *);
 gfarm_error_t gfs_client_lock(struct gfs_connection *, gfarm_int32_t,
@@ -94,8 +92,7 @@ gfarm_error_t gfs_client_lock_info(struct gfs_connection *, gfarm_int32_t,
 gfarm_error_t gfs_client_replica_add_from(struct gfs_connection *,
 	char *, gfarm_int32_t, gfarm_int32_t);
 gfarm_error_t gfs_client_replica_recv(struct gfs_connection *,
-	gfarm_ino_t, gfarm_uint64_t, gfarm_int32_t,
-	gfarm_error_t *, gfarm_error_t *);
+	gfarm_ino_t, gfarm_uint64_t, gfarm_int32_t);
 gfarm_error_t gfs_client_statfs(struct gfs_connection *, char *,
 	gfarm_int32_t *,
 	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *,
@@ -127,7 +124,6 @@ gfarm_error_t gfs_client_command_result(struct gfs_connection *,
 gfarm_error_t gfs_client_command(struct gfs_connection *,
 			 char *, char **, char **, int,
 			 int *, int *, int *);
-int gfs_client_connection_cache_change(int);
 
 /* from gfmd */
 
@@ -153,6 +149,6 @@ gfarm_error_t gfs_client_get_load_result(int, struct sockaddr *, socklen_t *,
 struct gfs_client_get_load_state;
 gfarm_error_t gfs_client_get_load_request_multiplexed(
 	struct gfarm_eventqueue *, struct sockaddr *,
-	void (*)(void *), void *, struct gfs_client_get_load_state **, int);
+	void (*)(void *), void *, struct gfs_client_get_load_state **);
 gfarm_error_t gfs_client_get_load_result_multiplexed(
 	struct gfs_client_get_load_state *, struct gfs_client_load *);

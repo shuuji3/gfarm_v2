@@ -41,6 +41,18 @@ gfarm_mutex_trylock(pthread_mutex_t *mutex, const char *where,
 	return (err == 0);
 }
 
+int
+gfarm_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *timeout,
+	const char *where, const char *what)
+{
+	int err = pthread_mutex_timedlock(mutex, timeout);
+
+	if (err != 0)
+		gflog_error(GFARM_MSG_1004199, "%s: %s mutex timedlock: %s",
+		    where, what, strerror(err));
+	return (err);
+}
+
 void
 gfarm_mutex_unlock(pthread_mutex_t *mutex, const char *where, const char *what)
 {
@@ -60,8 +72,6 @@ gfarm_mutex_destroy(pthread_mutex_t *mutex, const char *where, const char *what)
 		gflog_fatal(GFARM_MSG_1001488, "%s: %s mutex destroy: %s",
 		    where, what, strerror(err));
 }
-
-#ifndef __KERNEL__	/* gfarm_cond_xxx */
 
 void
 gfarm_cond_init(pthread_cond_t *cond, const char *where, const char *what)
@@ -136,4 +146,3 @@ gfarm_cond_destroy(pthread_cond_t *cond, const char *where, const char *what)
 		gflog_fatal(GFARM_MSG_1001489, "%s: %s cond destroy: %s",
 		    where, what, strerror(err));
 }
-#endif /* __KERNEL__ */

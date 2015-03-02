@@ -23,31 +23,6 @@ struct gfarm_param_config {
 	struct gfarm_hostspec *hostspec;
 };
 
-void
-gfarm_param_config_init(struct gfarm_param_config **config_listp,
-	struct gfarm_param_config ***config_lastp)
-{
-	*config_listp = NULL;
-	*config_lastp = config_listp;
-}
-
-void
-gfarm_param_config_free(struct gfarm_param_config **config_listp,
-	struct gfarm_param_config ***config_lastp)
-{
-	struct gfarm_param_config *cl;
-	struct gfarm_param_config *next;
-
-	for (cl = *config_listp; cl != NULL; cl = next) {
-		next = cl->next;
-		free(cl->hostspec);
-		free(cl);
-	}
-
-	*config_listp = NULL;
-	*config_lastp = config_listp;
-}
-
 gfarm_error_t
 gfarm_param_config_parse_long(int ntypes, struct gfarm_param_type *type_table,
 	char *config,
@@ -107,7 +82,7 @@ gfarm_param_config_parse_long(int ntypes, struct gfarm_param_type *type_table,
 
 		*type_indexp = i;
 		*valuep = value;
-		return (GFARM_ERR_NO_ERROR);
+		return (GFARM_ERR_NO_ERROR);				
 	}
 	e = GFARM_ERR_NO_SUCH_OBJECT;
 	gflog_debug(GFARM_MSG_1000889, "%s: %s", config, gfarm_error_string(e));
@@ -136,7 +111,7 @@ gfarm_param_config_add_long(
 	*(*config_list_lastp) = pcp;
 	*config_list_lastp = &pcp->next;
 
-	return (GFARM_ERR_NO_ERROR);
+	return (GFARM_ERR_NO_ERROR);				
 }
 
 gfarm_error_t
@@ -229,7 +204,6 @@ gfarm_param_get_long(struct gfarm_param_config *list,
 	return (GFARM_ERR_NO_SUCH_OBJECT);
 }
 
-#if 0 /* not yet in gfarm v2 */
 /*
  * netparam
  */
@@ -376,4 +350,3 @@ gfarm_netparam_config_get_long(struct gfarm_netparam_info *info,
 	}
 	return (GFARM_ERR_NO_ERROR);
 }
-#endif

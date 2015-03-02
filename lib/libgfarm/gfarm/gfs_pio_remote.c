@@ -8,11 +8,13 @@
 #include <unistd.h>
 #include <string.h>
 #include <libgen.h>
+#include <sys/time.h>
 #include <sys/socket.h> /* struct sockaddr */
 #include <openssl/evp.h>
 #include <gfarm/gfarm.h>
 
 #include "queue.h"
+#include "timer.h"
 
 #include "host.h"
 #include "config.h"
@@ -20,7 +22,14 @@
 #include "gfs_client.h"
 #include "gfs_io.h"
 #include "gfs_pio.h"
-#include "schedule.h"
+#include "gfs_profile.h"
+
+static double gfs_pio_remote_write_time;
+static double gfs_pio_remote_read_time;
+static unsigned long long gfs_pio_remote_write_size;
+static unsigned long long gfs_pio_remote_read_size;
+static unsigned long long gfs_pio_remote_write_count;
+static unsigned long long gfs_pio_remote_read_count;
 
 static gfarm_error_t
 gfs_pio_remote_storage_close(GFS_File gf)
@@ -38,12 +47,6 @@ gfs_pio_remote_storage_close(GFS_File gf)
 	if (vc->pid != getpid())
 		return (GFARM_ERR_NO_ERROR);
 	e = gfs_client_close(gfs_server, gf->fd);
-	gfarm_schedule_host_unused(
-	    gfs_client_hostname(gfs_server),
-	    gfs_client_port(gfs_server),
-	    gfs_client_username(gfs_server),
-	    gf->scheduled_age);
-
 	vc->storage_context = NULL;
 	gfs_client_connection_free(gfs_server);
 	if (e != GFARM_ERR_NO_ERROR) {
@@ -60,7 +63,11 @@ gfs_pio_remote_storage_pwrite(GFS_File gf,
 {
 	struct gfs_file_section_context *vc = gf->view_context;
 	struct gfs_connection *gfs_server = vc->storage_context;
+	gfarm_error_t e;
+	gfarm_timerval_t t1, t2;
 
+	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
+	gfs_profile(gfarm_gettimerval(&t1));
 	/*
 	 * buffer beyond GFS_PROTO_MAX_IOSIZE are just ignored by gfsd,
 	 * we don't perform such GFS_PROTO_WRITE request, because it's
@@ -69,8 +76,15 @@ gfs_pio_remote_storage_pwrite(GFS_File gf,
 	 */
 	if (size > GFS_PROTO_MAX_IOSIZE)
 		size = GFS_PROTO_MAX_IOSIZE;
-	return (gfs_client_pwrite(gfs_server, gf->fd, buffer, size, offset,
-	    lengthp));
+	e = gfs_client_pwrite(gfs_server, gf->fd, buffer, size, offset,
+	    lengthp);
+	if (e != GFARM_ERR_NO_ERROR)
+		return (e);
+	gfs_profile(gfarm_gettimerval(&t2));
+	gfs_profile(gfs_pio_remote_write_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_pio_remote_write_size += *lengthp);
+	gfs_profile(gfs_pio_remote_write_count++);
+	return (e);
 }
 
 static gfarm_error_t
@@ -99,15 +113,26 @@ gfs_pio_remote_storage_pread(GFS_File gf,
 {
 	struct gfs_file_section_context *vc = gf->view_context;
 	struct gfs_connection *gfs_server = vc->storage_context;
+	gfarm_error_t e;
+	gfarm_timerval_t t1, t2;
 
+	GFARM_TIMEVAL_FIX_INITIALIZE_WARNING(t1);
+	gfs_profile(gfarm_gettimerval(&t1));
 	/*
 	 * Unlike gfs_pio_remote_storage_write(), we don't care
 	 * buffer size here, because automatic i/o size truncation
 	 * performed by gfsd isn't inefficient for read case.
 	 * Note that upper gfs_pio layer should care the partial read.
 	 */
-	return (gfs_client_pread(gfs_server, gf->fd, buffer, size, offset,
-	    lengthp));
+	e = gfs_client_pread(gfs_server, gf->fd, buffer, size, offset,
+	    lengthp);
+	if (e != GFARM_ERR_NO_ERROR)
+		return (e);
+	gfs_profile(gfarm_gettimerval(&t2));
+	gfs_profile(gfs_pio_remote_read_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(gfs_pio_remote_read_size += *lengthp);
+	gfs_profile(gfs_pio_remote_read_count++);
+	return (e);
 }
 
 static gfarm_error_t
@@ -137,6 +162,16 @@ gfs_pio_remote_storage_fstat(GFS_File gf, struct gfs_stat *st)
 	return (gfs_client_fstat(gfs_server, gf->fd,
 	    &st->st_size, &st->st_atimespec.tv_sec, &st->st_atimespec.tv_nsec,
 	    &st->st_mtimespec.tv_sec, &st->st_mtimespec.tv_nsec));
+}
+
+static gfarm_error_t
+gfs_pio_remote_storage_cksum(GFS_File gf, const char *type,
+	char *cksum, size_t size, size_t *lenp)
+{
+	struct gfs_file_section_context *vc = gf->view_context;
+	struct gfs_connection *gfs_server = vc->storage_context;
+
+	return (gfs_client_cksum(gfs_server, gf->fd, type, cksum, size, lenp));
 }
 
 static gfarm_error_t
@@ -172,6 +207,7 @@ struct gfs_storage_ops gfs_pio_remote_storage_ops = {
 	gfs_pio_remote_storage_fstat,
 	gfs_pio_remote_storage_reopen,
 	gfs_pio_remote_storage_write,
+	gfs_pio_remote_storage_cksum,
 };
 
 gfarm_error_t
@@ -193,4 +229,21 @@ gfs_pio_open_remote_section(GFS_File gf, struct gfs_connection *gfs_server)
 	vc->fd = -1; /* not used */
 	vc->pid = getpid();
 	return (GFARM_ERR_NO_ERROR);
+}
+
+void
+gfs_pio_remote_display_timers(void)
+{
+	gflog_info(GFARM_MSG_1003830,
+	    "remote read time   : %g sec", gfs_pio_remote_read_time);
+	gflog_info(GFARM_MSG_1003831,
+	    "remote read size   : %llu", gfs_pio_remote_read_size);
+	gflog_info(GFARM_MSG_1003832,
+	    "remote read count  : %llu", gfs_pio_remote_read_count);
+	gflog_info(GFARM_MSG_1003833,
+	    "remote write time  : %g sec", gfs_pio_remote_write_time);
+	gflog_info(GFARM_MSG_1003834,
+	    "remote write size  : %llu", gfs_pio_remote_write_size);
+	gflog_info(GFARM_MSG_1003835,
+	    "remote write count : %llu", gfs_pio_remote_write_count);
 }
