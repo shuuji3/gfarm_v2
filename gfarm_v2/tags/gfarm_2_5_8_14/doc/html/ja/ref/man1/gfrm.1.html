@@ -1,0 +1,63 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>gfrm</title>
+<meta name="generator" content="DocBook XSL Stylesheets V1.76.1">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" title="gfrm">
+<a name="gfrm.1"></a><div class="titlepage"></div>
+<div class="refnamediv">
+<a name="name"></a><h2>Name</h2>
+<p>gfrm — Gfarm ファイル，ディレクトリ，ファイル複製を削除する．</p>
+</div>
+<div class="refsynopsisdiv" title="Synopsis">
+<a name="synopsis"></a><h2>Synopsis</h2>
+<div class="cmdsynopsis"><p><code class="command">gfrm</code>  [-frn] [-h <em class="replaceable"><code>ファイルシステムノード</code></em>] [-D <em class="replaceable"><code>ドメイン名</code></em>]  <em class="replaceable"><code>gfarm-URL</code></em>... </p></div>
+</div>
+<div class="refsect1" title="DESCRIPTION">
+<a name="description"></a><h2>DESCRIPTION</h2>
+<p>Gfarm-URL に指定されたファイルを削除します．
+デフォルトではディレクトリの削除は行いませんが，
+<code class="option">-r</code> オプションが指定された場合，
+指定されたディレクトリ以下のファイルおよびディレクトリが再帰的に消去されます．
+なお，. あるいは .. が指定された場合はエラーになります．
+</p>
+<p>
+<code class="option">-h</code> あるいは <code class="option">-D</code>
+オプションでファイルシステムノードを指定することにより，
+指定されたノードに格納されているファイル複製を削除することができます．
+ただし，gfarm.ncopy あるいは gfarm.replicainfo 拡張属性で指定された数以下になってしまう場合，ファイル複製の削除はできません．
+</p>
+</div>
+<div class="refsect1" title="OPTIONS">
+<a name="options"></a><h2>OPTIONS</h2>
+<div class="variablelist"><dl>
+<dt><span class="term"><code class="option">-f</code></span></dt>
+<dd><p>ファイルが存在しない場合もエラーとしません．
+</p></dd>
+<dt><span class="term"><code class="option">-n</code></span></dt>
+<dd><p>消去されるファイルを表示します．
+実際には何も実行されません．
+</p></dd>
+<dt><span class="term"><code class="option">-r</code></span></dt>
+<dd><p>引数がディレクトリだった場合，そのディレクトリ以下を
+全て，再帰的に削除します．</p></dd>
+<dt><span class="term"><code class="option">-h</code> <em class="parameter"><code>ファイルシステムノード</code></em></span></dt>
+<dd><p>複製を削除するファイルシステムノード名を指定します．
+</p></dd>
+<dt><span class="term"><code class="option">-D</code> <em class="parameter"><code>ドメイン名</code></em></span></dt>
+<dd><p>複製を削除するファイルシステムノードのドメイン名を指定します．
+</p></dd>
+<dt><span class="term"><code class="option">-?</code></span></dt>
+<dd><p>引数オプションを表示します．</p></dd>
+</dl></div>
+</div>
+<div class="refsect1" title="SEE ALSO">
+<a name="see-also"></a><h2>SEE ALSO</h2>
+<p>
+  <span class="citerefentry"><span class="refentrytitle">gfncopy</span>(1)</span>,
+  <span class="citerefentry"><span class="refentrytitle">gfarm_attr</span>(5)</span>
+</p>
+</div>
+</div></body>
+</html>
