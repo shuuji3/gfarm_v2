@@ -1,10 +1,10 @@
 # Part 1 data definition
 %define pkg	gfarm
 %if %{undefined ver}
-%define ver	2.5.8
+%define ver	2.6.1
 %endif
 %if %{undefined rel}
-%define rel	rc1.1
+%define rel	1
 %endif
 
 # a hook to make RPM version number different from %{ver}
@@ -12,6 +12,7 @@
 
 %define prefix		%{_prefix}
 %define lib_prefix	%{_libdir}
+%define libexec_prefix	%{_libexecdir}
 %define man_prefix	%{_mandir}
 %define share_prefix	%{_prefix}/share/%{pkg}
 %define doc_prefix	%{_prefix}/share/doc/%{name}-%{ver}
@@ -64,7 +65,7 @@ Summary: Document for Gfarm file system
 Group: Documentation
 # always provide "gfarm-doc" as a virtual package.
 %if "%{pkg_suffix}" != ""
-Provides: %{pkg}-doc = %{ver}-%{rel}
+Provides: %{pkg}-doc = %{pkgver}-%{rel}
 %endif
 
 %package libs
@@ -72,7 +73,7 @@ Summary: Runtime libraries for Gfarm file system
 Group: System Environment/Libraries
 # always provide "gfarm-libs" as a virtual package.
 %if "%{pkg_suffix}" != ""
-Provides: %{pkg}-libs = %{ver}-%{rel}
+Provides: %{pkg}-libs = %{pkgver}-%{rel}
 %endif
 BuildRequires: openssl-devel, postgresql-devel
 
@@ -81,43 +82,43 @@ Summary: Clients for Gfarm file system
 Group: Applications/File
 # always provide "gfarm-client" as a virtual package.
 %if "%{pkg_suffix}" != ""
-Provides: %{pkg}-client = %{ver}-%{rel}
+Provides: %{pkg}-client = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}
+Requires: %{package_name}-libs = %{pkgver}
 
 %package fsnode
 Summary: File system daemon for Gfarm file system
 Group: System Environment/Daemons
 # always provide "gfarm-fsnode" as a virtual package.
 %if "%{pkg_suffix}" != ""
-Provides: %{pkg}-fsnode = %{ver}-%{rel}
+Provides: %{pkg}-fsnode = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}, %{package_name}-client = %{ver}
+Requires: %{package_name}-libs = %{pkgver}, %{package_name}-client = %{pkgver}
 
 %package server
 Summary: Metadata server for Gfarm file system
 Group: System Environment/Daemons
 # always provide "gfarm-server" as a virtual package.
 %if "%{pkg_suffix}" != ""
-Provides: %{pkg}-server = %{ver}-%{rel}
+Provides: %{pkg}-server = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}
+Requires: %{package_name}-libs = %{pkgver}
 
 %package ganglia
 Summary: Gfarm performance monitoring plugin for Ganglia
 Group: System Environment/Libraries
 # always provide "gfarm-ganglia" as a virtual package.
 %if "%{pkg_suffix}" != ""
-Provides: %{pkg}-ganglia = %{ver}-%{rel}
+Provides: %{pkg}-ganglia = %{pkgver}-%{rel}
 %endif
 
 %package devel
 Summary: Development header files and libraries for Gfarm file system
 Group: Development/Libraries
 %if "%{pkg_suffix}" != ""
-Provides: %{pkg}-devel = %{ver}-%{rel}
+Provides: %{pkg}-devel = %{pkgver}-%{rel}
 %endif
-Requires: %{package_name}-libs = %{ver}
+Requires: %{package_name}-libs = %{pkgver}
 
 %description
 The Gfarm filesystem is a distributed filesystem consisting of the
@@ -151,6 +152,16 @@ Gfarm performance monitoring plugin for Ganglia
 Development header files and libraries for Gfarm file system
 
 %changelog
+* Wed Dec 17 2014 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.6.0-1
+- Gfarm version 2.6.0 released
+
+* Mon Apr 22 2013 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.5.8-1
+- Gfarm version 2.5.8 released
+
+* Thu Jan 15 2013 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.5.8rc2-1
+- Gfarm version 2.5.8 released candidate 2
+- gfruntest, gfservice and systest are included in the client package
+
 * Thu Nov  1 2012 Osamu Tatebe <tatebe@cs.tsukuba.ac.jp> 2.5.7.2-1
 - Gfarm version 2.5.7.2 released
 - Use GFARM_CONFIGURE_OPTION instead of GLOBUS_PREFIX and
@@ -320,6 +331,7 @@ fi
 %{man_prefix}/man1/gfchgrp.1.gz
 %{man_prefix}/man1/gfchmod.1.gz
 %{man_prefix}/man1/gfchown.1.gz
+%{man_prefix}/man1/gfcksum.1.gz
 %{man_prefix}/man1/gfdf.1.gz
 %{man_prefix}/man1/gfedquota.1.gz
 %if %{gfarm_v2_not_yet}
@@ -333,10 +345,12 @@ fi
 %{man_prefix}/man1/gfgetfacl.1.gz
 %{man_prefix}/man1/gfgroup.1.gz
 %{man_prefix}/man1/gfhost.1.gz
+%{man_prefix}/man1/gfhostgroup.1.gz
 %if %{gfarm_v2_not_yet}
 %{man_prefix}/man1/gfimport_fixed.1.gz
 %{man_prefix}/man1/gfimport_text.1.gz
 %endif
+%{man_prefix}/man1/gfjournal.1.gz
 %{man_prefix}/man1/gfjournaladmin.1.gz
 %{man_prefix}/man1/gfkey.1.gz
 %{man_prefix}/man1/gfln.1.gz
@@ -372,6 +386,8 @@ fi
 %{man_prefix}/man1/gfspoolpath.1.gz
 %{man_prefix}/man1/gfstat.1.gz
 %{man_prefix}/man1/gfstatus.1.gz
+%{man_prefix}/man1/gfsudo.1.gz
+%{man_prefix}/man1/gftest.1.gz
 %{man_prefix}/man1/gfusage.1.gz
 %{man_prefix}/man1/gfuser.1.gz
 %if %{gfarm_v2_not_yet}
@@ -496,6 +512,7 @@ fi
 %{man_prefix}/ja/man1/gfchgrp.1.gz
 %{man_prefix}/ja/man1/gfchmod.1.gz
 %{man_prefix}/ja/man1/gfchown.1.gz
+%{man_prefix}/ja/man1/gfcksum.1.gz
 %{man_prefix}/ja/man1/gfdf.1.gz
 %{man_prefix}/ja/man1/gfedquota.1.gz
 %if %{gfarm_v2_not_yet}
@@ -509,10 +526,12 @@ fi
 %{man_prefix}/ja/man1/gfgetfacl.1.gz
 %{man_prefix}/ja/man1/gfgroup.1.gz
 %{man_prefix}/ja/man1/gfhost.1.gz
+%{man_prefix}/ja/man1/gfhostgroup.1.gz
 %if %{gfarm_v2_not_yet}
 %{man_prefix}/ja/man1/gfimport_fixed.1.gz
 %{man_prefix}/ja/man1/gfimport_text.1.gz
 %endif
+%{man_prefix}/ja/man1/gfjournal.1.gz
 %{man_prefix}/ja/man1/gfjournaladmin.1.gz
 %{man_prefix}/ja/man1/gfkey.1.gz
 %{man_prefix}/ja/man1/gfln.1.gz
@@ -521,6 +540,8 @@ fi
 %{man_prefix}/ja/man1/gfmkdir.1.gz
 %{man_prefix}/ja/man1/gfmv.1.gz
 %{man_prefix}/ja/man1/gfncopy.1.gz
+%{man_prefix}/ja/man1/gfpcopy.1.gz
+%{man_prefix}/ja/man1/gfprep.1.gz
 %if %{gfarm_v2_not_yet}
 %{man_prefix}/ja/man1/gfps.1.gz
 %{man_prefix}/ja/man1/gfpwd.1.gz
@@ -546,6 +567,8 @@ fi
 %{man_prefix}/ja/man1/gfspoolpath.1.gz
 %{man_prefix}/ja/man1/gfstat.1.gz
 %{man_prefix}/ja/man1/gfstatus.1.gz
+%{man_prefix}/ja/man1/gfsudo.1.gz
+%{man_prefix}/ja/man1/gftest.1.gz
 %{man_prefix}/ja/man1/gfusage.1.gz
 %{man_prefix}/ja/man1/gfuser.1.gz
 %if %{gfarm_v2_not_yet}
@@ -645,6 +668,7 @@ fi
 %{html_prefix}/en/ref/man1/gfchgrp.1.html
 %{html_prefix}/en/ref/man1/gfchmod.1.html
 %{html_prefix}/en/ref/man1/gfchown.1.html
+%{html_prefix}/en/ref/man1/gfcksum.1.html
 %{html_prefix}/en/ref/man1/gfdf.1.html
 %{html_prefix}/en/ref/man1/gfedquota.1.html
 %if %{gfarm_v2_not_yet}
@@ -658,10 +682,12 @@ fi
 %{html_prefix}/en/ref/man1/gfgetfacl.1.html
 %{html_prefix}/en/ref/man1/gfgroup.1.html
 %{html_prefix}/en/ref/man1/gfhost.1.html
+%{html_prefix}/en/ref/man1/gfhostgroup.1.html
 %if %{gfarm_v2_not_yet}
 %{html_prefix}/en/ref/man1/gfimport_fixed.1.html
 %{html_prefix}/en/ref/man1/gfimport_text.1.html
 %endif
+%{html_prefix}/en/ref/man1/gfjournal.1.html
 %{html_prefix}/en/ref/man1/gfjournaladmin.1.html
 %{html_prefix}/en/ref/man1/gfkey.1.html
 %{html_prefix}/en/ref/man1/gfln.1.html
@@ -695,6 +721,8 @@ fi
 %{html_prefix}/en/ref/man1/gfspoolpath.1.html
 %{html_prefix}/en/ref/man1/gfstat.1.html
 %{html_prefix}/en/ref/man1/gfstatus.1.html
+%{html_prefix}/en/ref/man1/gfsudo.1.html
+%{html_prefix}/en/ref/man1/gftest.1.html
 %{html_prefix}/en/ref/man1/gfusage.1.html
 %{html_prefix}/en/ref/man1/gfuser.1.html
 %if %{gfarm_v2_not_yet}
@@ -826,6 +854,7 @@ fi
 %{html_prefix}/ja/ref/man1/gfchgrp.1.html
 %{html_prefix}/ja/ref/man1/gfchmod.1.html
 %{html_prefix}/ja/ref/man1/gfchown.1.html
+%{html_prefix}/ja/ref/man1/gfcksum.1.html
 %{html_prefix}/ja/ref/man1/gfdf.1.html
 %{html_prefix}/ja/ref/man1/gfedquota.1.html
 %if %{gfarm_v2_not_yet}
@@ -839,10 +868,12 @@ fi
 %{html_prefix}/ja/ref/man1/gfgetfacl.1.html
 %{html_prefix}/ja/ref/man1/gfgroup.1.html
 %{html_prefix}/ja/ref/man1/gfhost.1.html
+%{html_prefix}/ja/ref/man1/gfhostgroup.1.html
 %if %{gfarm_v2_not_yet}
 %{html_prefix}/ja/ref/man1/gfimport_fixed.1.html
 %{html_prefix}/ja/ref/man1/gfimport_text.1.html
 %endif
+%{html_prefix}/ja/ref/man1/gfjournal.1.html
 %{html_prefix}/ja/ref/man1/gfjournaladmin.1.html
 %{html_prefix}/ja/ref/man1/gfkey.1.html
 %{html_prefix}/ja/ref/man1/gfln.1.html
@@ -851,6 +882,8 @@ fi
 %{html_prefix}/ja/ref/man1/gfmkdir.1.html
 %{html_prefix}/ja/ref/man1/gfmv.1.html
 %{html_prefix}/ja/ref/man1/gfncopy.1.html
+%{html_prefix}/ja/ref/man1/gfpcopy.1.html
+%{html_prefix}/ja/ref/man1/gfprep.1.html
 %if %{gfarm_v2_not_yet}
 %{html_prefix}/ja/ref/man1/gfps.1.html
 %{html_prefix}/ja/ref/man1/gfpwd.1.html
@@ -874,6 +907,8 @@ fi
 %{html_prefix}/ja/ref/man1/gfspoolpath.1.html
 %{html_prefix}/ja/ref/man1/gfstat.1.html
 %{html_prefix}/ja/ref/man1/gfstatus.1.html
+%{html_prefix}/ja/ref/man1/gfsudo.1.html
+%{html_prefix}/ja/ref/man1/gftest.1.html
 %{html_prefix}/ja/ref/man1/gfusage.1.html
 %{html_prefix}/ja/ref/man1/gfuser.1.html
 %if %{gfarm_v2_not_yet}
@@ -1023,12 +1058,16 @@ fi
 %{prefix}/bin/gfchgrp
 %{prefix}/bin/gfchmod
 %{prefix}/bin/gfchown
+%{prefix}/bin/gfcksum
+%{prefix}/bin/gfdirpath
 %{prefix}/bin/gfedquota
 %{prefix}/bin/gfexport
+%{prefix}/bin/gffilepath
 %{prefix}/bin/gffindxmlattr
 %{prefix}/bin/gfgetfacl
 %{prefix}/bin/gfgroup
 %{prefix}/bin/gfhost
+%{prefix}/bin/gfhostgroup
 %if %{gfarm_v2_not_yet}
 %{prefix}/bin/gfifo.sh
 %{prefix}/bin/gfimport_fixed
@@ -1058,12 +1097,15 @@ fi
 %{prefix}/bin/gfquotacheck
 %{prefix}/bin/gfreg
 %{prefix}/bin/gfrep
+%{prefix}/bin/gfrepcheck
 %{prefix}/bin/gfrm
 %{prefix}/bin/gfrmdir
+%{prefix}/bin/gfruntest
 %{prefix}/bin/gfusage
 %{prefix}/bin/gfuser
 %{prefix}/bin/gfsched
 %{prefix}/bin/gfsetfacl
+%{libexec_prefix}/gfs_pio_test
 %if %{gfarm_v2_not_yet}
 %{prefix}/bin/gfrsh
 %{prefix}/bin/gfrshl
@@ -1073,11 +1115,15 @@ fi
 %{prefix}/bin/gfssh
 %{prefix}/bin/gfsshl
 %endif
+%{prefix}/bin/gfservice
+%{prefix}/bin/gfservice-agent
+%{prefix}/bin/gfservice-timeout
+%{prefix}/bin/gfspoolgen
+%{prefix}/bin/gfspoolinum
 %{prefix}/bin/gfstat
 %{prefix}/bin/gfstatus
-%if %{gfarm_v2_not_yet}
+%{prefix}/bin/gfsudo
 %{prefix}/bin/gftest
-%endif
 %{prefix}/bin/gfwhere
 %{prefix}/bin/gfwhoami
 %{prefix}/bin/gfxattr
@@ -1085,6 +1131,10 @@ fi
 %{profile_prefix}/gfarm.sh
 %{profile_prefix}/gfarm.csh
 %endif
+
+%dir %{share_prefix}
+%{share_prefix}/gfservice
+%{share_prefix}/systest
 
 %{prefix}/bin/gfperf-autoreplica
 %{prefix}/bin/gfperf-copy
@@ -1101,7 +1151,6 @@ fi
 %{prefix}/bin/gfperf.rb
 %{prefix}/bin/gfstress.rb
 %{prefix}/bin/gfiops
-%dir %{share_prefix}
 %dir %{share_prefix}/config
 %{share_prefix}/config/gfperf-config.yml
 %{share_prefix}/config/gfperf-simple.yml
@@ -1119,6 +1168,8 @@ fi
 %defattr(-,root,root)
 %{prefix}/bin/config-gfsd
 %{prefix}/bin/gfarm.arch.guess
+%{prefix}/bin/gfspooldigest
+%{prefix}/bin/gfspoolmd5
 %{prefix}/bin/gfspoolpath
 %if %{gfarm_v2_not_yet}
 %{prefix}/bin/gfexec
@@ -1132,6 +1183,7 @@ fi
 %{share_prefix}/config/linux/default/gfsd.in
 %{share_prefix}/config/linux/redhat/gfsd.in
 %{share_prefix}/config/linux/suse/gfsd.in
+%{share_prefix}/config/linux/systemd/gfsd.service.in
 
 %files ganglia
 %defattr(-,root,root)
@@ -1140,10 +1192,7 @@ fi
 %dir %{share_prefix}
 %dir %{share_prefix}/config
 %{share_prefix}/config/config-gfarm.iostat
-%dir %{share_prefix}/ganglia
-%{share_prefix}/ganglia/gfarm_gfmd.pyconf
-%{share_prefix}/ganglia/gfarm_gfsd.pyconf
-%{share_prefix}/ganglia/gfarm_iostat.py
+%{share_prefix}/ganglia
 
 %files server
 %defattr(-,root,root)
@@ -1153,6 +1202,7 @@ fi
 %{prefix}/bin/gfdump.postgresql
 %{prefix}/bin/gfjournal
 %{prefix}/bin/gfjournaladmin
+%{prefix}/bin/gfjournaldump
 %dir %{share_prefix}
 %dir %{share_prefix}/config
 %{share_prefix}/config/bdb.DB_CONFIG.in
@@ -1179,8 +1229,12 @@ fi
 %{share_prefix}/config/linux/suse/gfarm-pgsql.in
 %{share_prefix}/config/linux/suse/gfarm-slapd.in
 %{share_prefix}/config/linux/suse/gfmd.in
+%{share_prefix}/config/linux/systemd/gfarm-pgsql.service.in
+%{share_prefix}/config/linux/systemd/gfmd.service.in
 %{share_prefix}/config/slapd.conf-2.0.in
 %{share_prefix}/config/slapd.conf-2.1.in
+%{share_prefix}/ruby/gfcrc32.rb
+%{share_prefix}/ruby/gfjournalfile.rb
 
 %files devel
 %defattr(-,root,root)

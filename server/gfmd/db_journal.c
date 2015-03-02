@@ -30,6 +30,7 @@
 #include "metadb_common.h"
 #include "xattr_info.h"
 #include "quota_info.h"
+#include "quota.h"
 #include "metadb_server.h"
 #include "gfp_xdr.h"
 #include "io_fd.h"
@@ -40,7 +41,6 @@
 #include "gfm_proto.h"
 
 #include "subr.h"
-#include "quota.h"
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_access.h"
@@ -56,14 +56,8 @@
 
 static struct journal_file	*self_jf;
 static const struct db_ops	*journal_apply_ops;
-/*
- * *_op function pointers defined for avoiding to depend other object files
- * because gfjournal command depends db_journal.o.
- */
 static void			(*db_journal_fail_store_op)(void);
 static gfarm_error_t		(*db_journal_sync_op)(gfarm_uint64_t);
-static void			(*db_journal_remove_db_update_info_op)(
-					gfarm_uint64_t, const char *);
 
 struct db_journal_recv_info {
 	gfarm_uint64_t from_sn, to_sn;
@@ -88,7 +82,6 @@ static const char RECVQ_NONEMPTY_COND_DIAG[]	= "journal_recvq_nonempty_cond";
 static const char RECVQ_NONFULL_COND_DIAG[]	= "journal_recvq_nonfull_cond";
 static const char RECVQ_CANCEL_COND_DIAG[]	= "journal_recvq_cancel_cond";
 static const char DB_ACCESS_MUTEX_DIAG[]	= "db_access_mutex";
-
 
 static gfarm_uint64_t journal_seqnum = GFARM_METADB_SERVER_SEQNUM_INVALID;
 static gfarm_uint64_t journal_seqnum_pre = GFARM_METADB_SERVER_SEQNUM_INVALID;
@@ -207,13 +200,6 @@ void
 db_journal_set_sync_op(gfarm_error_t (*func)(gfarm_uint64_t))
 {
 	db_journal_sync_op = func;
-}
-
-void
-db_journal_set_remove_db_update_info_op(void (*func)(gfarm_uint64_t,
-	const char *))
-{
-	db_journal_remove_db_update_info_op = func;
 }
 
 gfarm_error_t
@@ -961,7 +947,7 @@ db_journal_write_fsngroup_size_add(enum journal_operation ope,
 	    GFM_JOURNAL_FSNGROUP_CORE_XDR_FMT,
 	    NON_NULL_STR(fsnarg->hostname),
 	    NON_NULL_STR(fsnarg->fsngroupname))) != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
+		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_1004044,
 			"gfp_xdr_send_size_add", e, ope);
 		return (e);
 	}
@@ -979,7 +965,7 @@ db_journal_write_fsngroup_core(enum journal_operation ope, void *arg)
 	    GFM_JOURNAL_FSNGROUP_CORE_XDR_FMT,
 	    NON_NULL_STR(fsnarg->hostname),
 	    NON_NULL_STR(fsnarg->fsngroupname))) != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
+		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_1004045,
 			"gfp_xdr_send", e, ope);
 		return (e);
 	}
@@ -1006,7 +992,7 @@ db_journal_read_fsngroup_core(struct gfp_xdr *xdr, enum journal_operation ope,
 	    GFM_JOURNAL_FSNGROUP_CORE_XDR_FMT,
 	    &fsnarg->hostname,
 	    &fsnarg->fsngroupname)) != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
+		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_1004046,
 			"gfp_xdr_recv", e, ope);
 	}
 	return (e);
@@ -1022,14 +1008,14 @@ db_journal_read_fsngroup_modify(struct gfp_xdr *xdr,
 
 	GFARM_MALLOC(arg);
 	if (arg == NULL) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
+		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_1004047,
 		    "GFARM_MALLOC", GFARM_ERR_NO_MEMORY, ope);
 		return (GFARM_ERR_NO_MEMORY);
 	}
 	memset(arg, 0, sizeof(*arg));
 	if ((e = db_journal_read_fsngroup_core(xdr, ope, arg))
 	    != GFARM_ERR_NO_ERROR) {
-		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_UNFIXED,
+		GFLOG_DEBUG_WITH_OPE(GFARM_MSG_1004048,
 		    "db_journal_read_fsngroup_core", e, ope);
 		goto end;
 	}
@@ -3114,9 +3100,9 @@ db_journal_write_mdhost_remove(gfarm_uint64_t seqnum, char *name)
 		seqnum, GFM_JOURNAL_MDHOST_REMOVE, name));
 }
 
-/**********************************************************/
+ /**********************************************************/
 /* nop */
-
+ 
 static gfarm_error_t
 db_journal_read_nop(struct gfp_xdr *xdr,
 	struct db_mdhost_modify_arg **argp)
@@ -4055,10 +4041,8 @@ db_journal_recvq_proc(int *canceledp)
 	}
 	if ((e = journal_file_write_raw(self_jf, ri->recs_len, ri->recs,
 	    &last_seqnum, &journal_slave_transaction_nesting))
-	    == GFARM_ERR_NO_ERROR) {
+	    == GFARM_ERR_NO_ERROR)
 		journal_seqnum = last_seqnum;
-		db_journal_remove_db_update_info_op(journal_seqnum, diag);
-	}
 	free(ri->recs);
 	free(ri);
 	if (gfarm_get_journal_sync_file()) {

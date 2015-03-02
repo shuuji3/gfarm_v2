@@ -4,7 +4,6 @@
 
 #include <pthread.h>
 #include <assert.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -18,7 +17,6 @@
 #include "gfutil.h"
 #include "thrsubr.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 
 #include "subr.h"
@@ -612,7 +610,7 @@ db_fsngroup_modify_arg_alloc(const char *hostname, const char *fsngroupname)
 		arg = (struct db_fsngroup_modify_arg *)malloc(sz);
 alloc_check:
 	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1004038,
 			"allocation of 'db_fsngroup_modify_arg' failed.");
 		return (NULL);
 	}
@@ -1144,7 +1142,8 @@ db_inode_cksum_arg_alloc(gfarm_ino_t inum,
 
 	arg->inum = inum;
 	strcpy(arg->type, type);
-	memcpy(arg->sum, sum, len + 1);
+	memcpy(arg->sum, sum, len);
+	arg->sum[len] = '\0';
 	return (arg);
 }
 
@@ -1593,7 +1592,7 @@ db_xattr_modify(int xmlMode, gfarm_ino_t inum, char *attrname,
 }
 
 gfarm_error_t
-db_xattr_remove(int xmlMode, gfarm_ino_t inum, char *attrname)
+db_xattr_remove(int xmlMode, gfarm_ino_t inum, const char *attrname)
 {
 	struct db_xattr_arg *arg = db_xattr_arg_alloc(xmlMode, inum,
 	    attrname, NULL, 0);

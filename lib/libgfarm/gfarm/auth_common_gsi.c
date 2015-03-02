@@ -31,6 +31,8 @@ struct gfarm_auth_common_gsi_static {
 	int gsi_initialized;
 	int gsi_server_initialized;
 	gss_cred_id_t delegated_cred;
+	pthread_cond_t gsi_server_init_count_cond;
+	int gsi_server_init_count;
 
 	/* gfarm_gsi_client_cred_name() */
 	pthread_mutex_t client_cred_init_mutex;
@@ -42,18 +44,21 @@ gfarm_error_t
 gfarm_auth_common_gsi_static_init(struct gfarm_context *ctxp)
 {
 	struct gfarm_auth_common_gsi_static *s;
+	static const char diag[] = "gfarm_auth_common_gsi_static_init";
 
 	GFARM_MALLOC(s);
 	if (s == NULL)
 		return (GFARM_ERR_NO_MEMORY);
 
-	gfarm_mutex_init(&s->gsi_init_mutex,
-	    "gfarm_host_static_init", "gsi_initialize");
+	gfarm_mutex_init(&s->gsi_init_mutex, diag, "gsi_initialize");
 	s->gsi_initialized = 0;
 	s->gsi_server_initialized = 0;
+	gfarm_cond_init(&s->gsi_server_init_count_cond,
+	    diag, "gsi_server_init_count");
+	s->gsi_server_init_count = 0;
 	s->delegated_cred = GSS_C_NO_CREDENTIAL;
 	gfarm_mutex_init(&s->client_cred_init_mutex,
-	    "gfarm_host_static_init", "client_cred_initialize");
+	    diag, "client_cred_initialize");
 	s->client_cred_initialized = 0;
 	s->client_dn = NULL;
 
@@ -65,16 +70,30 @@ void
 gfarm_auth_common_gsi_static_term(struct gfarm_context *ctxp)
 {
 	struct gfarm_auth_common_gsi_static *s = ctxp->auth_common_gsi_static;
+	static const char diag[] = "gfarm_auth_common_gsi_static_term";
 
 	if (s == NULL)
 		return;
 
-	gfarm_mutex_destroy(&s->gsi_init_mutex,
-	    "gfarm_host_static_term", "gsi_initialize");
+	gfarm_mutex_destroy(&s->gsi_init_mutex, diag, "gsi_initialize");
+	gfarm_cond_destroy(&s->gsi_server_init_count_cond,
+	    diag, "gsi_server_init_count");
 	gfarm_mutex_destroy(&s->client_cred_init_mutex,
-	    "gfarm_host_static_term", "client_cred_initialize");
+	    diag, "client_cred_initialize");
 	free(s->client_dn);
 	free(s);
+}
+
+void
+gfarm_gsi_initialize_mutex_lock(const char *diag)
+{
+	gfarm_mutex_lock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
+}
+
+void
+gfarm_gsi_initialize_mutex_unlock(const char *diag)
+{
+	gfarm_mutex_unlock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
 }
 
 static void
@@ -89,10 +108,10 @@ gfarm_gsi_client_finalize(void)
 {
 	static const char diag[] = "gfarm_gsi_client_finalize";
 
-	gfarm_mutex_lock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
+	gfarm_gsi_initialize_mutex_lock(diag);
 	if (staticp->gsi_initialized)
 		gfarm_gsi_client_finalize_unlocked();
-	gfarm_mutex_unlock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
+	gfarm_gsi_initialize_mutex_unlock(diag);
 }
 
 gfarm_error_t
@@ -103,10 +122,9 @@ gfarm_gsi_client_initialize(void)
 	int rv;
 	static const char diag[] = "gfarm_gsi_client_initialize";
 
-	gfarm_mutex_lock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
+	gfarm_gsi_initialize_mutex_lock(diag);
 	if (staticp->gsi_initialized) {
-		gfarm_mutex_unlock(&staticp->gsi_init_mutex,
-		    diag, gsi_initialize_diag);
+		gfarm_gsi_initialize_mutex_unlock(diag);
 		return (GFARM_ERR_NO_ERROR);
 	}
 
@@ -120,14 +138,13 @@ gfarm_gsi_client_initialize(void)
 			gfarmGssPrintMinorStatus(e_minor);
 		}
 		gfarm_gsi_client_finalize_unlocked();
-		gfarm_mutex_unlock(&staticp->gsi_init_mutex,
-		    diag, gsi_initialize_diag);
+		gfarm_gsi_initialize_mutex_unlock(diag);
 
 		return (GFARM_ERRMSG_GSI_CREDENTIAL_INITIALIZATION_FAILED);
 	}
 	staticp->gsi_initialized = 1;
 	staticp->gsi_server_initialized = 0;
-	gfarm_mutex_unlock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
+	gfarm_gsi_initialize_mutex_unlock(diag);
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -152,7 +169,7 @@ gfarm_gsi_client_cred_name(void)
 	if (cred == GSS_C_NO_CREDENTIAL &&
 	    gfarmSecSessionGetInitiatorInitialCredential(&cred) < 0) {
 		staticp->client_dn = NULL;
-		gflog_auth_error(GFARM_MSG_1000707,
+		gflog_auth_notice(GFARM_MSG_1000707,
 		    "gfarm_gsi_client_cred_name(): "
 		    "not initialized as an initiator");
 	} else if (gfarmGssNewCredentialName(&name, cred, &e_major, &e_minor)
@@ -191,52 +208,62 @@ gfarm_gsi_server_finalize_unlocked(void)
 	staticp->gsi_server_initialized = 0;
 }
 
+static void
+gsi_server_init_count_add(int i, const char *diag)
+{
+	static const char name[] = "init_count";
+
+	gfarm_gsi_initialize_mutex_lock(diag);
+	staticp->gsi_server_init_count += i;
+	gfarm_cond_signal(&staticp->gsi_server_init_count_cond, diag, name);
+	gfarm_gsi_initialize_mutex_unlock(diag);
+}
+
+void
+gfarm_gsi_server_init_count_increment(void)
+{
+	static const char diag[] = "gsi_server_init_count_increment";
+
+	gsi_server_init_count_add(1, diag);
+}
+
+void
+gfarm_gsi_server_init_count_decrement(void)
+{
+	static const char diag[] = "gsi_server_init_count_decrement";
+
+	gsi_server_init_count_add(-1, diag);
+}
+
 void
 gfarm_gsi_server_finalize(void)
 {
 	static const char diag[] = "gfarm_gsi_server_finalize";
+	static const char name[] = "init_count";
 
-	gfarm_mutex_lock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
+	gfarm_gsi_initialize_mutex_lock(diag);
+	while (staticp->gsi_server_init_count > 0) {
+		gflog_info(GFARM_MSG_1003751, "%s: wait (%d)", diag,
+		    staticp->gsi_server_init_count);
+		gfarm_cond_wait(&staticp->gsi_server_init_count_cond,
+		    &staticp->gsi_init_mutex, diag, name);
+	}
 	if (staticp->gsi_initialized && staticp->gsi_server_initialized)
 		gfarm_gsi_server_finalize_unlocked();
-	gfarm_mutex_unlock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
+	gfarm_gsi_initialize_mutex_unlock(diag);
 }
 
 gfarm_error_t
-gfarm_gsi_server_initialize(void)
+gfarm_gsi_server_initialize_unlocked(void)
 {
 	OM_uint32 e_major;
 	OM_uint32 e_minor;
 	int rv;
-	static const char diag[] = "gfarm_gsi_server_initialize";
 
-	gfarm_mutex_lock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
 	if (staticp->gsi_initialized) {
-		if (staticp->gsi_server_initialized) {
-			/*
-			 * check whether the initial acceptor
-			 * credential is valid or not.  Unfortunately,
-			 * this check cannot be used for the
-			 * expiration of CA and CRL.
-			 */
-			if (gfarmSecSessionAcceptorCredIsValid(
-				&e_major, &e_minor)) {
-				/* already initialized */
-				gfarm_mutex_unlock(&staticp->gsi_init_mutex,
-				    diag, gsi_initialize_diag);
-
-				return (GFARM_ERR_NO_ERROR);
-			}
-			if (gflog_auth_get_verbose() &&
-				e_major != GSS_S_COMPLETE) {
-				gflog_info(GFARM_MSG_1002722,
-				    "initial acceptor certificate is not valid "
-				    "because of:");
-				gfarmGssPrintMajorStatus(e_major);
-				gfarmGssPrintMinorStatus(e_minor);
-			}
-			gfarm_gsi_server_finalize_unlocked();
-		} else
+		if (staticp->gsi_server_initialized)
+			return (GFARM_ERR_NO_ERROR);
+		else
 			gfarm_gsi_client_finalize_unlocked();
 	}
 
@@ -250,20 +277,33 @@ gfarm_gsi_server_initialize(void)
 			gfarmGssPrintMinorStatus(e_minor);
 		}
 		gfarm_gsi_server_finalize_unlocked();
-		gfarm_mutex_unlock(&staticp->gsi_init_mutex,
-		    diag, gsi_initialize_diag);
 		return (GFARM_ERRMSG_GSI_INITIALIZATION_FAILED);
 	}
 	staticp->gsi_initialized = 1;
 	staticp->gsi_server_initialized = 1;
-	gfarm_mutex_unlock(&staticp->gsi_init_mutex, diag, gsi_initialize_diag);
 	return (GFARM_ERR_NO_ERROR);
+}
+
+gfarm_error_t
+gfarm_gsi_server_initialize(void)
+{
+	static const char diag[] = "gfarm_gsi_server_initialize";
+	gfarm_error_t e;
+
+	gfarm_gsi_initialize_mutex_lock(diag);
+	e = gfarm_gsi_server_initialize_unlocked();
+	gfarm_gsi_initialize_mutex_unlock(diag);
+	return (e);
 }
 
 /*
  * Delegated credential
  */
 
+/*
+ * XXX - thread-unsafe interface.  this assumes a single thread server
+ * like gfsd and gfarm_gridftp_dsi.  this is not for gfmd.
+ */
 void
 gfarm_gsi_set_delegated_cred(gss_cred_id_t cred)
 {
