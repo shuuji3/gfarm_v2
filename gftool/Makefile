@@ -11,9 +11,12 @@ PUBLIC_TARGETS =
 SUBDIRS = \
 	gfchmod \
 	gfchown \
+	gfcksum \
 	gfdf \
 	gfdump \
 	gfexport \
+	gfdirpath \
+	gffilepath \
 	gffindxmlattr \
 	gfgetfacl \
 	gfgroup \
@@ -33,13 +36,19 @@ SUBDIRS = \
 	gfquota \
 	gfreg \
 	gfrep \
+	gfrepcheck \
 	gfrm \
 	gfrmdir \
 	gfsched \
 	gfsetfacl \
+	gfspoolgen \
+	gfspoolinum \
+	gfspoolmd5 \
 	gfspoolpath \
 	gfstat \
 	gfstatus \
+	gfsudo \
+	gftest \
 	gfuser \
 	gfusage \
 	$(gfvoms_sync_targets) \
@@ -50,17 +59,10 @@ SUBDIRS = \
 	gfhostgroup \
 	$(optional_targets)
 
-#	gfexec \
 #	gfifo \
 #	gfpwd \
-#	gfrcmd \
 #	gfsck \
 #	gfsetdir \
-#	gfmpirun \
-#	gfps \
 #	gfq \
-#	gfrun \
-#	gftest \
-#	example \
 
 include $(top_srcdir)/makes/subdir.mk

@@ -2,12 +2,12 @@
 .\"     Title: gfarm2.conf
 .\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
 .\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
-.\"      Date: 12 Jun 2013
+.\"      Date: 16 Jul 2014
 .\"    Manual: Gfarm
 .\"    Source: Gfarm
 .\"  Language: English
 .\"
-.TH "GFARM2\&.CONF" "5" "12 Jun 2013" "Gfarm" "Gfarm"
+.TH "GFARM2\&.CONF" "5" "16 Jul 2014" "Gfarm" "Gfarm"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -279,6 +279,23 @@ For example,
 .\}
 .nf
 	spool_check_level disable
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+spool_base_load \fIload\-average\fR
+.RS 4
+This statement specifies the CPU load adding to the real CPU load\&. This option is only available for a gfsd node (or a file system node)\&. The default base load is 0\&.0\&. This option can be used to pretend to be busy or idle to change the scheduling priority\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	spool_base_load 1\&.0
 .fi
 .if n \{\
 .RE
@@ -785,6 +802,42 @@ gsi; and all other hosts will be authenticated by
 gsi\&. Note that two hosts, 192\&.168\&.0\&.100 and 192\&.168\&.0\&.101, will be tested for authentication by gsi only\&.
 .RE
 .PP
+shared_key_file \fIpathname\fR
+.RS 4
+The
+shared_key_file
+statement specifies a pathname of the shared secret key file in sharedsecret authentication\&.
+.RE
+.PP
+digest \fIdigest_type\fR
+.RS 4
+The
+digest
+statement enables the checksum calculation, and specifies the digest type of the checksum\&. The digest_type parameter is a lower\-case name which is supported by the OpenSSL library on the filesystem nodes\&. For example, "md5", "sha256"\&. Or, if
+client_digest_check
+is enabled, the digest_type has to be supported on clients as well\&.
+.sp
+This directive is only available in gfmd\&.conf, and ignored in gfarm2\&.conf\&.
+.sp
+NOTE: Even if checksum calculation is enabled by this directive, the digest checksum is not calculated when a client accesses a file replica which is managed by a local gfsd\&. This is because only gfsd calculates the checksum by default, but the client directly reads/writes the file replica in the local access case\&. To calculate the checksum of local files, You have to either disable the direct access feature by the
+direct_local_access
+statement, or enable the client\-side checksum calculation feature by the
+client_digest_check
+statement\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	digest md5
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 sockopt \fIoption\fR\fI[=\fR\fIvalue\fR\fI] [\fR\fILISTENER\fR\fI | \fR\fI\fIHost_specification\fR\fR\fI]\fR
 .RS 4
 The
@@ -1187,7 +1240,7 @@ For example,
 .PP
 minimum_free_disk_space \fIbytes\fR
 .RS 4
-This directive specifies free disk space (in bytes) which is required on filesystem nodes\&. The Gfarm scheduler excludes filesystem nodes which have less free space than this parameter, when it schedules nodes for jobs which may write files\&. The free space value may have a suffix like ``k\*(Aq\*(Aq (kilo bytes), ``M\*(Aq\*(Aq (mega bytes), ``G\*(Aq\*(Aq (giga bytes) and ``T\*(Aq\*(Aq (tera bytes)\&. The default size is 128M bytes\&.
+This directive specifies free disk space (in bytes) which is required on filesystem nodes\&. The Gfarm scheduler excludes filesystem nodes which have less free space than this parameter, when it schedules nodes for jobs which may write files\&. The free space value may have a suffix like ``k\*(Aq\*(Aq (kilo bytes), ``M\*(Aq\*(Aq (mega bytes), ``G\*(Aq\*(Aq (giga bytes) and ``T\*(Aq\*(Aq (tera bytes)\&. The default size is 512M bytes\&.
 .sp
 This directive has to be specified in both gfarm2\&.conf and gfmd\&.conf\&. After restarting the gfmd and the Gfarm client, it is effective\&.
 .sp
@@ -1204,9 +1257,16 @@ For example,
 .\}
 .RE
 .PP
-gfs_proto_fhremove_request_window \fInumber\fR
+direct_local_access \fIvalidity\fR
 .RS 4
-This directive specifies maximum number of outstanding replica removal requests from gfmd to gfsd\&. The default is 50\&.
+When a Gfarm client accesses a file replica which is stored by the local gfsd, the client bypasses the gfsd and directly accesses the file replica for reading/writing the file contents to reduce the overhead\&. This directive is used to disable this feature\&. It is useful to make the local gfsd calculate the checksum of the local file replica\&. Please see the
+digest
+directive for detail\&.
+.sp
+The default is
+enable\&.
+.sp
+This directive is only available for clients in gfarm2\&.conf\&. Both gfsd and gfmd ignore this setting in gfarm2\&.conf and gfmd\&.conf\&.
 .sp
 For example,
 .sp
@@ -1214,24 +1274,7 @@ For example,
 .RS 4
 .\}
 .nf
-	gfs_proto_fhremove_request_window 50
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-gfs_proto_replication_request_window \fInumber\fR
-.RS 4
-This directive specifies maximum number of outstanding gfmd\-initiated replication requests from gfmd to destination\-side gfsd\&. The default is 20\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_replication_request_window 20
+	direct_local_access disable
 .fi
 .if n \{\
 .RE
@@ -1240,7 +1283,7 @@ For example,
 .PP
 simultaneous_replication_receivers \fInumber\fR
 .RS 4
-This directive is just an alias of the gfs_proto_replication_request_window directive since gfarm\-2\&.6\&. Please use that directive instead\&. This directive remains for compatibility with older versions\&. The default is 20\&.
+This directive specifies maximum number of simultaneous gfmd\-initiated replications to same host\&. The default is 20\&.
 .sp
 For example,
 .sp
@@ -1248,24 +1291,7 @@ For example,
 .RS 4
 .\}
 .nf
-	simultaneous_replication_receivers 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-outstanding_file_replication_limit \fInumber\fR
-.RS 4
-This directive specifies maximum number of outstanding gfmd\-initiated replication requests in whole system\&. This exists to prevent memory shortage of gfmd\&. The default is 4194304 and this value corresponds to approximately 512MB memory\&.
-.sp
-For example,
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 .fi
 .if n \{\
 .RE
@@ -1371,7 +1397,7 @@ For example,
 .RS 4
 .\}
 .nf
-        page_cache_timeout 3600000
+	page_cache_timeout 3600000
 .fi
 .if n \{\
 .RE
@@ -1549,6 +1575,23 @@ For example,
 .\}
 .RE
 .PP
+gfsd_connection_timeout \fIseconds\fR
+.RS 4
+This directive specifies the timeout to connect to a gfsd\&. The default is 30 seconds\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	gfsd_connection_timeout 30
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 atime \fItype\fR
 .RS 4
 When "disable" is specified, atime (access time) is not updated\&. When "relative" is specified, atime is only updated if the previous atime is earlier than the current mtime (modify time) or ctime (change time), or if the previous atime is more than 1 day old\&. When "strict" is specified, atime is always updated\&. The default setting is "relative"\&.
@@ -1568,9 +1611,32 @@ For example,
 .\}
 .RE
 .PP
+client_digest_check \fIvalidity\fR
+.RS 4
+When "enable" is specified, the Gfarm client library (libgfarm) calculates checksum while accessing a whole file sequentially, and verify the result against a value which is set in the metadata of the file\&. Also, libgfarm sets the calculated checksum to the metadata, if checksum isn\*(Aqt set in the metadata, and the file is opened for writing\&.
+.sp
+The default value is disable\&.
+.sp
+This directive is only available for clients in gfarm2\&.conf\&. Both gfsd and gfmd ignore this setting in gfarm2\&.conf and gfmd\&.conf\&.
+.sp
+For example,
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	client_digest_check enable
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 client_file_bufsize \fIbytes\fR
 .RS 4
 This directive specifies the file buffer size in bytes used in the Gfarm client library (libgfarm)\&. The default size is 1048568 bytes (= 1MiB \- 8B)\&. The file buffer size should be less than the default value not for deterioration of remote access performance for version 2\&.5\&.0 or earlier\&.
+.sp
+This directive is only available for clients in gfarm2\&.conf\&. Both gfsd and gfmd ignore this setting in gfarm2\&.conf and gfmd\&.conf\&.
 .sp
 For example,
 .sp
@@ -1718,27 +1784,6 @@ Example:
 .\}
 .RE
 .PP
-metadb_server_slave_listen \fIvalidity\fR
-.RS 4
-When "enable" is specified, even if the gfmd is set to slave, it receives requests from clients\&. The default is "disable"\&.
-.sp
-NOTE: Please do not set this directive for ordinary use, because this feature is only for development\&.
-.sp
-This parameter is only available in gfmd\&.conf\&.
-.sp
-Example:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	metadb_server_slave_listen enable
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 metadb_server_slave_max_size \fInumber\fR
 .RS 4
 This parameter specifies the maximum number of slave gfmds\&. The default is "32"\&.
@@ -1836,7 +1881,7 @@ Example:
 .PP
 replica_check_host_down_thresh \fIseconds\fR
 .RS 4
-If a gfsd is down, the replica_check assumes that the gfsd is not down until the specified seconds\&. This is useful to maintain a gfsd\&. The default value is 10800 seconds (3 hours)\&.
+This statement specifies an interval to start replica check after a gfsd is down\&. The default value is 10800 seconds (3 hours)\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1855,7 +1900,7 @@ Example:
 .PP
 replica_check_sleep_time \fInanoseconds\fR
 .RS 4
-If this value is increased, the replica_check works more slowly only when the gfmd is busy\&. When the gfmd is not busy, the replica_check works at full speed\&. This directive specifies the nanoseconds to sleep in the replica_check\&. The default value is 100000 nanoseconds (0\&.1 millisecond)\&. The maximum value is 1000000000 nanoseconds (1 second)\&.
+This statement specifies the sleep time in nanoseconds during the replica check when gfmd is busy\&. The default value is 100000 nanoseconds (0\&.1 millisecond)\&. The maximum value is 1000000000 nanoseconds (1 second)\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1874,7 +1919,7 @@ Example:
 .PP
 replica_check_minimum_interval \fIseconds\fR
 .RS 4
-This directive specifies the minimum interval in seconds, for the replica_check to work\&. The default value is 10 seconds, i\&.e\&. the replica_check can work up to one time every 10 seconds\&.
+This statement specifies the minimum interval in seconds, to start the next replica check\&. The default value is 10 seconds\&.
 .sp
 This parameter is only available in gfmd\&.conf\&.
 .sp
@@ -1901,13 +1946,14 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .RS 4
 .\}
 .nf
-<spool_statement> |
+	<spool_statement> |
 	<spool_server_listen_address_statement> |
 	<spool_server_listen_backlog_statement> |
 	<spool_server_cred_type_statement> |
 	<spool_server_cred_service_statement> |
 	<spool_server_cred_name_statement> |
 	<spool_check_level_statement> |
+	<spool_base_load_statement> |
 	<metadb_server_host_statement> |
 	<metadb_server_port_statement> |
 	<metadb_server_cred_type_statement> |
@@ -1932,6 +1978,8 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<postgresql_password_statement> |
 	<postgresql_conninfo_statement> |
 	<auth_statement> |
+	<shared_key_file_statement> |
+	<digest_statement> |
 
 	<sockopt_statement> |
 
@@ -1956,16 +2004,13 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<write_local_priority_statement> |
 	<write_target_domain_statement> |
 	<minimum_free_disk_space_statement> |
-	<gfs_proto_fhremove_request_window_statement> |
-	<gfs_proto_replication_request_window_statement> |
+	<direct_local_access_statement> |
 	<simultaneous_replication_receivers_statement> |
-	<outstanding_file_replication_limit_statement> |
 	<gfsd_connection_cache_statement> |
 	<xmlattr_size_limit_statement> |
 	<xattr_size_limit_statement> |
 	<attr_cache_limit_statement> |
 	<attr_cache_timeout_statement> |
-	<page_cache_timeout_statement> |
 	<log_level_statement> |
 	<log_message_verbose_level_statement> |
 	<log_auth_verbose_statement> |
@@ -1974,6 +2019,7 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<debug_command_statement> |
 
 	<atime_statement> |
+	<client_digest_check_statement> |
 	<client_file_bufsize_statement> |
 	<client_parallel_copy_statement> |
 	<profile_statement> |
@@ -1982,7 +2028,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 	<synchronous_replication_timeout_statement> |
 	<synchronous_journaling_statement> |
 	<metadb_server_force_slave_statement> |
-	<metadb_server_slave_listen_statement> |
 	<metadb_server_slave_max_size_statement> |
 	<metadb_journal_dir_statement> |
 	<metadb_journal_max_size_statement> |
@@ -2089,6 +2134,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "spool_check_level" <spck_level>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<spool_base_load_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"spool_base_load" <load>
 .fi
 .if n \{\
 .RE
@@ -2459,6 +2518,34 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
+<shared_key_file_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"shared_key_file" <pathname>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<digest_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"digest" <digest_type>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 <sockopt_statement> ::=
 .RS 4
 .sp
@@ -2770,28 +2857,14 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
-<gfs_proto_fhremove_request_window_statement> ::=
+<direct_local_access_statement> ::=
 .RS 4
 .sp
 .if n \{\
 .RS 4
 .\}
 .nf
-"gfs_proto_fhremove_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<gfs_proto_replication_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_replication_request_window" <number>
+"direct_local_access" <validity>
 .fi
 .if n \{\
 .RE
@@ -2806,20 +2879,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "simultaneous_replication_receivers" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<outstanding_file_replication_limit_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"outstanding_file_replication_limit" <number>
 .fi
 .if n \{\
 .RE
@@ -2890,20 +2949,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "attr_cache_timeout" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<page_cache_timeout_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"page_cache_timeout" <number>
 .fi
 .if n \{\
 .RE
@@ -3022,6 +3067,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .RE
 .PP
+<gfsd_connection_timeout_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"gfsd_connection_timeout" <number>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 <atime_statement> ::=
 .RS 4
 .sp
@@ -3030,6 +3089,20 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "atime" <atime_type>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<client_digest_check_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"client_digest_check" <validity>
 .fi
 .if n \{\
 .RE
@@ -3157,20 +3230,6 @@ This is a grammar of gfarm2\&.conf described by the BNF notation\&.
 .\}
 .nf
 "metadb_server_force_slave" <validity>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<metadb_server_slave_listen_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"metadb_server_slave_listen" <validity>
 .fi
 .if n \{\
 .RE

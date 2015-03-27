@@ -1642,6 +1642,15 @@ pfunc_cb_func_init()
 }
 
 static void
+gfprep_count_skip_file(gfarm_off_t filesize)
+{
+	gfarm_mutex_lock(&cb_mutex, "gfprep_count_skip_file", CB_MUTEX_DIAG);
+	total_skip_filesize += filesize;
+	total_skip_filenum++;
+	gfarm_mutex_unlock(&cb_mutex, "gfprep_count_skip_file", CB_MUTEX_DIAG);
+}
+
+static void
 gfprep_count_ng_file(gfarm_off_t filesize)
 {
 	gfarm_mutex_lock(&cb_mutex, "gfprep_count_ng_file", CB_MUTEX_DIAG);
@@ -2181,8 +2190,8 @@ gfprep_check_disk_avail(struct gfprep_host_info *hi, gfarm_off_t src_size)
 	gfprep_get_and_reset_failed_size(hi, &failed_size);
 	hi->disk_avail += failed_size;
 
-	if (hi->disk_avail >= src_size &&
-	    hi->disk_avail >= gfarm_get_minimum_free_disk_space())
+	/* to reduce no space risk, keep minimum disk space */
+	if (hi->disk_avail >= src_size + gfarm_get_minimum_free_disk_space())
 		return (GFARM_ERR_NO_ERROR);
 	return (GFARM_ERR_NO_SPACE);
 }
@@ -3661,18 +3670,19 @@ main(int argc, char *argv[])
 			if (entry->src_d_type == GFS_DT_REG) {
 				if (entry->dst_exist) {
 					if (entry->dst_d_type == GFS_DT_REG) {
-						if (entry->src_size ==
-						    entry->dst_size &&
-						    ((!opt_force_copy &&
-						      entry->src_m_sec <=
-						      entry->dst_m_sec)
-						     ||
-						     (opt_force_copy &&
-						      entry->src_m_sec ==
-						      entry->dst_m_sec))) {
+						if ((!opt_force_copy &&
+						     entry->src_m_sec <=
+						     entry->dst_m_sec) ||
+						    (opt_force_copy &&
+						     entry->src_size ==
+						     entry->dst_size &&
+						     entry->src_m_sec ==
+						     entry->dst_m_sec)) {
 							gfprep_verbose(
 							  "already exists: %s",
 							  dst_url);
+							gfprep_count_skip_file(
+							    entry->src_size);
 							goto next_entry;
 						}
 						/* overwrite, not unlink */
@@ -3792,7 +3802,8 @@ main(int argc, char *argv[])
 
 		/* ----- a file ----- */
 		/* select a file within specified src  */
-		if (hash_src && (hash_srcname || opt_src_domain)) {
+		if (hash_src && (hash_srcname || opt_src_domain ||
+		    opt_migrate)) {
 			int found = 0;
 
 			for (i = 0; i < entry->src_ncopy; i++) {
@@ -3805,6 +3816,7 @@ main(int argc, char *argv[])
 			if (!found) {
 				gfprep_verbose("not a target file: %s",
 					       src_url);
+				gfprep_count_skip_file(entry->src_size);
 				goto next_entry;
 			}
 		}
@@ -3819,8 +3831,10 @@ main(int argc, char *argv[])
 			} else {
 				assert(src_is_gfarm);
 				/* gfprep: ignore 0 byte: not replicate */
-				if (entry->src_ncopy == 0)
+				if (entry->src_ncopy == 0) {
+					gfprep_count_skip_file(entry->src_size);
 					goto next_entry; /* skip */
+				}
 			}
 		} else if (src_is_gfarm &&
 			   entry->src_ncopy == 0) { /* entry->src_size > 0 */
@@ -3848,8 +3862,10 @@ main(int argc, char *argv[])
 						break;
 					}
 				}
-				if (found) /* not replicate */
+				if (found) { /* not replicate */
+					gfprep_count_skip_file(entry->src_size);
 					goto next_entry;
+				}
 			}
 			n_target++;
 			if (n_target <= 0) { /* overflow */
@@ -4033,12 +4049,15 @@ main(int argc, char *argv[])
 			n_desire = opt_n_desire - n_dst_exist;
 			if (n_desire == 0) {
 				gfprep_verbose("enough replicas: %s", src_url);
+				gfprep_count_skip_file(entry->src_size);
 				goto next_entry_with_free;
 			} else if (n_desire < 0) {
 				gfprep_verbose("too many replicas(%d): %s",
 					       -n_desire, src_url);
-				if (!opt_remove)
+				if (!opt_remove) {
+					gfprep_count_skip_file(entry->src_size);
 					goto next_entry_with_free;
+				}
 				/* disk_avail: small to large */
 				for (i = n_dst_exist - 1; i >= 0; i--) {
 					gfprep_do_remove_replica(
