@@ -60,7 +60,7 @@ public class LocalSeekableFile implements SeekableFile {
 	}
 
 	/**
-	 * @param pos æ–°ãŸãªå…¥åŠ›ä½ç½®
+	 * @param pos V‚½‚È“ü—ÍˆÊ’u
 	 * @throws java.io.IOException
 	 */
 	public void seek(long pos) throws IOException {

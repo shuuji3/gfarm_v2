@@ -19,7 +19,7 @@ import java.util.Date;
 public class DataBlock {
 
 	/**
-	 * ç©ºã®ãƒ‡ãƒ¼ã‚¿ãƒ–ãƒ­ãƒƒã‚¯ã‚’ç”Ÿæˆã™ã‚‹ 
+	 * ‹ó‚Ìƒf[ƒ^ƒuƒƒbƒN‚ğ¶¬‚·‚é 
 	 */
 	public DataBlock() {
 		valid = false;
@@ -32,7 +32,7 @@ public class DataBlock {
 	ArrayList data = new ArrayList();
 
 	/**
-	 * ãƒã‚¤ãƒŠãƒªé…åˆ—ã‹ã‚‰ãƒ‡ãƒ¼ã‚¿ãƒ–ãƒ­ãƒƒã‚¯ã‚’ç”Ÿæˆã™ã‚‹
+	 * ƒoƒCƒiƒŠ”z—ñ‚©‚çƒf[ƒ^ƒuƒƒbƒN‚ğ¶¬‚·‚é
 	 */
 	public DataBlock(byte[] bytes, int i, int num)
 	{

@@ -3,7 +3,6 @@
  */
 
 #include <errno.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,7 +12,6 @@
 #include <sys/time.h>
 #include <math.h>
 #include <time.h>
-
 #include <gfarm/gfarm.h>
 
 #include "timespec.h" /* XXX should export this interface */
@@ -202,7 +200,7 @@ put_suffix(struct ls_entry *ls)
 }
 
 void
-put_perm(int mode, int highbit, int highchar)
+put_perm(int mode)
 {
 	if (mode & 04)
 		putchar('r');
@@ -212,12 +210,7 @@ put_perm(int mode, int highbit, int highchar)
 		putchar('w');
 	else
 		putchar('-');
-	if (mode & highbit) {
-		if (mode & 01)
-			putchar(highchar);
-		else
-			putchar(toupper(highchar));
-	} else if (mode & 01)
+	if (mode & 01)
 		putchar('x');
 	else
 		putchar('-');
@@ -260,9 +253,9 @@ put_stat(struct gfs_stat *st)
 		putchar('l');
 	else
 		putchar('-');
-	put_perm(st->st_mode >> 6, GFARM_S_ISUID >> 6, 's');
-	put_perm(st->st_mode >> 3, GFARM_S_ISGID >> 3, 's');
-	put_perm(st->st_mode, GFARM_S_ISTXT, 't');
+	put_perm(st->st_mode >> 6);
+	put_perm(st->st_mode >> 3);
+	put_perm(st->st_mode);
 	printf(" %d %-8s %-8s ", (int)st->st_nlink, st->st_user, st->st_group);
 	printf("%10" GFARM_PRId64 " ", st->st_size);
 	put_time(&st->st_mtimespec);
@@ -556,7 +549,7 @@ list(gfarm_stringlist *paths, gfs_glob_t *types, int *need_newline)
 void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-1ACFRSTadilrt] [-E <sec>] <path>...\n",
+	fprintf(stderr, "Usage: %s [-1ACFRSTVadilrt] [-E <sec>] <path>...\n",
 		program_name);
 	exit(EXIT_FAILURE);
 }
@@ -598,7 +591,7 @@ main(int argc, char **argv)
 	} else {
 		option_output_format = OF_ONE_PER_LINE;
 	}
-	while ((c = getopt(argc, argv, "1ACE:FRSTadilrt?")) != -1) {
+	while ((c = getopt(argc, argv, "1ACE:FRSTVadilrt?")) != -1) {
 		switch (c) {
 		case '1': option_output_format = OF_ONE_PER_LINE; break;
 		case 'A': option_all = OA_ALMOST_ALL; break;
@@ -620,6 +613,9 @@ main(int argc, char **argv)
 		case 'R': option_recursive = 1; break;
 		case 'S': option_sort_order = SO_SIZE; break;
 		case 'T': option_complete_time = 1; break;
+		case 'V':
+			fprintf(stderr, "Gfarm version %s\n", gfarm_version());
+			exit(0);
 		case 'a': option_all = OA_ALL; break;
 		case 'd': option_directory_itself = 1; break;
 		case 'i': option_inumber = 1; break;

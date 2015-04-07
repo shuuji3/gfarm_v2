@@ -1,13 +1,13 @@
 '\" t
 .\"     Title: gfprep
 .\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
-.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
-.\"      Date: 9 Dec 2013
+.\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
+.\"      Date: 29 Aug 2013
 .\"    Manual: Gfarm
 .\"    Source: Gfarm
 .\"  Language: English
 .\"
-.TH "GFPREP" "1" "9 Dec 2013" "Gfarm" "Gfarm"
+.TH "GFPREP" "1" "29 Aug 2013" "Gfarm" "Gfarm"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -34,21 +34,20 @@ gfprep \- replicate Gfarm files in parallel
 \fBgfprep\fR [\-nqvdpPU] [\-mx] [\-S\ \fIsource\-domainname\fR] [\-h\ \fIsource\-hostfile\fR] [\-D\ \fIdestination\-domainname\fR] [\-H\ \fIdestination\-hostfile\fR] [\-j\ \fInum\-of\-processes\fR] [\-J\ \fInum\-of\-processes\fR] [\-M\ \fIlimit\-byte\fR] [\-w\ \fIway\-of\-scheduling\fR] [\-W\ \fIkilobytes\-for\-threshold\fR] [\-s\ \fIKB/s\-to\-simulate\fR] [\-F\ \fInum\-for\-readahead\fR] [\-N\ \fInum\-of\-replicas\fR] \fIpath\fR
 .SH "DESCRIPTION"
 .PP
+
 \fBgfprep\fR
-creates replicas of Gfarm files win parallel\&.
+creates replicas of Gfarm files specified by the
+\fIgfarm\-url\fR(gfarm:///\&.\&.\&.) in parallel\&.
 .PP
-A set of source/destination hosts can be specified by a domain name and/or a hostlist file\&. When both a domain name and a hostlist file are specified, a set of hosts is determined by both conditions\&. When a set of source hosts is specified, only files stored on the source hosts are replicated\&.
-.PP
-Idler filesystem nodes will be selected for source or destination\&. The maximum number of parallel to send or receive per host is the number of CPUs\&. Please see the manual page of
-\fBgfhost\fR
-for information about the number of CPUs\&.
+When a set of source hosts are specified, only files stored on the set of source hosts are replicated\&. A set of hosts can be specified by a domain name and/or a host file\&. When both a domain name and a host file are specified, a set of hosts is determined by both conditions\&.
 .PP
 If the
-\fIpath\fR
+\fIgfarm\-url\fR
 parameter is a directory, files under the directory will be replicated recursively\&.
 .PP
+
 \fBgfprep\fR
-can also read the directory and get information of the entries in parallel\&.
+can also read the directory and get informations of the entries in parallel\&.
 .SH "GFPREP OPTIONS"
 .PP
 These are the options only for
@@ -63,12 +62,12 @@ If this option is not specified, \-N 1 is assumed\&.
 .PP
 \fB\-x\fR
 .RS 4
-Removes extra file replicas when a set of destination nodes has more file replicas than specified by \-N option\&.
+Removes file replicas when a set of destination nodes has more file replicas than specified by \-N option\&.
 .RE
 .PP
 \fB\-m\fR
 .RS 4
-Migrates file replicas within a set of source nodes to destination nodes\&.
+Migrates replicas within a set of source nodes to destination nodes\&.
 .sp
 This option requires \-S or \-h or \-D or \-H options\&.
 .sp
@@ -76,18 +75,19 @@ This option and \-N option are mutually exclusive\&.
 .RE
 .SH "COMMON OPTIONS"
 .PP
+
 \fBgfprep\fR
 has the same options with
 \fBgfpcopy\fR\&.
 .PP
 \fB\-S\fR \fIsource\-domainname\fR
 .RS 4
-Specifies a domain name to select files\&. Only files which have the real file on the domain will be sended\&.
+Specifies the domain name of source filesystem nodes from which replicas will be copied\&.
 .RE
 .PP
 \fB\-h\fR \fIsource\-hostfile\fR
 .RS 4
-Specifies a file of which describes hostnames of file system nodes to replicate or copy files\&. Only files which have the real file on the host names will be selected\&. The
+Specifies a file which describes hostnames of source filesystem nodes from which the replica will be copied\&. The
 \fIsource\-hostfile\fR
 consists of a filesystem node name on each line\&.
 .sp
@@ -96,12 +96,13 @@ If ``\-\*(Aq\*(Aq is specified, standard input is used to read the host list\&.
 .PP
 \fB\-L\fR
 .RS 4
-Filesystem nodes selected by \-S or \-h are only used to send for the source\&.
+Selects source filesystem nodes within a set of specified source nodes\&.
+.sp
 .RE
 .PP
 \fB\-D\fR \fIdestination\-domainname\fR
 .RS 4
-Specifies the domain name for destination\&.
+Specifies the domain name of destination filesystem nodes to which replicas will be copied\&.
 .sp
 If neither this nor the
 \fB\-H\fR
@@ -110,7 +111,7 @@ option is specified, replicas may be copied to any available host\&.
 .PP
 \fB\-H\fR \fIdestination\-hostfile\fR
 .RS 4
-Specifies a file which describes hostnames for destination\&. The
+Specifies a file which describes hostnames of destination filesystem nodes on which the replica will be copied\&. The
 \fIdestination\-hostfile\fR
 consists of a filesystem node name on each line\&.
 .sp
@@ -119,12 +120,12 @@ If ``\-\*(Aq\*(Aq is specified, standard input is used to read the host list\&.
 .PP
 \fB\-j\fR \fInum\-of\-processes\fR
 .RS 4
-Specifies the maximum number of processes to create file replicas (or copy files) simultaneously\&.
+Specifies the number of processes to create file replicas (or copy files) simultaneously\&.
 .sp
 The default value is the parameter of client_parallel_copy in gfarm2\&.conf\&. (see man gfarm2\&.conf)
 .sp
-The maximum number of process per filesystem node for source or destination is the number of CPUs (see man
-\fBgfhost\fR)\&.
+The source nodes and the destination nodes are selected/scheduled and used(read/written) up to the number of CPUs (see man
+\fBgfhost\fR) at the same time\&.
 .RE
 .PP
 \fB\-J\fR \fInum\-of\-processes\fR
@@ -143,7 +144,7 @@ The default value is unlimited\&.
 .PP
 \fB\-w\fR \fIway\-of\-scheduling\fR
 .RS 4
-Specifies the name of scheduling way\&. ``noplan\*(Aq\*(Aq replicates/copies while files are found\&. ``greedy\*(Aq\*(Aq schedules greedily the order of replication/copy beforehand\&.
+Specifies the name of scheduling way\&. ``noplan\*(Aq\*(Aq replicates/copies in order that the files are found\&. ``greedy\*(Aq\*(Aq schedules greedily the order of replication/copy beforehand\&.
 .sp
 The default behavior is ``noplan\*(Aq\*(Aq\&.
 .sp
@@ -166,14 +167,14 @@ Disables checking the available disk space of the selected node every time\&.
 .PP
 \fB\-F\fR \fInum\-of\-dirents\fR
 .RS 4
-Specifies the number of entries to perform the directory readahead\&.
+Specifies a number of entries to perform the directory readahead\&.
 .sp
 The default value is 10000\&.
 .RE
 .PP
 \fB\-s\fR \fIkilobytes\-per\-sec\&.\fR
 .RS 4
-Specifies a throughput(KB/s) to simulate the replication/copy, and does nothing (gets file information only)\&.
+Specifies a throughput(KB/s) to simulate the replication/copy, and does nothing (gets file informations only)\&.
 .RE
 .PP
 \fB\-n\fR
@@ -223,17 +224,6 @@ $ gfprep \-N 3 gfarm:///dir
 .if n \{\
 .RE
 .\}
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-$ cd /mnt/gfarm2fs
-$ gfprep \-N 3 dir
-.fi
-.if n \{\
-.RE
-.\}
 .PP
 To replicate a file or reduce surplus replicas of the file\&.
 .sp
@@ -260,8 +250,9 @@ $ gfprep \-m \-S gfsd1\&.example\&.com gfarm:///
 .\}
 .SH "NOTES"
 .PP
-When the \-L or \-m option is not specified, a source node is not always selected within a set of specified source filesystem nodes\&.
+If the \-L or \-m option is not specified, a source node is not always selected within a set of specified source nodes\&.
 .PP
+
 \fBgfprep\fR
 command should be executed at the same host of gfmd\&. If the gfmd and
 \fBgfprep\fR
@@ -270,6 +261,7 @@ are far apart, the
 operation is slow\&. Specifying a large value by \-j or \-J options may be effective in such a case\&.
 .SH "SEE ALSO"
 .PP
+
 \fBgfrep\fR(1),
 \fBgfpcopy\fR(1),
 \fBgfhost\fR(1),

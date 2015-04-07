@@ -6,7 +6,7 @@ srcdir = .
 
 include $(top_srcdir)/makes/var.mk
 
-SUBDIRS = gfpcopy-test gfpcopy-stress
+SUBDIRS = gfpcopy-test
 
 GFREP_SRCDIR = $(srcdir)/../gfrep
 
@@ -17,8 +17,7 @@ OBJS = gfprep.o gfarm_list.o gfarm_parallel.o gfarm_dirtree.o gfarm_fifo.o \
 EXTRA_CLEAN_TARGETS = gfarm_list.c
 PROGRAM = gfprep
 GFPCOPY = gfpcopy
-CFLAGS = $(pthread_includes) $(COMMON_CFLAGS) \
-	-I$(GFUTIL_SRCDIR) -I$(GFARMLIB_SRCDIR) \
+CFLAGS = $(COMMON_CFLAGS) -I$(GFUTIL_SRCDIR) -I$(GFARMLIB_SRCDIR) \
 	-I$(GFREP_SRCDIR) -I$(srcdir) $(openssl_includes)
 LDLIBS = $(COMMON_LDFLAGS) $(GFARMLIB) $(LIBS)
 DEPLIBS = $(DEPGFARMLIB)
@@ -44,7 +43,6 @@ $(OBJS): $(DEPGFARMINC) \
 	$(GFUTIL_SRCDIR)/gfutil.h \
 	$(GFUTIL_SRCDIR)/queue.h \
 	$(GFARMLIB_SRCDIR)/config.h \
-	$(GFARMLIB_SRCDIR)/context.h \
 	$(GFARMLIB_SRCDIR)/gfarm_path.h \
 	$(GFARMLIB_SRCDIR)/gfm_client.h \
 	$(GFARMLIB_SRCDIR)/host.h \

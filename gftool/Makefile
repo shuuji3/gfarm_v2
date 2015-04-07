@@ -20,7 +20,6 @@ SUBDIRS = \
 	gfhost \
 	gfjournal \
 	gfjournaladmin \
-	gfjournaldump \
 	gfkey \
 	gfln \
 	gfls \
@@ -40,6 +39,7 @@ SUBDIRS = \
 	gfspoolpath \
 	gfstat \
 	gfstatus \
+	gftest \
 	gfuser \
 	gfusage \
 	$(gfvoms_sync_targets) \
@@ -47,20 +47,12 @@ SUBDIRS = \
 	gfwhoami \
 	gfxattr \
 	config-gfarm \
-	gfhostgroup \
 	$(optional_targets)
 
-#	gfexec \
 #	gfifo \
 #	gfpwd \
-#	gfrcmd \
 #	gfsck \
 #	gfsetdir \
-#	gfmpirun \
-#	gfps \
 #	gfq \
-#	gfrun \
-#	gftest \
-#	example \
 
 include $(top_srcdir)/makes/subdir.mk

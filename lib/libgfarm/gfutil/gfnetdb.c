@@ -9,8 +9,9 @@
 
 #ifndef HAVE_MTSAFE_NETDB
 static pthread_mutex_t netdb_mutex = PTHREAD_MUTEX_INITIALIZER;
-static const char mutex_name[] = "netdb_mutex";
 #endif
+
+static const char mutex_name[] = "netdb_mutex";
 
 int
 gfarm_getaddrinfo(const char *hostname,

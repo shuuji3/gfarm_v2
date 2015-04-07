@@ -17,57 +17,57 @@ import java.awt.Color;
 public class ViewData {
 	
 	/**
-	 * この描画データを描画対象としてよいかどうか
+	 * ���̕`��f�[�^��`��ΏۂƂ��Ă悢���ǂ���
 	 */
 	private boolean valid = false;
 	
 	/**
-	 * この描画データを画面上で小さな点(プロット)として描画すべきかどうか
+	 * ���̕`��f�[�^����ʏ�ŏ����ȓ_(�v���b�g)�Ƃ��ĕ`�悷�ׂ����ǂ���
 	 */
 	private boolean plot = false;
 	
 	/**
-	 * この描画データのプロットを描画すべき色
+	 * ���̕`��f�[�^�̃v���b�g��`�悷�ׂ��F
 	 */
 	private Color plotColor = Color.GREEN;
 	
 	/**
-	 * この描画データから垂直下向きに塗りつぶしを行うべきかどうか(棒グラフのように見える)
+	 * ���̕`��f�[�^���琂���������ɓh��Ԃ����s���ׂ����ǂ���(�_�O���t�̂悤�Ɍ�����)
 	 */
 	private boolean fill = false;
 	
 	/**
-	 * この描画データを垂直下向きに塗りつぶすべき色 
+	 * ���̕`��f�[�^�𐂒��������ɓh��Ԃ��ׂ��F 
 	 */
 	private Color fillColor = Color.RED;
 	
 	/**
-	 * この描画データと隣接する有効な描画データとを線分で連結して描画すべきかどうか
+	 * ���̕`��f�[�^�Ɨאڂ���L���ȕ`��f�[�^�Ƃ�����ŘA�����ĕ`�悷�ׂ����ǂ���
 	 */
 	private boolean join = false;
 	
 	/**
-	 * 描画データを連結する線分を描画すべき色
+	 * �`��f�[�^��A�����������`�悷�ׂ��F
 	 */
 	private Color joinColor = Color.YELLOW;
 	
 	/**
-	 * 最新データを示す水平線(レベルメータ)を描画すべきかどうか
+	 * �ŐV�f�[�^������������(���x�����[�^)��`�悷�ׂ����ǂ���
 	 */
 	private boolean level = false;
 	
 	/**
-	 * レベルメータを描画すべき色
+	 * ���x�����[�^��`�悷�ׂ��F
 	 */
 	private Color levelColor = Color.BLUE;
 	
 	/**
-	 * 描画データ要素の配列
+	 * �`��f�[�^�v�f�̔z��
 	 */
 	private ViewDataElement[] data;
 	
 	/**
-	 * プロットの半径(ピクセル単位)
+	 * �v���b�g�̔��a(�s�N�Z���P��)
 	 */
 	private int plotRadius = 2;
 

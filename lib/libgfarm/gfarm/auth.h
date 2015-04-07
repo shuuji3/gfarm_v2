@@ -5,7 +5,6 @@ enum gfarm_auth_error {
 	GFARM_AUTH_ERROR_INVALID_CREDENTIAL,
 	GFARM_AUTH_ERROR_EXPIRED,
 	GFARM_AUTH_ERROR_RESOURCE_UNAVAILABLE,
-	GFARM_AUTH_ERROR_TEMPORARY_FAILURE, /* e.g. gfmd failover */
 };
 
 enum gfarm_auth_id_type {
@@ -17,11 +16,8 @@ enum gfarm_auth_id_type {
 
 enum gfarm_auth_method {
 	GFARM_AUTH_METHOD_NONE, /* never used */
-	GFARM_AUTH_METHOD_SHAREDSECRET_V2, /* used until gfarm v2 */
-	GFARM_AUTH_METHOD_GSI_OLD, /* not supported since 2003/07/09 */
-	GFARM_AUTH_METHOD_GSI_V2, /* used until gfarm v2 */
-	GFARM_AUTH_METHOD_GSI_AUTH_V2, /* used until gfarm v2 */
 	GFARM_AUTH_METHOD_SHAREDSECRET,
+	GFARM_AUTH_METHOD_GSI_OLD, /* not supported since 2003/07/09 */
 	GFARM_AUTH_METHOD_GSI,
 	GFARM_AUTH_METHOD_GSI_AUTH,
 
@@ -138,8 +134,7 @@ enum gfarm_auth_cred_type gfarm_auth_server_cred_type_get(const char *);
 char *gfarm_auth_server_cred_service_get(const char *);
 char *gfarm_auth_server_cred_name_get(const char *);
 gfarm_error_t gfarm_auth_server_cred_type_set_by_string(char *, char *);
-gfarm_error_t gfarm_auth_server_cred_type_set(char *,
-	enum gfarm_auth_cred_type);
+gfarm_error_t gfarm_auth_server_cred_type_set(char *, enum gfarm_auth_cred_type);
 gfarm_error_t gfarm_auth_server_cred_service_set(char *, char *);
 gfarm_error_t gfarm_auth_server_cred_name_set(char *, char *);
 

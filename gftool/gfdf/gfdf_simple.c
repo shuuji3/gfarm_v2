@@ -10,7 +10,6 @@
 
 #include <gfarm/gfarm.h>
 
-#include "liberror.h"
 #include "gfm_client.h"
 #include "lookup.h"
 #include "gfarm_path.h"
@@ -85,13 +84,13 @@ const struct formatter *formatter = &precise_formatter;
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-ahHnrS] [-P path] [-D domain]\n",
+	fprintf(stderr, "Usage: %s [-ahHnrSV] [-P path] [-D domain]\n",
 		program_name);
 	exit(1);
 }
 
 gfarm_error_t
-display_statfs(const char *path, const char *dummy, int *ndisplayed)
+display_statfs(const char *path, const char *dummy)
 {
 	gfarm_error_t e;
 	gfarm_off_t used, avail, files;
@@ -100,7 +99,6 @@ display_statfs(const char *path, const char *dummy, int *ndisplayed)
 	char availbuf[GFARM_INT64STRLEN];
 	char filesbuf[GFARM_INT64STRLEN];
 
-	*ndisplayed = 0;
 	/* XXX FIXME: should implement and use gfs_statvfs */
 	e = gfs_statfs(&used, &avail, &files);
 	if (e != GFARM_ERR_NO_ERROR)
@@ -122,7 +120,6 @@ display_statfs(const char *path, const char *dummy, int *ndisplayed)
 	       (double)used / (used + avail) * 100,
 	       filesbuf);
 
-	*ndisplayed = 1;
 	return (GFARM_ERR_NO_ERROR);
 }
 
@@ -202,7 +199,7 @@ schedule_host_domain(const char *path, const char *domain,
 }
 
 gfarm_error_t
-display_statfs_nodes(const char *path, const char *domain, int *ndisplayed)
+display_statfs_nodes(const char *path, const char *domain)
 {
 	gfarm_error_t e;
 	int nhosts, i;
@@ -213,7 +210,6 @@ display_statfs_nodes(const char *path, const char *domain, int *ndisplayed)
 	char usedbuf[GFARM_INT64STRLEN];
 	char availbuf[GFARM_INT64STRLEN];
 
-	*ndisplayed = 0;
 	e = schedule_host_domain(path, domain, &nhosts, &hosts);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -247,25 +243,22 @@ display_statfs_nodes(const char *path, const char *domain, int *ndisplayed)
 		       capbuf, usedbuf, availbuf,
 		       (double)total_used / (total_used + total_avail) * 100,
 		       "");
-	} else {
-		fprintf(stderr, "%s\n",
-		    gfarm_error_string(GFARM_ERRMSG_NO_FILESYSTEM_NODE));
 	}
+	else
+		puts("No file system node");
 
 	gfarm_host_sched_info_free(nhosts, hosts);
-	*ndisplayed = nhosts;
  
 	return (GFARM_ERR_NO_ERROR);
 }
 
 gfarm_error_t
-display_nodes(const char *path, const char *domain, int *ndisplayed)
+display_nodes(const char *path, const char *domain)
 {
 	gfarm_error_t e;
 	int nhosts, i;
 	struct gfarm_host_sched_info *hosts;
 
-	*ndisplayed = 0;
 	e = schedule_host_domain(path, domain, &nhosts, &hosts);
 	if (e != GFARM_ERR_NO_ERROR)
 		return (e);
@@ -274,7 +267,6 @@ display_nodes(const char *path, const char *domain, int *ndisplayed)
 		printf("%s\n", hosts[i].host);
 
 	gfarm_host_sched_info_free(nhosts, hosts);
-	*ndisplayed = nhosts;
 	return (e);
 }
 
@@ -284,9 +276,8 @@ main(int argc, char *argv[])
 	gfarm_error_t e;
 	const char *domain = "", *path = ".";
 	char *p = NULL;
-	gfarm_error_t (*statfs)(const char *, const char *, int *) =
+	gfarm_error_t (*statfs)(const char *, const char *) =
 		display_statfs_nodes;
-	int ndisplayed;
 	int c;
 
 	if (argc > 0)
@@ -299,7 +290,7 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	while ((c = getopt(argc, argv, "ahHnrD:P:S?")) != -1) {
+	while ((c = getopt(argc, argv, "ahHnrD:P:SV?")) != -1) {
 		switch (c) {
 		case 'a':
 			statfs = display_statfs;
@@ -327,6 +318,9 @@ main(int argc, char *argv[])
 		case 'S':
 			option_sort_order = SO_SIZE;
 			break;
+		case 'V':
+			fprintf(stderr, "Gfarm version %s\n", gfarm_version());
+			exit(0);
 		case '?':
 		default:
 			usage();
@@ -334,7 +328,7 @@ main(int argc, char *argv[])
 	}
 	if (gfarm_realpath_by_gfarm2fs(path, &p) == GFARM_ERR_NO_ERROR)
 		path = p;
-	e = statfs(path, domain, &ndisplayed);
+	e = statfs(path, domain);
 	free(p);
 	if (e != GFARM_ERR_NO_ERROR) {
 		fprintf(stderr, "%s: %s\n", program_name,
@@ -348,7 +342,5 @@ main(int argc, char *argv[])
 		    gfarm_error_string(e));
 		exit(1);
 	}
-	if (ndisplayed == 0)
-		exit(1);
 	exit (0);
 }

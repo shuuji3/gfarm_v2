@@ -53,13 +53,18 @@ else
 	exit 1
 fi
 
-. $config_dir/config-gfarm.common
-
 usage()
 {
 	echo >&2 "usage: $PROGNAME [--help] [--prefix prefix] [-t|-T] [-f]"
 	echo >&2 "	[-a arch] [-p port] [-h hostname] [-n ncpu] "
 	echo >&2 "	[-l listen_address] [-S] [-N] spool_directory"
+	exit 1
+}
+
+ABORT()
+{
+	[ $# -gt 0 ] && echo >&2 "${PROGNAME}: $@"
+	echo >&2 "$PROGNAME failure"
 	exit 1
 }
 
@@ -87,7 +92,7 @@ display_plain_params()
 	echo "port                         [-p]: $GFSD_PORT"
 	echo "ncpu                         [-n]: $NCPU"
 	echo "spool directory                  : $SPOOL_DIRECTORY"
-	echo "rc script                        : $RC_GFSD"
+	echo "rc script                        : $RC_DIR/$RC_NAME"
 	echo "gfarm client conf file           : $GFARM_CLIENT_CONF"
 	if $PRIVATE_MODE; then
 		echo "gfsd conf file                   : $GFARM_CONF"
@@ -108,7 +113,7 @@ display_script_params()
 	echo "GFSD_PORT=$GFSD_PORT"
 	echo "NCPU=$NCPU"
 	echo "SPOOL_DIRECTORY=$SPOOL_DIRECTORY"
-	echo "GFSD_RC=$RC_GFSD"
+	echo "GFSD_RC=$RC_DIR/$RC_NAME"
 	echo "GFARM_CONF=$GFARM_CLIENT_CONF"
 	if $PRIVATE_MODE; then
 		echo "GFSD_CONF=$GFARM_CONF"
@@ -185,12 +190,6 @@ esac
 #
 
 : ${CONFIG_PREFIX:=}
-: ${LISTEN_ADDRESS:=""}
-if [ -n "$LISTEN_ADDRESS" ]; then
-	: ${GFSD_SERVICE_NAME:="gfsd-$LISTEN_ADDRESS"}
-else
-	: ${GFSD_SERVICE_NAME:="gfsd"}
-fi
 
 # NOTE: $CONFIG_PREFIX needs to be set before calling sysdep_defaults
 # sysdep_defaults must set: $RC_DIR
@@ -207,8 +206,6 @@ if [ X"$CONFIG_PREFIX" != X ]; then
 else
 	: ${GFARM_CONF_DIR:="$sysconfdir"}
 fi
-: ${UNCONFIG_SCRIPT:="$GFARM_CONF_DIR/unconfig-gfsd.sh"}
-: ${UNCONFIG_SCRIPT_IN:="$config_dir/unconfig-gfsd.sh.in"}
 if $PRIVATE_MODE; then
 	: ${GFARM_CONF:="$GFARM_CONF_DIR/gfsd.conf"}
 else
@@ -234,20 +231,23 @@ fi
 [ X"$ARCH" = X ] && ABORT 'cannot determine the architecture of this machine'
 
 : ${RC_GFSD_IN="$config_dir/gfsd.in"}
-: ${RC_GFSD:="$RC_DIR/$GFSD_SERVICE_NAME"}
+
+: ${LISTEN_ADDRESS:=""}
 
 if [ -n "$LISTEN_ADDRESS" ]; then
 	: ${SPOOL_DIRECTORY:="$CONFIG_PREFIX/var/gfarm-spool-$LISTEN_ADDRESS"}
 	: ${GFSD_EXTRA_OPTIONS:=" -l $LISTEN_ADDRESS"}
+	: ${RC_NAME:="gfsd-$LISTEN_ADDRESS"}
 	# $RC_VAR will be used as a shell variable name on *BSD ports & pkgsrc,
 	# thus, we only allow [0-9a-z_] as its value.
 	: ${RC_VAR:="`echo gfsd_$LISTEN_ADDRESS | sed 's/[^0-9a-z_]/_/g'`"}
 else
 	: ${SPOOL_DIRECTORY:="$CONFIG_PREFIX/var/gfarm-spool"}
 	: ${GFSD_EXTRA_OPTIONS:=""}
-	: ${RC_VAR:="$GFSD_SERVICE_NAME"}
+	: ${RC_NAME:="gfsd"}
+	: ${RC_VAR:="$RC_NAME"}
 fi
-: ${GFSD_PID_FILE:="$RUN_DIR/${GFSD_SERVICE_NAME}.pid"}
+: ${GFSD_PID_FILE:="$RUN_DIR/${RC_NAME}.pid"}
 
 # -t option; display parameters
 [ $PARAMS_DISPLAY_STYLE != none ] && display_${PARAMS_DISPLAY_STYLE}_params
@@ -263,29 +263,64 @@ config()
 	-e "s|@config_gfarm_globus_location@|${GLOBUS_LOCATION:-$globus_location}|g" \
 	-e "s|@config_gfarm_gfarm_config@|$GFARM_CONF|g" \
 	-e "s|@config_gfarm_gfsd_option@|-f $GFARM_CONF -h $GFSD_HOSTNAME -r $SPOOL_DIRECTORY$GFSD_EXTRA_OPTIONS|g" \
-	-e "s|@config_gfarm_gfsd_rc_name@|$GFSD_SERVICE_NAME|g" \
+	-e "s|@config_gfarm_gfsd_rc_name@|$RC_NAME|g" \
 	-e "s|@config_gfarm_gfsd_rc_var@|$RC_VAR|g" \
 	-e "s|@config_gfarm_gfsd_pid_file@|$GFSD_PID_FILE|g" \
 	-e "s|@config_gfarm_run_dir@|$RUN_DIR|g" \
 	${1+"$@"} | config_sysdep
 }
 
-unconfig()
+mkcnf()
 {
-	sed \
-	-e "s|@config_gfarm_prefix@|$prefix|g" \
-	-e "s|@config_gfarm_datadir@|$datadir|g" \
-	-e "s|@config_gfarm_spool_directory@|$SPOOL_DIRECTORY|g" \
-	-e "s|@config_gfarm_rc_gfsd@|$RC_GFSD|g" \
-	-e "s|@config_gfarm_gfsd_pid_file@|$GFSD_PID_FILE|g" \
-	-e "s|@config_gfarm_gfarm_config@|$GFARM_CONF|g" \
-	-e "s|@config_gfarm_gfarm_client_config@|$GFARM_CLIENT_CONF|g" \
-	-e "s|@config_gfarm_gfarm_conf_dir@|$GFARM_CONF_DIR|g" \
-	-e "s|@config_gfarm_config_prefix@|$CONFIG_PREFIX|g" \
-        -e "s|@config_gfarm_private_mode@|$PRIVATE_MODE|g" \
-	-e "s|@config_gfarm_usermap_file@|$USERMAP_FILE|g" \
-	-e "s|@config_gfarm_gfsd_hostname@|$GFSD_HOSTNAME|g" \
-	${1+"$@"}
+	# local out
+
+	out=$1
+	shift
+	if ${1+"$@"} >$out; then
+		echo created $out
+	else
+		ABORT "cannot create $out"
+	fi
+}
+
+mkscript()
+{
+	mkcnf ${1+"$@"}
+	chmod +x "$1" || ABORT "cannot chmod +x $1"
+}
+
+delete_file_or_directory()
+{
+	# local p
+
+	for p
+	do
+		[ -d "$p" ] && rmdir "$p" > /dev/null 2>&1
+		# [ -e "$p" ] isn't portable. not supported by Solaris /bin/sh
+		if ls -1d "$p" >/dev/null 2>&1; then
+			if $FORCE; then
+				rm -rf "$p"
+				echo removed "$p"
+			else
+				ABORT "$p already exist"
+			fi
+		fi
+	done
+}
+
+create_directory()
+{
+	# local d
+
+	for d
+	do
+		[ -d "$d" ] && continue
+		if mkdir -p "$d"; then
+			echo created "$d"
+		else
+			ABORT "mkdir -p $d, failed"
+		fi
+	done
 }
 
 #########################################################################
@@ -308,11 +343,7 @@ fi
 mkcnf_gfsd_sysdep
 
 # create run scripts
-create_run_script "$RC_GFSD"	config "$RC_GFSD_IN"
-$PRIVATE_MODE || service_reg gfsd
-
-mkcnf "$UNCONFIG_SCRIPT"	unconfig "$UNCONFIG_SCRIPT_IN"
-chmod +x "$UNCONFIG_SCRIPT" || ABORT "cannot chmod +x $UNCONFIG_SCRIPT"
+mkscript $RC_DIR/$RC_NAME	config "$RC_GFSD_IN"
 
 # update configuration file
 # spool_check_level (default value)
@@ -339,9 +370,9 @@ echo >&2 "gfhost -c -a $ARCH -p $GFSD_PORT -n $NCPU $GFSD_HOSTNAME: failed"
 
 if $START_SERVICE; then
 	if [ -f $GFSD_PID_FILE ]; then ctl=restart; else ctl=start; fi
-	service_add $GFSD_SERVICE_NAME &&
-		service_ctl $GFSD_SERVICE_NAME $ctl ||
-		ABORT "failed to $ctl $GFSD_SERVICE_NAME"
+	service_add $RC_NAME &&
+		service_ctl $RC_NAME $ctl ||
+		ABORT "failed to $ctl $RC_NAME"
 fi
 echo "$PROGNAME success"
 
@@ -355,7 +386,8 @@ echo "$prefix/bin/gfhost" -c -a $ARCH -p $GFSD_PORT -n $NCPU $GFSD_HOSTNAME
 echo
 echo After that, start gfsd by the following command as a root:
 echo
-service_ctl -n $GFSD_SERVICE_NAME start
-fi
+# XXX FIXME should use "forcestart" instead of "start" on NetBSD and FreeBSD.
+echo "$RC_DIR/$RC_NAME start"
 
+fi
 exit 0

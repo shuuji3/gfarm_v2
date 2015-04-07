@@ -28,10 +28,8 @@
 #include "gfm_client.h"
 #include "gfs_client.h"
 #include "lookup.h"
-#include "filesystem.h"
 #include "config.h"
 #include "gfarm_path.h"
-#include "context.h"
 
 char *program_name = "gfhost";
 
@@ -734,8 +732,6 @@ gfarm_paraccess_connect_request(void *closure)
 	struct gfarm_access *a = closure;
 	gfarm_error_t e;
 	struct gfs_client_connect_state *cs;
-	struct gfarm_filesystem *fs =
-	    gfarm_filesystem_get_by_connection(gfm_server);
 
 	e = gfs_client_get_load_result_multiplexed(a->protocol_state,
 	    &a->load);
@@ -745,7 +741,7 @@ gfarm_paraccess_connect_request(void *closure)
 	}
 	e = gfs_client_connect_request_multiplexed(a->pa->q,
 	    a->canonical_hostname, a->port, gfm_client_username(gfm_server),
-	    &a->peer_addr, fs, gfarm_paraccess_connect_finish, a, &cs);
+	    &a->peer_addr, gfarm_paraccess_connect_finish, a, &cs);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfarm_paraccess_callback(a->pa, a, &a->load, NULL, e);
 		return;
@@ -791,7 +787,7 @@ gfarm_paraccess_request(struct gfarm_paraccess *pa,
 	    gfarm_paraccess_connect_request :
 	    gfarm_paraccess_load_finish,
 	    a,
-	    &gls, 1);
+	    &gls);
 	if (e != GFARM_ERR_NO_ERROR) {
 		gfarm_paraccess_callback(pa, a, NULL, NULL, e);
 		return (e);
@@ -1048,7 +1044,7 @@ list_all(const char *architecture, const char *domainname,
 	struct gfarm_paraccess *pa)
 {
 	gfarm_error_t e, e_save = GFARM_ERR_NO_ERROR;
-	int i, nhosts, ndisplayed;
+	int i, nhosts;
 	struct gfarm_host_info *hosts;
 
 	if (architecture != NULL)
@@ -1062,24 +1058,14 @@ list_all(const char *architecture, const char *domainname,
 		    gfarm_error_string(e));
 		return (e);
 	}
-
-	ndisplayed = 0;
 	for (i = 0; i < nhosts; i++) {
 		if (domainname == NULL ||
 	 	    gfarm_host_is_in_domain(hosts[i].hostname, domainname)) {
 			e = (*request_op)(&hosts[i], pa);
 			if (e_save == GFARM_ERR_NO_ERROR)
 				e_save = e;
-			ndisplayed++;
 		}
 	}
-
-	if (nhosts == 0 || ndisplayed == 0) {
-		fprintf(stderr, "%s: %s\n",  program_name,
-		    gfarm_error_string(GFARM_ERRMSG_NO_FILESYSTEM_NODE));
-		return (GFARM_ERR_UNKNOWN_HOST);
-	}
-
 	gfarm_host_info_free_all(nhosts, hosts);
 	return (e_save);
 }
@@ -1259,7 +1245,6 @@ parse_opt_long(char *option, int option_char, char *argument_name)
 
 
 #define DEFAULT_CONCURRENCY 10 /* reflect this value to gfhost.1.docbook */
-const char *default_opt_path = ".";
 
 int
 main(int argc, char **argv)
@@ -1270,7 +1255,7 @@ main(int argc, char **argv)
 	char opt_operation = '\0'; /* default operation */
 	int opt_concurrency = DEFAULT_CONCURRENCY;
 	int opt_alter_aliases = 0;
-	const char *opt_path = default_opt_path;
+	const char *opt_path = ".";
 	char *realpath = NULL;
 	char *opt_architecture = NULL, *opt_domainname = NULL;
 	long opt_ncpu = 0;
@@ -1434,41 +1419,13 @@ main(int argc, char **argv)
 	e = gfarm_realpath_by_gfarm2fs(opt_path, &realpath);
 	if (e == GFARM_ERR_NO_ERROR)
 		opt_path = realpath;
-
-	if (!opt_use_metadb)
-		; /* nothing to do */
-	else if (opt_path == default_opt_path) {
-		char *user = NULL;
-
-		e = gfarm_get_global_username_by_host_for_connection_cache(
-		    gfarm_ctxp->metadb_server_name,
-		    gfarm_ctxp->metadb_server_port, &user);
-		if (e != GFARM_ERR_NO_ERROR) {
-			fprintf(stderr, "gfarm_get_global_username_by_host_"
-			    "for_connection_cache: %s", gfarm_error_string(e));
-			exit(1);
-		}
-		if ((e = gfm_client_connection_acquire(
-		    gfarm_ctxp->metadb_server_name,
-		    gfarm_ctxp->metadb_server_port, user, &gfm_server))
-		    != GFARM_ERR_NO_ERROR) {
-			fprintf(stderr, "metadata server `%s', port %d: %s\n",
-			    gfarm_ctxp->metadb_server_name,
-			    gfarm_ctxp->metadb_server_port,
-			    gfarm_error_string(e));
-			free(user);
-			exit(1);
-		}
-		free(user);
-	} else {
-		if ((e = gfm_client_connection_and_process_acquire_by_path(
-		    opt_path, &gfm_server)) != GFARM_ERR_NO_ERROR) {
-			fprintf(stderr, "%s: metadata server for \"%s\": %s\n",
-			    program_name, opt_path, gfarm_error_string(e));
-			exit(1);
-		}
+	if (opt_use_metadb &&
+	    (e = gfm_client_connection_and_process_acquire_by_path(opt_path,
+	    &gfm_server)) != GFARM_ERR_NO_ERROR) {
+		fprintf(stderr, "%s: metadata server for \"%s\": %s\n",
+		    program_name, opt_path, gfarm_error_string(e));
+		exit(1);
 	}
-
 	free(realpath);
 
 	switch (opt_operation) {

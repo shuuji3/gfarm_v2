@@ -141,8 +141,6 @@ static const char *errcode_string[GFARM_ERR_NUMBER] = {
 	"bad inode number",
 	"bad cookie",
 	"insufficient number of file replicas",
-	"invalid remote peer",
-	"RPC request ignored",
 };
 
 static const char *errmsg_string[GFARM_ERRMSG_END - GFARM_ERRMSG_BEGIN] = {
@@ -403,9 +401,9 @@ static struct gfarm_errno_error_map {
 	/*		GFARM_ERR_NO_SUCH_OBJECT */
 	/*		GFARM_ERR_CANT_OPEN */
 #ifdef EPROTO
-	{ EPROTO,	GFARM_ERR_UNEXPECTED_EOF },
+        { EPROTO,	GFARM_ERR_UNEXPECTED_EOF },
 #else
-	{ ECONNABORTED,	GFARM_ERR_UNEXPECTED_EOF },
+        { ECONNABORTED,	GFARM_ERR_UNEXPECTED_EOF },
 #endif
 	/*		GFARM_ERR_GFARM_URL_PREFIX_IS_MISSING */
 	{ EAGAIN,	GFARM_ERR_TOO_MANY_JOBS },
@@ -654,10 +652,6 @@ gfarm_error_string(gfarm_error_t error)
 	    "gfarm_error_string: unassigned error: %d", error);
 	return (errcode_string[GFARM_ERR_UNKNOWN]);
 }
-
-#ifdef __KERNEL__	/* HAVE_SYS_NERR :: not defined in kernel */
-#undef HAVE_SYS_NERR
-#endif /* __KERNEL__ */
 
 #if defined(HAVE_SYS_NERR)
 # define ERRNO_NUMBER sys_nerr

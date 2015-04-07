@@ -20,33 +20,33 @@ import java.net.URL;
 public class SeekableFileFactory {
 	
 	/**
-	 * URL u ã§ç¤ºã•ã‚Œã‚‹ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ç”¨ã„ã¦ SeekableFile ã‚’ç”Ÿæˆã™ã‚‹ã€‚
-	 * u ã®ãƒ—ãƒ­ãƒˆã‚³ãƒ«ãŒ file: ã§ã‚ã‚Œã° LocalSeekableFile ãŒã€http: ã§ã‚ã‚Œã° HttpSeekableFileã€€ãŒ
-	 * ç”Ÿæˆã•ã‚Œã‚‹ã€‚ãã‚Œä»¥å¤–ã®ãƒ—ãƒ­ãƒˆã‚³ãƒ«ã§ã¯ MalformedURLException ãŒç™ºç”Ÿã™ã‚‹
-	 * @param u SeekableFileã‚’ç¤ºã™ URL
-	 * @return u ã§ç¤ºã•ã‚ŒãŸãƒ•ã‚¡ã‚¤ãƒ«ã‹ã‚‰ç”Ÿæˆã•ã‚ŒãŸ SeekableFile
+	 * URL u ‚Å¦‚³‚ê‚éƒtƒ@ƒCƒ‹‚ğ—p‚¢‚Ä SeekableFile ‚ğ¶¬‚·‚éB
+	 * u ‚ÌƒvƒƒgƒRƒ‹‚ª file: ‚Å‚ ‚ê‚Î LocalSeekableFile ‚ªAhttp: ‚Å‚ ‚ê‚Î HttpSeekableFile@‚ª
+	 * ¶¬‚³‚ê‚éB‚»‚êˆÈŠO‚ÌƒvƒƒgƒRƒ‹‚Å‚Í MalformedURLException ‚ª”­¶‚·‚é
+	 * @param u SeekableFile‚ğ¦‚· URL
+	 * @return u ‚Å¦‚³‚ê‚½ƒtƒ@ƒCƒ‹‚©‚ç¶¬‚³‚ê‚½ SeekableFile
 	 * @throws IOException
-	 * @throws MalformedURLException u ã®ãƒ—ãƒ­ãƒˆã‚³ãƒ«ãŒfile:ã‚‚ã—ãã¯http:ä»¥å¤–ã§ã‚ã£ãŸå ´åˆã€‚
+	 * @throws MalformedURLException u ‚ÌƒvƒƒgƒRƒ‹‚ªfile:‚à‚µ‚­‚Íhttp:ˆÈŠO‚Å‚ ‚Á‚½ê‡B
 	 */
 	public static SeekableFile create(URL u) throws IOException {
 		SeekableFile file = null;
 		String p = u.getProtocol();
 		if(p.equalsIgnoreCase("file")){
-			// file: ãªã®ã§ LocalSeekableFile ã‚’ç”Ÿæˆ
+			// file: ‚È‚Ì‚Å LocalSeekableFile ‚ğ¶¬
 			File f = new File(u.getPath());
 			file = new LocalSeekableFile(f);
 		}else if(p.equalsIgnoreCase("http")){
-			// http: ãªã®ã§ HttpSeekableFile ã‚’ç”Ÿæˆ
+			// http: ‚È‚Ì‚Å HttpSeekableFile ‚ğ¶¬
 			file = new HttpSeekableFile(u);
 		}else{
-			// æœªçŸ¥ã®ãƒ—ãƒ­ãƒˆã‚³ãƒ«
+			// –¢’m‚ÌƒvƒƒgƒRƒ‹
 			throw new MalformedURLException("Unsupported Protocol" + p);
 		}
 		return file;
 	}
 	
 	public static SeekableFile create(File f) throws IOException {
-		// File ã§ã‚ã‚‰ã‚ã•ã‚Œã‚‹ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ç¤ºã™ SeekableFile ã‚’ç”Ÿæˆã™ã‚‹
+		// File ‚Å‚ ‚ç‚í‚³‚ê‚éƒtƒ@ƒCƒ‹‚ğ¦‚· SeekableFile ‚ğ¶¬‚·‚é
 		return new LocalSeekableFile(f);
 	}
 

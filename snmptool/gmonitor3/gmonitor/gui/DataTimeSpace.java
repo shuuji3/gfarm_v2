@@ -31,7 +31,7 @@ import java.util.TreeSet;
  * Window>Preferences>Java>Code Generation>Code and Comments
  */
 public class DataTimeSpace {
-	ArrayList files = new ArrayList(); // DataFile のリスト
+	ArrayList files = new ArrayList(); // DataFile �̃��X�g
 	TreeSet hostnames = new TreeSet();
 	TreeSet eventnames= new TreeSet();
 
@@ -63,7 +63,7 @@ public class DataTimeSpace {
 		}
 	}
 
-	// ファイル名の配列を与え、対象とする時空間を設定する	
+	// �t�@�C�����̔z���^���A�ΏۂƂ��鎞��Ԃ�ݒ肷��	
 	public DataTimeSpace(String[] list) throws IOException
 	{
 		largestGroupInterval = 1;
@@ -187,7 +187,7 @@ SimpleDateFormat dtf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 				// Nothing to do.
 			}
 		}
-		// 最後のファイルだけ特別。
+		// �Ō�̃t�@�C���������ʁB
 		DataFile f = (DataFile) bList.get(bList.size() - 1);
 		long b = f.getBeginDateTime();
 //System.out.println("  f: " + f.getUrl() + " b: " + b + " " + dtf.format(new Date(b)));
@@ -635,14 +635,14 @@ SimpleDateFormat dtf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 //	public ArrayList getMeasurementDataXXX(String host, String event, long begin, long term)
 //	throws IOException
 //	{
-//		// ファイルから計測データを読み込む
+//		// �t�@�C������v���f�[�^��ǂݍ���
 //		ArrayList a_list = extract_aList(host);
 //		ArrayList b_list = extract_bList(a_list, event);
 //		DataFile file = extract_file(b_list, begin);
 //		int file_idx = b_list.indexOf(file); 
 //		ArrayList result = new ArrayList();
 //		if(file == null){
-//			// 該当するファイルがなかったので、計測データがない
+//			// �Y������t�@�C�����Ȃ������̂ŁA�v���f�[�^���Ȃ�
 //System.out.println("No suitable file in DataTimeSpace, no measurement data.");
 //			return result;
 //		}
@@ -659,7 +659,7 @@ SimpleDateFormat dtf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 //			DataBlockGroup dbg = file.getDataBlockGroup(dbg_idx);
 //			ArrayList date_data_list = dbg.pickData(tbl, hidx, oidx);
 //			if(date_data_list.size() == 0){
-//				// 一切データが取れなかったので、ここでギブアップする。
+//				// ��؃f�[�^�����Ȃ������̂ŁA�����ŃM�u�A�b�v����B
 //				break;
 //			}
 //			
@@ -671,27 +671,27 @@ SimpleDateFormat dtf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 //				result.add(date);
 //				result.add(elm);
 //				if(date.getTime() >= (begin + term)){
-//					// 要求された時間範囲をすべて取ったので、ここで終了する。
+//					// �v�����ꂽ���Ԕ͈͂����ׂĎ�����̂ŁA�����ŏI������B
 //					file = null;
 //					break;
 //				}
 //			}
 //			if(date.getTime() < (begin + term)){
-//				// まだ要求された時間範囲をすべて取りきっていないので、続行を試みる。
-//				// まず、「次の」データブロックグループを選択してみる。
+//				// �܂��v�����ꂽ���Ԕ͈͂����ׂĎ�肫���Ă��Ȃ��̂ŁA���s�����݂�B
+//				// �܂��A�u���́v�f�[�^�u���b�N�O���[�v��I�����Ă݂�B
 //				dbg_idx++;
 //				if(dbg_idx >= file.getLength()){
-//					// 「次の」データブロックグループは、このファイルには存在しないので、「次の」ファイルを
-//					// 試行する。
+//					// �u���́v�f�[�^�u���b�N�O���[�v�́A���̃t�@�C���ɂ͑��݂��Ȃ��̂ŁA�u���́v�t�@�C����
+//					// ���s����B
 //					file_idx++;
 //					if(file_idx >= b_list.size()){
-//						// 「次の」ファイルは存在しないので、これ以上読めない
+//						// �u���́v�t�@�C���͑��݂��Ȃ��̂ŁA����ȏ�ǂ߂Ȃ�
 //						file = null;
 //						break;
-//						// ここで終了する。
+//						// �����ŏI������B
 //					}
 //					file = (DataFile) b_list.get(file_idx);
-//					// ファイルを切り替えたので、最初のデータブロックグループを読むべき
+//					// �t�@�C����؂�ւ����̂ŁA�ŏ��̃f�[�^�u���b�N�O���[�v��ǂނׂ�
 //					dbg_idx = 0;
 //				}
 //			}

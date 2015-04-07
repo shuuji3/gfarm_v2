@@ -26,7 +26,6 @@
 			<javac srcdir="${build.src}"
 				debug="${debug}"
 				destdir="${build.dest}"
-				encoding="UTF-8"
 			/>
 		</target>
 		

@@ -17,7 +17,7 @@ import java.io.IOException;
 /**
  * @author hkondo
  *
- * ãƒ­ã‚°ãƒ•ã‚¡ã‚¤ãƒ«ã®æ§‹é€ ã‚’èª­ã¿å–ã‚Šã€printable ãªãƒ†ã‚­ã‚¹ãƒˆå½¢å¼ã§ãƒ€ãƒ³ãƒ—ã™ã‚‹é–‹ç™ºç”¨ãƒ„ãƒ¼ãƒ«
+ * ƒƒOƒtƒ@ƒCƒ‹‚Ì\‘¢‚ð“Ç‚ÝŽæ‚èAprintable ‚ÈƒeƒLƒXƒgŒ`Ž®‚Åƒ_ƒ“ƒv‚·‚éŠJ”­—pƒc[ƒ‹
  */
 public class DumpLogFile {
 
@@ -33,9 +33,9 @@ public class DumpLogFile {
 	{
 		for(int i = 0; i < args.length; i++){
 			if(args[i].startsWith("-")){
-				// ã‚ªãƒ—ã‚·ãƒ§ãƒ³ã®å‡¦ç†
+				// ƒIƒvƒVƒ‡ƒ“‚Ìˆ—
 			}else{
-				// ãƒ•ã‚¡ã‚¤ãƒ«åã®å‡¦ç†
+				// ƒtƒ@ƒCƒ‹–¼‚Ìˆ—
 				filename = args[i];
 			}
 		}

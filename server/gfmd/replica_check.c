@@ -2,7 +2,6 @@
  * $Id$
  */
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
@@ -23,20 +22,16 @@
 #include "nanosec.h"
 #include "thrsubr.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
-#include "repattr.h"
 
-#include "fsngroup.h"
 #include "gfmd.h"
 #include "inode.h"
+#include "dead_file_copy.h"
 #include "dir.h"
-#include "file_replication.h"
 #include "host.h"
 #include "subr.h"
 #include "user.h"
 #include "back_channel.h"
-#include "gflog_reduced.h"
 
 /* for debug */
 /* #define DEBUG_REPLICA_CHECK or CPPFLAGS='-DDEBUG_REPLICA_CHECK' */
@@ -49,23 +44,54 @@
 #define RC_LOG_INFO gflog_info
 #endif
 
-#define SAME_WARNING_TRIGGER	10	/* check reduced mode */
-#define SAME_WARNING_THRESHOLD	30	/* more than this -> reduced mode */
-#define SAME_WARNING_DURATION	600	/* seconds to measure the limit */
-#define SAME_WARNING_INTERVAL	60	/* seconds: interval of reduced log */
+struct suppress_log {
+	char *type;
+	int level, count, suppressed, max;
+};
 
-static struct gflog_reduced_state hosts_down_state =
-	GFLOG_REDUCED_STATE_INITIALIZER(
-		SAME_WARNING_TRIGGER,
-		SAME_WARNING_THRESHOLD,
-		SAME_WARNING_DURATION,
-		SAME_WARNING_INTERVAL);
+static struct suppress_log log_hosts_down
+= { .type = "hosts are down", .level = LOG_INFO, .max = 20 };
+
+static int log_is_suppressed(struct suppress_log *log)
+{
+	if (log->count < log->max) {
+		log->count++;
+		return (0);
+	}
+	if (log->suppressed)
+		return (1);
+
+	log->suppressed = 1;
+	switch (log->level) {
+	case LOG_DEBUG:
+		gflog_debug(GFARM_MSG_1003615,
+		    "replica_check: suppress many `%s' debug messages",
+		    log->type);
+		break;
+	case LOG_INFO:
+		gflog_info(GFARM_MSG_1003616,
+		    "replica_check: suppress many `%s' info messages",
+		     log->type);
+		break;
+	default:
+		break;
+	}
+	return (1);
+}
+
+static void suppress_log_reset(struct suppress_log *log)
+{
+	log->count = log->suppressed = 0;
+}
+static void suppress_log_reset_all()
+{
+	suppress_log_reset(&log_hosts_down);
+}
 
 struct replication_info {
 	gfarm_ino_t inum;
 	gfarm_uint64_t gen;
 	int desired_number;
-	char *repattr;
 };
 
 static gfarm_error_t
@@ -73,7 +99,7 @@ replica_check_fix(struct replication_info *info)
 {
 	gfarm_error_t e;
 	struct inode *inode = inode_lookup(info->inum);
-	int n_srcs, n_existing, n_being_removed, n_success = 0;
+	int n_srcs, n_existing, n_being_removed;
 	struct host **srcs, **existing, **being_removed;
 	static const char diag[] = "replica_check_fix";
 
@@ -84,6 +110,8 @@ replica_check_fix(struct replication_info *info)
 		    (long long)info->inum, (long long)info->gen);
 		return (GFARM_ERR_NO_ERROR); /* ignore */
 	}
+	if (info->desired_number <= 0) /* disabled */
+		return (GFARM_ERR_NO_ERROR); /* OK */
 	if (inode_is_opened_for_writing(inode)) {
 		gflog_debug(GFARM_MSG_1003627,
 		    "replica_check: %lld:%lld:%s: "
@@ -96,7 +124,7 @@ replica_check_fix(struct replication_info *info)
 	e = inode_replica_hosts(
 	    inode, &n_existing, &existing, &n_being_removed, &being_removed);
 	if (e != GFARM_ERR_NO_ERROR) { /* no memory */
-		gflog_error(GFARM_MSG_UNFIXED,
+		gflog_error(GFARM_MSG_1003692,
 		    "replica_check: %lld:%lld:%s: replica_hosts: %s",
 		    (long long)info->inum, (long long)info->gen,
 		    user_name(inode_get_user(inode)), gfarm_error_string(e));
@@ -107,7 +135,7 @@ replica_check_fix(struct replication_info *info)
 		free(being_removed);
 		if (inode_get_size(inode) == 0)
 			return (GFARM_ERR_NO_ERROR); /* normally */
-		gflog_error(GFARM_MSG_1003624,
+		gflog_warning(GFARM_MSG_1003624,
 		    "replica_check: %lld:%lld:%s: lost all replicas",
 		    (long long)info->inum, (long long)info->gen,
 		    user_name(inode_get_user(inode)));
@@ -130,28 +158,20 @@ replica_check_fix(struct replication_info *info)
 		free(existing);
 		free(being_removed);
 		free(srcs);
-		gflog_reduced_warning(GFARM_MSG_1003629, &hosts_down_state,
-		    "replica_check: %lld:%lld:%s: hosts are down",
-		    (long long)info->inum, (long long)info->gen,
-		    user_name(inode_get_user(inode)));
+		if (!log_is_suppressed(&log_hosts_down))
+			gflog_info(GFARM_MSG_1003629,
+			    "replica_check: %lld:%lld:%s: hosts are down",
+			    (long long)info->inum, (long long)info->gen,
+			    user_name(inode_get_user(inode)));
 		return (GFARM_ERR_NO_ERROR); /* ignore */
 	}
 
-	if (info->repattr == NULL && info->desired_number <= 0) {/* disabled */
-		free(existing);
-		free(being_removed);
-		free(srcs);
-		return (GFARM_ERR_NO_ERROR); /* skip */
-	}
-
-	e = inode_schedule_replication(
-	    inode, 1, info->desired_number, info->repattr,
-	    n_srcs, srcs, &n_existing, existing,
-	    gfarm_replica_check_host_down_thresh,
-	    &n_being_removed, being_removed, diag, &n_success);
-
-	if (n_success > 0)
-		inode_replication_start(inode);
+	/* indent for diff */
+		e = inode_schedule_replication_from_all(
+		    inode, info->desired_number, n_srcs, srcs,
+		    &n_existing, existing,
+		    gfarm_replica_check_host_down_thresh,
+		    &n_being_removed, being_removed, diag);
 
 	free(existing);
 	free(being_removed);
@@ -159,22 +179,15 @@ replica_check_fix(struct replication_info *info)
 	return (e);
 }
 
-static void
-replica_check_desired_set(
-	struct inode *dir_ino, struct inode *file_ino,
-	struct replication_info *infop)
+static int
+replica_check_desired_number(struct inode *dir_ino, struct inode *file_ino)
 {
-	char *repattr;
 	int desired_number;
 
-	if (inode_get_replica_spec(file_ino, &repattr, &desired_number) ||
-	    inode_search_replica_spec(dir_ino, &repattr, &desired_number)) {
-		infop->desired_number = desired_number;
-		infop->repattr = repattr;
-	} else {
-		infop->desired_number = 0;
-		infop->repattr = NULL;
-	}
+	if (inode_has_desired_number(file_ino, &desired_number) ||
+	    inode_traverse_desired_replica_number(dir_ino, &desired_number))
+		return (desired_number);
+	return (0);
 }
 
 #define REPLICA_CHECK_DIRENTS_BUFCOUNT 512
@@ -204,8 +217,8 @@ replica_check_stack_push(struct inode *dir_ino, struct inode *file_ino)
 		= inode_get_number(file_ino);
 	replica_check_stack[replica_check_stack_index].gen
 		= inode_get_gen(file_ino);
-	replica_check_desired_set(dir_ino, file_ino,
-	    &(replica_check_stack[replica_check_stack_index]));
+	replica_check_stack[replica_check_stack_index].desired_number
+		= replica_check_desired_number(dir_ino, file_ino);
 	replica_check_stack_index++;
 }
 
@@ -298,14 +311,10 @@ replica_check_main_dir(gfarm_ino_t inum, gfarm_ino_t *countp)
 				    gfarm_error_string(e));
 			}
 			(*countp)++;
-			free(rep_info.repattr);
 		}
 	}
 	return (need_to_retry);
 }
-
-static gfarm_ino_t info_inum, info_table_size;
-static time_t info_time_start;
 
 static int
 replica_check_main()
@@ -315,23 +324,17 @@ replica_check_main()
 	int need_to_retry = 0;
 
 	replica_check_giant_lock();
-	info_table_size = table_size = inode_table_current_size();
-	info_time_start = time(NULL);
+	table_size = inode_table_current_size();
 	replica_check_giant_unlock();
 
 	RC_LOG_INFO(GFARM_MSG_1003632, "replica_check: start");
 	for (inum = root_inum;;) {
-		replica_check_giant_lock();
-		info_inum = inum;
-		replica_check_giant_unlock();
-
 		if (replica_check_main_dir(inum, &count))
 			need_to_retry = 1;
 		inum++; /* a next directory */
 		if (inum >= table_size) {
 			replica_check_giant_lock();
-			info_table_size = table_size
-				= inode_table_current_size();
+			table_size = inode_table_current_size();
 			replica_check_giant_unlock();
 			if (inum >= table_size)
 				break;
@@ -339,47 +342,7 @@ replica_check_main()
 	}
 	RC_LOG_INFO(GFARM_MSG_1003633,
 	    "replica_check: finished, files=%llu", (unsigned long long)count);
-
-	replica_check_giant_lock();
-	info_time_start = 0;
-	replica_check_giant_unlock();
-
 	return (need_to_retry);
-}
-
-void
-replica_check_info()
-{
-	gfarm_ino_t inum, table_size;
-	time_t time_start, elapse;
-	float progress;
-	long long estimate;
-
-	replica_check_giant_lock();
-	table_size = info_table_size;
-	inum = info_inum;
-	time_start = info_time_start;
-	replica_check_giant_unlock();
-
-	if (!gfarm_replica_check) {
-		RC_LOG_INFO(GFARM_MSG_UNFIXED, "replica_check is disabled");
-		return;
-	}
-	if (time_start == 0 || table_size == 0) {
-		RC_LOG_INFO(GFARM_MSG_UNFIXED, "replica_check: standby");
-		return;
-	}
-
-	elapse = time(NULL) - time_start;
-	progress = (float)inum / (float)table_size;
-	/* elapse / estimate_all = progress */
-	estimate = (long long)((float)elapse / progress - (float)elapse);
-
-	RC_LOG_INFO(GFARM_MSG_UNFIXED,
-	    "replica_check: progress=%lld/%lld (%.2f%%),"
-	    " elapse:estimate=%lld:%lld sec.",
-	    (long long)inum, (long long)table_size, progress * 100,
-	    (long long)elapse, estimate);
 }
 
 #define REPLICA_CHECK_DIAG "replica_check"
@@ -641,10 +604,14 @@ replica_check_signal_rep_result_failed()
 	replica_check_signal_general(diag, 0);
 }
 
+/* workaround for #406 - obsolete replicas remain existing */
+#define DFC_SCAN_INTERVAL 21600 /* 6 hours */
+
 static void *
 replica_check_thread(void *arg)
 {
 	int wait_time;
+	time_t dfc_scan_time;
 
 	if (!replica_check_stack_init())
 		return (NULL);
@@ -662,13 +629,29 @@ replica_check_thread(void *arg)
 	wait_time = gfarm_metadb_heartbeat_interval;
 	replica_check_targets_add(wait_time);
 
+	dfc_scan_time = time(NULL) + DFC_SCAN_INTERVAL;
+	replica_check_targets_add(DFC_SCAN_INTERVAL);
+
 	for (;;) {
 		time_t t = time(NULL) + gfarm_replica_check_minimum_interval;
 
 		replica_check_wait();
+		suppress_log_reset_all();
 
 		if (replica_check_main()) /* error occured, retry */
 			replica_check_targets_add(wait_time);
+
+		if (time(NULL) >= dfc_scan_time) {
+			replica_check_giant_lock();
+			dead_file_copy_scan_deferred_all();
+			replica_check_giant_unlock();
+
+			dfc_scan_time = time(NULL) + DFC_SCAN_INTERVAL;
+			replica_check_targets_add(DFC_SCAN_INTERVAL);
+			RC_LOG_DEBUG(GFARM_MSG_1003641,
+			    "replica_check: dead_file_copy_scan_deferred_all,"
+			    " next=%ld", (long)dfc_scan_time);
+		}
 
 		t = t - time(NULL);
 		if (t > 0)

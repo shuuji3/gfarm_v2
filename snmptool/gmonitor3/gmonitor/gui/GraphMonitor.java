@@ -35,93 +35,93 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 	private boolean styleFill = true;
 
 	/**
-	 * ã‚°ãƒ©ãƒ•æ ¼å­ã®æç”»è‰²
+	 * ƒOƒ‰ƒtŠiq‚Ì•`‰æF
 	 */
 	private Color gridColor = Color.GRAY;
 
 	/**
-	 * ã‚°ãƒ©ãƒ•ã®èƒŒæ™¯è‰²
+	 * ƒOƒ‰ƒt‚Ì”wŒiF
 	 */
 	private Color backColor = Color.WHITE;
 
 	/**
-	 * ã‚°ãƒ©ãƒ•ã®ãƒ©ãƒ™ãƒ«ã®è‰²
+	 * ƒOƒ‰ƒt‚Ìƒ‰ƒxƒ‹‚ÌF
 	 */
 	private Color labelColor = Color.BLACK;
 
 	/**
-	 * ã‚°ãƒ©ãƒ•ã®ã‚¿ã‚¤ãƒˆãƒ«
+	 * ƒOƒ‰ƒt‚Ìƒ^ƒCƒgƒ‹
 	 */
 	private String title = "";
 		
 	/**
-	 * Y è»¸ã®æœ€å¤§å€¤(ã‚°ãƒ©ãƒ•ç¸¦è»¸ã®å€¤åŸŸã®æœ€å¤§å€¤)
+	 * Y ²‚ÌÅ‘å’l(ƒOƒ‰ƒtc²‚Ì’lˆæ‚ÌÅ‘å’l)
 	 */
 	private long maxValue = Long.MAX_VALUE;
 
 	/**
-	 * X è»¸æ–¹å‘ã®åˆ»ã¿å¹…(ãƒ”ã‚¯ã‚»ãƒ«å˜ä½)
+	 * X ²•ûŒü‚Ì‚İ•(ƒsƒNƒZƒ‹’PˆÊ)
 	 */
 	private int unitX = 2;
 
 	/**
-	 * Y è»¸æ–¹å‘ã®åˆ»ã¿å¹…(ãƒ”ã‚¯ã‚»ãƒ«å˜ä½)
+	 * Y ²•ûŒü‚Ì‚İ•(ƒsƒNƒZƒ‹’PˆÊ)
 	 */
 	private int unitY = 2;
 
 	/**
-	 * X è»¸æ–¹å‘ã®å˜ä½ãƒ©ãƒ™ãƒ«
+	 * X ²•ûŒü‚Ì’PˆÊƒ‰ƒxƒ‹
 	 */
 	private String[] unitLabelX;
 	
 	/**
-	 * Y è»¸æ–¹å‘ã®å˜ä½ãƒ©ãƒ™ãƒ«
+	 * Y ²•ûŒü‚Ì’PˆÊƒ‰ƒxƒ‹
 	 */
 	private String[] unitLabelY;
 
 	/**
-	 * ã‚°ãƒªãƒƒãƒ‰ã®ç¸¦ç·šã®æ¨ªæ–¹å‘ã®ã‚ªãƒ•ã‚»ãƒƒãƒˆ(ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«ç”¨)
+	 * ƒOƒŠƒbƒh‚Ìcü‚Ì‰¡•ûŒü‚ÌƒIƒtƒZƒbƒg(ƒXƒNƒ[ƒ‹—p)
 	 */
 	private int offsetX;
 
 	/**
-	 * X è»¸ã®ãƒ©ãƒ™ãƒ«
+	 * X ²‚Ìƒ‰ƒxƒ‹
 	 */
 	private String axisLabelX = "";
 
 	/**
-	 * Y è»¸ã®ãƒ©ãƒ™ãƒ«
+	 * Y ²‚Ìƒ‰ƒxƒ‹
 	 */
 	private String axisLabelY = "";
 
 	/**
-	 * Y è»¸ã®å€¤ã®å˜ä½(ãƒ—ãƒ¬ãƒ•ã‚£ã‚¯ã‚¹ã‚‚å«ã‚€)
+	 * Y ²‚Ì’l‚Ì’PˆÊ(ƒvƒŒƒtƒBƒNƒX‚àŠÜ‚Ş)
 	 */
 	private String valueUnit = "";
 
 	/**
-	 * æç”»ãƒ‡ãƒ¼ã‚¿ã®ç³»åˆ—(å†…éƒ¨ã«ã¯ ViewData å‹ã®ã¿ã‚’è¨±å®¹ã™ã‚‹ã“ã¨)
+	 * •`‰æƒf[ƒ^‚ÌŒn—ñ(“à•”‚É‚Í ViewData Œ^‚Ì‚İ‚ğ‹–—e‚·‚é‚±‚Æ)
 	 */
 	private ArrayList viewdata = new ArrayList();
 
 	/**
-	 * ã“ã®ã‚°ãƒ©ãƒ•è¡¨ç¤ºã‚³ãƒ³ãƒãƒ¼ãƒãƒ³ãƒˆã«ã¤ã„ã¦ã€è¨ˆæ¸¬ãƒ‡ãƒ¼ã‚¿ã‚’ä¿æŒã—ã¦ã„ã‚‹ã€Œãƒ‡ãƒ¼ã‚¿ãƒ¢ãƒ‡ãƒ«ã€ã‚’å‚ç…§ã™ã‚‹
+	 * ‚±‚ÌƒOƒ‰ƒt•\¦ƒRƒ“ƒ|[ƒlƒ“ƒg‚É‚Â‚¢‚ÄAŒv‘ªƒf[ƒ^‚ğ•Û‚µ‚Ä‚¢‚éuƒf[ƒ^ƒ‚ƒfƒ‹v‚ğQÆ‚·‚é
 	 */
 	private GraphMonitorModel model;
 
 	/**
-	 * Y è»¸ãƒ©ãƒ™ãƒ«ã®æœ€å¤§å¹…(ãƒ”ã‚¯ã‚»ãƒ«å˜ä½)
+	 * Y ²ƒ‰ƒxƒ‹‚ÌÅ‘å•(ƒsƒNƒZƒ‹’PˆÊ)
 	 */
 	private int y_label_width_max;
 	private int x_label_width_max;
 	
 	/**
-	 * ã‚°ãƒ©ãƒ•è¡¨ç¤ºéƒ¨åˆ†ã®å¹…(ãƒ”ã‚¯ã‚»ãƒ«å˜ä½)
+	 * ƒOƒ‰ƒt•\¦•”•ª‚Ì•(ƒsƒNƒZƒ‹’PˆÊ)
 	 */
 	private int grid_width;
 	
 	/**
-	 * ã‚°ãƒ©ãƒ•è¡¨ç¤ºéƒ¨åˆ†ã®é«˜ã•(ãƒ”ã‚¯ã‚»ãƒ«å˜ä½)
+	 * ƒOƒ‰ƒt•\¦•”•ª‚Ì‚‚³(ƒsƒNƒZƒ‹’PˆÊ)
 	 */
 	private int grid_height;
 
@@ -133,26 +133,26 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 	}
 
 	/**
-	 * å†æç”»
+	 * Ä•`‰æ
 	 * @see java.awt.Component#paint(java.awt.Graphics)
 	 */
 	public void paint(Graphics g) {
 		Rectangle r = getBounds();
 		g.clearRect(0, 0, r.width, r.height);
 		if(model == null){
-			// ãƒ‡ãƒ¼ã‚¿ãƒ¢ãƒ‡ãƒ«ãŒè¨­å®šã•ã‚Œã¦ã„ãªã„ã®ã§ã€ãã®æ—¨ã‚’æç”»ã™ã‚‹
+			// ƒf[ƒ^ƒ‚ƒfƒ‹‚ªİ’è‚³‚ê‚Ä‚¢‚È‚¢‚Ì‚ÅA‚»‚Ì|‚ğ•`‰æ‚·‚é
 			draw_nodata(g);
 			return;
 		}
 		synchronized(model){
 			recalc();
-			// ãƒ‡ã‚³ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã‚’ç”Ÿæˆæ›´æ–°ã™ã‚‹
+			// ƒfƒRƒŒ[ƒVƒ‡ƒ“‚ğ¶¬XV‚·‚é
 			createDecoration();
-			// ãƒ‡ã‚³ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã‚‚å«ã‚ã¦åº§æ¨™ã‚’è¨ˆç®—ã—ãªãŠã™ã€‚
+			// ƒfƒRƒŒ[ƒVƒ‡ƒ“‚àŠÜ‚ß‚ÄÀ•W‚ğŒvZ‚µ‚È‚¨‚·B
 			recalc();
-			// ã‚°ãƒ©ãƒ•æœ¬ä½“ã®æç”»
+			// ƒOƒ‰ƒt–{‘Ì‚Ì•`‰æ
 			draw_graph(g);
-			// ãƒ‡ã‚³ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³(ã‚°ãƒ©ãƒ•æ ¼å­, å„ç¨®ãƒ©ãƒ™ãƒ«, ã‚°ãƒ©ãƒ•ã®ã‚¿ã‚¤ãƒˆãƒ«)ã®æç”»
+			// ƒfƒRƒŒ[ƒVƒ‡ƒ“(ƒOƒ‰ƒtŠiq, Šeíƒ‰ƒxƒ‹, ƒOƒ‰ƒt‚Ìƒ^ƒCƒgƒ‹)‚Ì•`‰æ
 			draw_decoration(g);
 //System.out.println("Model.begin: " + dateFormat.format(new Date(model.getBegin())));
 //System.out.println("Model.term : " + model.getTerm());
@@ -160,8 +160,8 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 	}
 
 	/**
-	 * ã‚°ãƒ©ãƒ•æœ¬ä½“ã‚’æç”»ã™ã‚‹
-	 * @param g å†æç”»ã«ç”¨ã„ã‚‹ Graphics
+	 * ƒOƒ‰ƒt–{‘Ì‚ğ•`‰æ‚·‚é
+	 * @param g Ä•`‰æ‚É—p‚¢‚é Graphics
 	 */
 	private void draw_graph(Graphics g) {
 		ArrayList l = viewdata;
@@ -183,7 +183,7 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 			g = org_g.create();
 			vd = (ViewData)l.get(i);
 			if(vd == null || vd.isValid() != true){
-				// ç³»åˆ—iã¯ç„¡åŠ¹ãªæç”»ãƒ‡ãƒ¼ã‚¿ãªã®ã§ã€æç”»ã—ãªã„ã§ã‚¹ã‚­ãƒƒãƒ—
+				// Œn—ñi‚Í–³Œø‚È•`‰æƒf[ƒ^‚È‚Ì‚ÅA•`‰æ‚µ‚È‚¢‚ÅƒXƒLƒbƒv
 				//break;
 				continue;
 			}
@@ -200,8 +200,8 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 //System.out.println("vde len:" + vde.length);
 				for(int j = 0; j < vde.length; j++){
 					if(vde[j].isValid() != true){
-						// ç„¡åŠ¹ãªãƒã‚¤ãƒ³ãƒˆãªã®ã§æç”»ã—ãªã„
-						// ç›´å‰ãƒã‚¤ãƒ³ãƒˆã‚‚ç„¡åŠ¹ã«ã—ã¦ãŠã
+						// –³Œø‚Èƒ|ƒCƒ“ƒg‚È‚Ì‚Å•`‰æ‚µ‚È‚¢
+						// ’¼‘Oƒ|ƒCƒ“ƒg‚à–³Œø‚É‚µ‚Ä‚¨‚­
 						previous_point_valid = false;
 						//break;
 						continue;
@@ -209,10 +209,10 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 					int x = vde[j].getPos() + grid_x_origin;
 					int h = vde[j].getHeight();
 					if(vd.isFill() == true){
-						// æ£’ã®å¡—ã‚Šã¤ã¶ã—
+						// –_‚Ì“h‚è‚Â‚Ô‚µ
 						int lefthalf = 0;
 						if(previous_point_valid == true){
-							lefthalf = (x - previous_point_x) / 2; // ä¸­å€¤
+							lefthalf = (x - previous_point_x) / 2; // ’†’l
 						}else{
 							lefthalf = 0;
 						}
@@ -220,7 +220,7 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 						if(nextIdx >= vde.length){
 							nextIdx = j;
 						}
-						int righthalf= (int) Math.ceil((vde[nextIdx].getPos() + grid_x_origin - x) / 2.0); // ä¸­å€¤
+						int righthalf= (int) Math.ceil((vde[nextIdx].getPos() + grid_x_origin - x) / 2.0); // ’†’l
 						int w = lefthalf + righthalf;
 						g.setColor(fillColor);
 						g.fillRect(x - lefthalf, y - h, w, h);
@@ -228,12 +228,12 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 					if(vd.isJoin() == true){
 						// line
 						if(previous_point_valid == true){
-							// é€£çµã™ã‚‹
+							// ˜AŒ‹‚·‚é
 							g.setColor(joinColor);
 							g.drawLine(previous_point_x, previous_point_y, x, y - h);
 							g.drawLine(previous_point_x, previous_point_y-1, x, y - h-1); // bold
 						}else{
-							// é€£çµã—ãªã„
+							// ˜AŒ‹‚µ‚È‚¢
 						}
 					}
 					previous_point_x = x;
@@ -242,7 +242,7 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 				}
 
 				if(vd.isPlot() == true){
-					// é ‚ç‚¹ã®æç”»ã‚’è¡Œã†
+					// ’¸“_‚Ì•`‰æ‚ğs‚¤
 					int r = vd.getPlotRadius();
 					int r2 = r*2;
 					Color vdColor = vd.getPlotColor();
@@ -268,7 +268,7 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 				
 				if(vd.isLevel() == true){
 				//if(true){
-					// æœ€çµ‚è¦ç´ (æœ€æ–°è¦ç´ )ã®å€¤ã‚’æ˜ç¤ºã™ã‚‹ãŸã‚ã®ãƒãƒ¼ã‚’æç”»ã™ã‚‹
+					// ÅI—v‘f(ÅV—v‘f)‚Ì’l‚ğ–¾¦‚·‚é‚½‚ß‚Ìƒo[‚ğ•`‰æ‚·‚é
 					if(vde.length == 0){
 						break;
 					}
@@ -286,8 +286,8 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 	}
 
 	/**
-	 * ãƒ‡ãƒ¼ã‚¿ãƒ¢ãƒ‡ãƒ«ãŒè¨­å®šã•ã‚Œã¦ã„ãªã„ã“ã¨ã‚’æç”»ã™ã‚‹
-	 * @param g å†æç”»ã«ç”¨ã„ã‚‹ Graphics
+	 * ƒf[ƒ^ƒ‚ƒfƒ‹‚ªİ’è‚³‚ê‚Ä‚¢‚È‚¢‚±‚Æ‚ğ•`‰æ‚·‚é
+	 * @param g Ä•`‰æ‚É—p‚¢‚é Graphics
 	 */
 	private void draw_nodata(Graphics g) {
 		FontMetrics fm = g.getFontMetrics();
@@ -296,7 +296,7 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 	}
 
 	/**
-	 * ã‚³ãƒ³ãƒãƒ¼ãƒãƒ³ãƒˆãŒresizeã•ã‚ŒãŸã¨ãç­‰ã«å‘¼ã°ã‚Œã€å„ç¨®åº§æ¨™ã‚’å†è¨ˆç®—ã™ã‚‹
+	 * ƒRƒ“ƒ|[ƒlƒ“ƒg‚ªresize‚³‚ê‚½‚Æ‚«“™‚ÉŒÄ‚Î‚êAŠeíÀ•W‚ğÄŒvZ‚·‚é
 	 */
 	private void recalc(){
 //		y_label_width_max = 0;
@@ -306,7 +306,7 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 //		FontMetrics fm = getFontMetrics(f);
 //		int fh = fm.getHeight();
 //
-//		// Yè»¸ãƒ©ãƒ™ãƒ«ç¾¤ã®æœ€å¤§å¹…ã‚’æ±‚ã‚ã‚‹
+//		// Y²ƒ‰ƒxƒ‹ŒQ‚ÌÅ‘å•‚ğ‹‚ß‚é
 //		String[] l = getUnitLabelY();
 //		if (l != null) {
 //			for (int i = 0; i < l.length; i++) {
@@ -318,14 +318,14 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 //			}
 //		}
 //
-//		// ãƒ©ãƒ™ãƒ«ã®å¹…ãŒæ±ºã¾ã£ãŸã®ã§ã€ã‚°ãƒ©ãƒ•æç”»ã‚¨ãƒªã‚¢ã®ã‚µã‚¤ã‚ºã‚’æ±ºå®šã§ãã‚‹
+//		// ƒ‰ƒxƒ‹‚Ì•‚ªŒˆ‚Ü‚Á‚½‚Ì‚ÅAƒOƒ‰ƒt•`‰æƒGƒŠƒA‚ÌƒTƒCƒY‚ğŒˆ’è‚Å‚«‚é
 //		grid_width = rect.width - y_label_width_max - fh - fh;
 //		grid_height = rect.height - fh - fh - fh - fh;
 	}
 
 	/**
-	 * ãƒ‡ã‚³ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã®æç”»
-	 * @param g æç”»ã«ç”¨ã„ã‚‹ Graphics
+	 * ƒfƒRƒŒ[ƒVƒ‡ƒ“‚Ì•`‰æ
+	 * @param g •`‰æ‚É—p‚¢‚é Graphics
 	 */
 	private void draw_decoration(Graphics g) {
 		FontMetrics fm = getFontMetrics(getFont());
@@ -419,7 +419,7 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 				if(lbl == null){
 					lbl = "";
 				}
-				String[] row = lbl.split("Â¥n", 2);
+				String[] row = lbl.split("\n", 2);
 				for(int j = 0; j < row.length; j++){
 					Rectangle2D fr2 = fm.getStringBounds(row[j], g);
 					Rectangle fr = fr2.getBounds();
@@ -589,10 +589,10 @@ public class GraphMonitor extends JPanel implements ComponentListener {
 			return;
 		}
 		synchronized(model){
-			recalc();				// ãƒªã‚µã‚¤ã‚ºã•ã‚ŒãŸã®ã§ã¾ãšåº§æ¨™ã‚’æ›´æ–°ã™ã‚‹ã€‚
-			createDecoration();     // ãƒ‡ã‚³ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã‚’æ›´æ–°ã™ã‚‹ã€‚
-			recalc();               // ãƒ‡ã‚³ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã‚‚å«ã‚ã¦åº§æ¨™ã‚’è¨ˆç®—ã—ãªãŠã™ã€‚
-			createViewData(); 		// æç”»ãƒ‡ãƒ¼ã‚¿ã‚’æ›´æ–°ã™ã‚‹ã€‚
+			recalc();				// ƒŠƒTƒCƒY‚³‚ê‚½‚Ì‚Å‚Ü‚¸À•W‚ğXV‚·‚éB
+			createDecoration();     // ƒfƒRƒŒ[ƒVƒ‡ƒ“‚ğXV‚·‚éB
+			recalc();               // ƒfƒRƒŒ[ƒVƒ‡ƒ“‚àŠÜ‚ß‚ÄÀ•W‚ğŒvZ‚µ‚È‚¨‚·B
+			createViewData(); 		// •`‰æƒf[ƒ^‚ğXV‚·‚éB
 		}
 	}
 
@@ -656,14 +656,14 @@ private void createDecoration()
 	if(y_div <= 0){
 		y_div = 1;
 	}
-	grid_height = (tmp_height / y_div) * y_div; // y_div ã®å€æ•°ã«ä¸¸ã‚ã‚‹ 
+	grid_height = (tmp_height / y_div) * y_div; // y_div ‚Ì”{”‚ÉŠÛ‚ß‚é 
 	//String[] ylabels = createYLabels(y_div, 0, model.getTopValue() / model.getPrefixFactor());
 	String[] ylabels = createYLabels(y_div, 0, model.getTopValue(), model.getPrefixFactor());
 	setMaxValue(Long.parseLong(ylabels[ylabels.length-1]) * model.getPrefixFactor());
 	
-	setUnitLabelY(ylabels);  // Y è»¸æ–¹å‘ã®ãƒ©ãƒ™ãƒ«é…åˆ—ã‚’è¨­å®šã™ã‚‹
+	setUnitLabelY(ylabels);  // Y ²•ûŒü‚Ìƒ‰ƒxƒ‹”z—ñ‚ğİ’è‚·‚é
 	String[] l = getUnitLabelY();
-	// Yè»¸ãƒ©ãƒ™ãƒ«ç¾¤ã®æœ€å¤§å¹…ã‚’æ±‚ã‚ã‚‹
+	// Y²ƒ‰ƒxƒ‹ŒQ‚ÌÅ‘å•‚ğ‹‚ß‚é
 /*
 	if (l != null) {
 		for (int i = 0; i < l.length; i++) {
@@ -683,7 +683,7 @@ private void createDecoration()
 	//int[] fw = fm.getWidths();
 	//x_label_width_max = 0;
 	//l = getUnitLabelX();
-	// Xè»¸ãƒ©ãƒ™ãƒ«ç¾¤ã®æœ€å¤§å¹…ã‚’æ±‚ã‚ã‚‹
+	// X²ƒ‰ƒxƒ‹ŒQ‚ÌÅ‘å•‚ğ‹‚ß‚é
 /*
 	if (l != null) {
 		for (int i = 0; i < l.length; i++) {
@@ -701,44 +701,44 @@ private void createDecoration()
 	
 //System.out.println("x_label_width_max " + x_label_width_max);
 	
-	// ãƒ©ãƒ™ãƒ«ã®å¹…ãŒæ±ºã¾ã£ãŸã®ã§ã€ã‚°ãƒ©ãƒ•æç”»ã‚¨ãƒªã‚¢ã®ã‚µã‚¤ã‚ºã‚’æ±ºå®šã§ãã‚‹
+	// ƒ‰ƒxƒ‹‚Ì•‚ªŒˆ‚Ü‚Á‚½‚Ì‚ÅAƒOƒ‰ƒt•`‰æƒGƒŠƒA‚ÌƒTƒCƒY‚ğŒˆ’è‚Å‚«‚é
 	int tmp_width = rect.width - y_label_width_max - fh - x_label_width_max / 2;
-	// å„è»¸ã®åˆ†å‰²æ•°ã‚’è¨ˆç®—
+	// Še²‚Ì•ªŠ„”‚ğŒvZ
 	int x_div = calc_division(X_DIVISION, tmp_width, x_label_width_max + 10); // 10 is adhoc.
-	grid_width = (tmp_width / x_div) * x_div; // x_div ã®å€æ•°ã«ä¸¸ã‚ã‚‹
+	grid_width = (tmp_width / x_div) * x_div; // x_div ‚Ì”{”‚ÉŠÛ‚ß‚é
 	
 //System.out.println("grid_width " + grid_width + ", x_label_width_max " + x_label_width_max + ", x_div " + x_div);
 	
-//	grid_width = 0; // x_div ã®å€æ•°ã«æ±ºå®š;
+//	grid_width = 0; // x_div ‚Ì”{”‚ÉŒˆ’è;
 
-	// å„è»¸åˆ†å‰²æ™‚ã®ãƒ”ã‚¯ã‚»ãƒ«å¹…ã‚’è¨ˆç®—
+	// Še²•ªŠ„‚ÌƒsƒNƒZƒ‹•‚ğŒvZ
 	int x_unit = getGrid_width() / x_div;
 	int y_unit = getGrid_height()/ y_div;
-	setUnitX(x_unit);        // X è»¸æ–¹å‘åˆ»ã¿å¹…ã‚’è¨­å®šã™ã‚‹
-	setUnitY(y_unit);        // Y è»¸æ–¹å‘åˆ»ã¿å¹…ã‚’è¨­å®šã™ã‚‹
+	setUnitX(x_unit);        // X ²•ûŒü‚İ•‚ğİ’è‚·‚é
+	setUnitY(y_unit);        // Y ²•ûŒü‚İ•‚ğİ’è‚·‚é
 
-	// å„è»¸ã®å˜ä½ãƒ©ãƒ™ãƒ«ã‚’ç”Ÿæˆ
+	// Še²‚Ì’PˆÊƒ‰ƒxƒ‹‚ğ¶¬
 	String[] xlabels = createXLabels(x_div, model.getBegin(), model.getTerm());
-	setUnitLabelX(xlabels);  // X è»¸æ–¹å‘ã®ãƒ©ãƒ™ãƒ«é…åˆ—ã‚’è¨­å®šã™ã‚‹
+	setUnitLabelX(xlabels);  // X ²•ûŒü‚Ìƒ‰ƒxƒ‹”z—ñ‚ğİ’è‚·‚é
 
 }
 //private void createDecoration()
 //{
-//	// å„è»¸ã®åˆ†å‰²æ•°ã‚’è¨ˆç®—
+//	// Še²‚Ì•ªŠ„”‚ğŒvZ
 //	int x_div = calc_division(X_DIVISION, getGrid_width(), 64); // 64 is adhoc.
 //	int y_div = calc_division(Y_DIVISION, getGrid_height(), 16);// 16 is adhoc.
 //
-//	// å„è»¸åˆ†å‰²æ™‚ã®ãƒ”ã‚¯ã‚»ãƒ«å¹…ã‚’è¨ˆç®—
+//	// Še²•ªŠ„‚ÌƒsƒNƒZƒ‹•‚ğŒvZ
 //	int x_unit = getGrid_width() / x_div;
 //	int y_unit = getGrid_height()/ y_div;
-//	setUnitX(x_unit);        // X è»¸æ–¹å‘åˆ»ã¿å¹…ã‚’è¨­å®šã™ã‚‹
-//	setUnitY(y_unit);        // Y è»¸æ–¹å‘åˆ»ã¿å¹…ã‚’è¨­å®šã™ã‚‹
+//	setUnitX(x_unit);        // X ²•ûŒü‚İ•‚ğİ’è‚·‚é
+//	setUnitY(y_unit);        // Y ²•ûŒü‚İ•‚ğİ’è‚·‚é
 //
-//	// å„è»¸ã®å˜ä½ãƒ©ãƒ™ãƒ«ã‚’ç”Ÿæˆ
+//	// Še²‚Ì’PˆÊƒ‰ƒxƒ‹‚ğ¶¬
 //	String[] xlabels = createXLabels(x_div, model.getBegin(), model.getTerm());
 //	String[] ylabels = createYLabels(y_div, 0, model.getTopValue() / model.getPrefixFactor());
-//	setUnitLabelX(xlabels);  // X è»¸æ–¹å‘ã®ãƒ©ãƒ™ãƒ«é…åˆ—ã‚’è¨­å®šã™ã‚‹
-//	setUnitLabelY(ylabels);  // Y è»¸æ–¹å‘ã®ãƒ©ãƒ™ãƒ«é…åˆ—ã‚’è¨­å®šã™ã‚‹
+//	setUnitLabelX(xlabels);  // X ²•ûŒü‚Ìƒ‰ƒxƒ‹”z—ñ‚ğİ’è‚·‚é
+//	setUnitLabelY(ylabels);  // Y ²•ûŒü‚Ìƒ‰ƒxƒ‹”z—ñ‚ğİ’è‚·‚é
 //}
 
 	public void setStylePlot(boolean f)
@@ -755,11 +755,11 @@ private void createDecoration()
 	}
 
 	/**
-	 * ç¾åœ¨ã®è«¸ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã«å¾“ã£ã¦æç”»ãƒ‡ãƒ¼ã‚¿ã‚’æ–°ãŸã«ä½œã‚Šç›´ã™
+	 * Œ»İ‚Ì”ƒpƒ‰ƒ[ƒ^‚É]‚Á‚Ä•`‰æƒf[ƒ^‚ğV‚½‚Éì‚è’¼‚·
 	 */
 	private void createViewData() {
 		if(model == null){
-			// é©åˆ‡ãªãƒ¢ãƒ‡ãƒ«ãŒè¨­å®šã•ã‚Œã¦ã„ãªã„ã®ã§æç”»ãƒ‡ãƒ¼ã‚¿ã‚’æ›´æ–°ã§ããªã„
+			// “KØ‚Èƒ‚ƒfƒ‹‚ªİ’è‚³‚ê‚Ä‚¢‚È‚¢‚Ì‚Å•`‰æƒf[ƒ^‚ğXV‚Å‚«‚È‚¢
 			return;
 		}
 		synchronized(model){
@@ -785,14 +785,14 @@ private void createDecoration()
 					newView.add(vd);
 				}
 			}
-			// å†æ§‹ç¯‰å¾Œã®æç”»ãƒ‡ãƒ¼ã‚¿ã‚’è¨­å®šã™ã‚‹
+			// Ä\’zŒã‚Ì•`‰æƒf[ƒ^‚ğİ’è‚·‚é
 			setViewdata(newView);
 		}
 	}
 
 	/**
-	 * è¨ˆæ¸¬ãƒ‡ãƒ¼ã‚¿ã‚’ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ã—ã¦æç”»ãƒ‡ãƒ¼ã‚¿ã‚’ç”Ÿæˆã™ã‚‹
-	 * @param rd ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ã™ã¹ãè¨ˆæ¸¬ãƒ‡ãƒ¼ã‚¿
+	 * Œv‘ªƒf[ƒ^‚ğƒŒƒ“ƒ_ƒŠƒ“ƒO‚µ‚Ä•`‰æƒf[ƒ^‚ğ¶¬‚·‚é
+	 * @param rd ƒŒƒ“ƒ_ƒŠƒ“ƒO‚·‚×‚«Œv‘ªƒf[ƒ^
 	 * @return
 	 */
 //	private ViewDataElement[] renderRawData(RawData rd, long begin, long term) {
@@ -814,8 +814,8 @@ private void createDecoration()
 //			long t = e.getTime() - first;
 //			long v = e.getValue();
 //System.out.println(v);
-//			int x = (int) ((t * grid_width) / term);      // e ã®å¯¾å¿œã™ã‚‹Xåº§æ¨™	
-//			int y = (int) ((v * grid_height) / maxValue); // e ã®å¯¾å¿œã™ã‚‹Yåº§æ¨™
+//			int x = (int) ((t * grid_width) / term);      // e ‚Ì‘Î‰‚·‚éXÀ•W	
+//			int y = (int) ((v * grid_height) / maxValue); // e ‚Ì‘Î‰‚·‚éYÀ•W
 //			ViewDataElement ve = new ViewDataElement();
 //			ve.setPos(x);
 //			ve.setHeight(y);
@@ -852,8 +852,8 @@ private void createDecoration()
 			long t = e.getTime() - first;
 			long v = e.getValue();
 //System.out.println("Time: " + dtFormat.format(new Date(e.getTime())) + " Value: " + v);
-			int x = (int) ((t * grid_width) / term);      // e ã®å¯¾å¿œã™ã‚‹Xåº§æ¨™	
-			int y = (int) ((v * grid_height) / maxValue); // e ã®å¯¾å¿œã™ã‚‹Yåº§æ¨™
+			int x = (int) ((t * grid_width) / term);      // e ‚Ì‘Î‰‚·‚éXÀ•W	
+			int y = (int) ((v * grid_height) / maxValue); // e ‚Ì‘Î‰‚·‚éYÀ•W
 			//x += mute_offpix;
 			ViewDataElement ve = new ViewDataElement();
 			ve.setPos(x);
@@ -1112,14 +1112,14 @@ private void createDecoration()
 	}
 
 	/**
-	 * @return MVCãƒ¢ãƒ‡ãƒ«ã«ãŠã‘ã‚‹GraphMonitorã®ãƒ¢ãƒ‡ãƒ«
+	 * @return MVCƒ‚ƒfƒ‹‚É‚¨‚¯‚éGraphMonitor‚Ìƒ‚ƒfƒ‹
 	 */
 	public GraphMonitorModel getModel() {
 		return model;
 	}
 
 	/**
-	 * @param model ã“ã®GraphMonitorã«æç”»ã•ã›ãŸã„ãƒ‡ãƒ¼ã‚¿ãƒ¢ãƒ‡ãƒ«
+	 * @param model ‚±‚ÌGraphMonitor‚É•`‰æ‚³‚¹‚½‚¢ƒf[ƒ^ƒ‚ƒfƒ‹
 	 */
 	public void setModel(GraphMonitorModel model) {
 		this.model = model;

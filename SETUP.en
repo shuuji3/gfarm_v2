@@ -6,11 +6,13 @@ Table of contents
 * About this document
   - Convention of command execution
 * Overview
-  - Firewall configuration
 * Configuration of a Gfarm metadata server (MDS)
+  - Firewall configuration
 * Configuration of a Gfarm filesystem node
+  - Firewall configuration
 * Configuration of a Gfarm client node
   - Configuration of a client node
+  - Firewall configuration
 * Testing of the Gfarm filesystem
   - gfls - Directory listing
   - gfhost - Filesystem node information
@@ -55,44 +57,6 @@ To introduce the Gfarm filesystem, configure a metadata server, and
 filesystem nodes have to be configured, and register users,
 administrators and root users.
 
-o Firewall configuration
-
-The following network communication has to be allowed.
-
-source           destination      proto purpose
-IP     port      IP     port
------- --------- ------ --------- ----- -------------------------------
-gfmd   ephemeral gfmd   gfmd_port TCP   metadata replication
-gfmd   ephemeral gfsd   gfsd_port UDP   gfmd failover notification request
-gfsd   ephemeral gfmd   gfmd_port TCP   metadata access 
-gfsd   ephemeral gfsd   gfsd_port TCP   data replication
-gfsd   gfsd_port gfmd   ephemeral UDP   gfmd failover notification response
-gfsd   gfsd_port client ephemeral UDP   gfsd health check response
-client ephemeral gfmd   gfmd_port TCP   metadata access 
-client ephemeral gfsd   gfsd_port TCP   data access
-client ephemeral gfsd   gfsd_port UDP   gfsd health check request
-
-    gfmd_port: the port number which is specified by "config-gfarm -m"
-    gfsd_port: the port number which is specified by "config-gfsd -p"
-    ephemeral: port number range that communication initiators will use.
-	The range depends on the type of the client OS,
-	and is greater than 1023 usually.
-
-For TCP connections, this table only describes rules for communication
-from a connection initiator to a connection acceptor, and omits rules
-for the other direction.
-If you are not using a stateful inspection feature of your firewall,
-you must allow the TCP communication for the other direction as well.
-
-Also, This table doesn't describe anything about icmp packets.  But if
-you disallow packets of icmp type:3 (unreachable) code:4 (need fragment),
-the Path MTU discovery feature stops working, and the communication
-performance may drop or the communication itself may stop working in
-some cases.
-For other types of icmp packets, disalllowing them may delay detection
-of a communication error, or may prevent gfarm related programs from
-getting a reason of an error.
-
 Configuration of a Gfarm metadata server (MDS)
 ==============================================
 
@@ -122,7 +86,7 @@ To begin with, the following information is required:
   administrator for a Gfarm file system.
 
 Run 'config-gfarm' to configure a Gfarm filesystem.  First, make
-sure of the default setting with the -t option.  With the -t option,
+sure the default setting with the -t option.  With the -t option,
 nothing is really executed except for the display of the settings for
 configuration.
 
@@ -135,8 +99,9 @@ details, refer to a manual page of gfarm2.conf(5) and Gfarm-FAQ.en.
 
 Note that the -X option is required to enable XML Path Language
 (XPath) support for querying XML extended attributes.  The -r option
-is required to enable replicated metadata servers.  For details, see
-tutorial of replicated metadata servers.
+is required for master-slave metadata server configuration that
+enables failover of gfmd.  For details, see tutorial of master-slave
+metadata servers.
 
 You can modify any default parameter with the option shown in [ ].
 When you have confirmed the parameter, run 'config-gfarm' by the root
@@ -144,34 +109,19 @@ user without the -t option.
 
 	# config-gfarm -A <global_admin_name> -a gsi_auth -D <Subject DN>
 
-config-gfarm performs the following processes, in that order:
+config-gfarm sets up the backend database, creates a Gfarm configuration
+files <sysconfdir>/gfarm2.conf and <sysconfdir>/gfmd.conf, puts startup
+scripts 'gfmd' and 'gfarm-pgsql' (or 'gfarm-slapd') onto /etc/init.d (or
+/etc/rc.d/init.d, according to your operating system), and executes the
+Gfarm metadata server gfmd.
 
-  1. sets up the backend database.
-  2. generates Gfarm configuration files <sysconfdir>/gfarm2.conf and
-     <sysconfdir>/gfmd.conf.
+  '<sysconfdir>' represents a directory for configuration files,
+  specified by --sysconfdir option of 'configure' at the compilation
+  of Gfarm (see 'INSTALL.en' for more details).  If you have installed
+  Gfarm from the RPM binary packages, <sysconfdir> is '/etc'.
 
-       '<sysconfdir>' represents a directory for configuration files,
-       specified by --sysconfdir option of 'configure' at the compilation
-       of Gfarm (see 'INSTALL.en' for more details).  If you have installed
-       Gfarm from the RPM binary packages, <sysconfdir> is '/etc'.
-
-       'prefix' is used to configure several Gfarm filesystems. It
-       generates all configuration files under the specified directory.
-
-  3. creates scripts (or configuration files) to start/stop the backend
-     database and the Gfarm metadata server gfmd.
-
-       On most systems, config-gfarm puts start/stop scripts 'gfmd' and
-       'gfarm-pgsql' onto either /etc/init.d or /etc/rc.d/init.d, according
-       to the operating system.
-
-       On Linux with systemd such as Red Hat Enterprise Linux 7 or later,
-       config-gfarm puts the unit configuration files 'gfmd.service' and
-       'gfarm-pgsql.service' onto /etc/systemd/system, and then executes
-       'systemctl enable gfmd.service' and 'systemctl enable
-       gfarm-pgsql.service' respectively.
-
-  4. starts the backend database and gfmd.
+  'prefix' is used to configure several Gfarm filesystems. It
+  generates all configuration files under the specified directory.
 
 When you use the shared secret authentication between gfsd and gfmd,
 it is necessary to create a '_gfarmfs' user and a shared secret key.
@@ -192,54 +142,40 @@ in the home directory.
 You can check whether the metadata server gfmd is running or not by
 the following command execution;
 
-  Red Hat Enterprise Linux 7 or later:
-	# systemctl status gfmd.service
-
-  Others:
 	# /etc/init.d/gfmd status
 
-For the automatic startup during the boot process, type the following
-commands;
+For the automatic startup during the boot process, chkconfig command
+is useful in Red Hat Linux.
 
-  Red Hat Enterprise Linux 7 or later:
-	# systemctl enable gfarm-pgsql.service
-	# systemctl enable gfmd.service
-
-  Red Hat Enterprise Linux 6 or earlier:
 	# chkconfig --add gfmd
 	# chkconfig --add gfarm-pgsql
+	(or # chkconfig --add gfarm-slapd)
 
-  Debian:
+For debian, use update-rc.d instead of chkconfig.
+
 	# update-rc.d gfmd defaults
 	# update-rc.d gfarm-pgsql defaults
+	(or # update-rc.d gfarm-slapd defaults)
 
 If you would like to remove all files created by config-gfarm, first
 stop gfmd and backend database server;
 
-  Red Hat Enterprise Linux 7 or later:
-	# systemctl stop gfarm-pgsql.service
-	(it also stops gfmd)
-
-  Others:
 	# /etc/init.d/gfmd stop
 	(or # killall gfmd)
 	# /etc/init.d/gfarm-pgsql stop
+	(or # /etc/init.d/gfarm-slapd stop)
 
 Then, remove files and directories as follows;
 
-  Red Hat Enterprise Linux 7 or later:
 	# rm -f /etc/gfarm2.conf /etc/gfmd.conf
-	# systemctl disable gfmd.service
-	# systemctl disable gfarm-pgsql.service
-	# rm -f /etc/systemd/system/gfarm-pgsql.service
-	# rm -f /etc/systemd/system/gfmd.service
-	# systemctl daemon-reload
+	# rm -f /etc/init.d/gfarm-* /etc/init.d/gfmd
 	# rm -rf /var/gfarm-*
 
-  Others:
-	# rm -f /etc/gfarm2.conf /etc/gfmd.conf
-	# rm -f /etc/init.d/gfarm-pgsql /etc/init.d/gfmd
-	# rm -rf /var/gfarm-*
+o Firewall configuration
+
+The Gfarm metadata server should be able to accept TCP connections at
+a port that are specified by the -m option of the config-gfarm
+command.
 
 Configuration of a Gfarm filesystem node
 ========================================
@@ -263,7 +199,12 @@ the gfsd.
 
   Copy the certificate to /etc/grid-security/gfsd/gfsd{cert,key}.pem
   and change the owner to '_gfarmfs'.  The permission of gfsdkey.pem
-  should be 0400.
+  should be 0400.  If you would like to execute two or more gfsd
+  servers on the same host using virtual IP addresses, you need to
+  specify the hostname or IP address of each gfsd by -l option of
+  config-gfsd.  In this case, the location of gfsd service certificate
+  should be /etc/grid-security/gfsd-<hostname or IP
+  address>/gfsd{cert,key}.pem
 
 Copy <sysconfdir>/gfarm2.conf from the metadata server that is created
 by 'config-gfarm'.
@@ -322,54 +263,39 @@ Ask the administrator to execute the displayed text.
 
 Start gfsd by the root user.
 
-  Red Hat Enterprise Linux 7 or later:
-	# systemctl start gfsd.service
-
-  Others:
 	# /etc/init.d/gfsd start
 
 You can check whether the gfsd is running or not by the following
 command execution;
 
-  Red Hat Enterprise Linux 7 or later:
-	# systemctl status gfsd.service
+	# /etc/init.d/gfmd status
 
-  Others:
-	# /etc/init.d/gfsd status
+For the automatic startup during the boot process, chkconfig command
+is useful in Red Hat Linux.
 
-For the automatic startup during the boot process, type the following
-command.
-
-  Red Hat Enterprise Linux 7 or later:
-	# systemctl enable gfsd.service
-
-  Red Hat Enterprise Linux 6 or earlier:
 	# chkconfig --add gfsd
 
-  Debian:
+For debian, use update-rc.d instead of chkconfig.
+
 	# update-rc.d gfsd defaults
 
 If you would like to remove all files created by config-gfsd, first
 stop gfsd;
 
-  Red Hat Enterprise Linux 7 or later:
-	# systemctl stop gfsd.service
-
-  Others:
 	# /etc/init.d/gfsd stop
 
 Then, remove files and directories as follows;
 
-  Red Hat Enterprise Linux 7 or later:
-	# rm -f /etc/gfarm2.conf
-	# systemctl disable gfsd.service
-	# rm -f /etc/systemd/system/gfsd.service
-	# systemctl daemon-reload
-	# rm -rf <spool_directory>
-
-  Others:
 	# rm -f /etc/gfarm2.conf /etc/init.d/gfsd
 	# rm -rf <spool_directory>
+
+o Firewall configuration
+
+Filesystem nodes should be able to accept TCP connections and
+UDP packet reception and transmission at the port that is
+specified by the -p option of the config-gfsd command.
+
+Also, it requires the same settings as those of the client nodes.
 
 Configuration of a Gfarm client node
 ====================================
@@ -389,6 +315,14 @@ copied among every nodes.
 
 In case of GSI, obtain the user certificate, and ask to add your entry
 into grid-mapfile of every file system node and a metadata server.
+
+o Firewall configuration
+
+Client nodes should be able to initiate TCP connections to the metadata
+server, at the port specified by the -m option of the config-gfarm command.
+Furthermore, they should be able to initiate TCP connections and
+should be able to send/receive UDP packets to filesystem nodes, from the
+port specified by the -p option of the config-gfsd command.
 
 Testing of the Gfarm filesystem
 ===============================
@@ -586,9 +520,10 @@ automatically.  If you would like to create two file replicas for all
 newly created files, specify two by the extended attribute gfarm.ncopy
 of / (the root directory) as follows,
 
-	$ echo -n 2 | gfxattr -s / gfarm.ncopy
+	$ gfncopy -s 2 /
 
-Note that file replicas are not always created when there are not
-enough number of available file system nodes, or when the Gfarm file
-system is too busy.  To ensure to create the specified number of file
-replicas, use 'gfrep' command also.
+File replicas will be created after the close operation when the file
+is created, or updated.  When a file system node is down, required
+number of file repilcas are automatically created after an interval
+specified by replica_check_host_down_tresh.  Default interval is 3
+hours.

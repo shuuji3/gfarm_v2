@@ -23,52 +23,52 @@ public class RawData {
 	private Color levelColor = Color.YELLOW;
 
 	/**
-	 * この計測データ系列のもっとも古いデータの日時(Java日時)
+	 * ���̌v���f�[�^�n��̂����Ƃ��Â��f�[�^�̓���(Java����)
 	 */
-//	private long epoch; // XXXtodoXXX 要再考: ここにあるべきではないような気がする
+//	private long epoch; // XXXtodoXXX �v�čl: �����ɂ���ׂ��ł͂Ȃ��悤�ȋC������
 
 	/**
-	 * このオブジェクトが保持している計測データの最初の日時(Java日時)
+	 * ���̃I�u�W�F�N�g���ێ����Ă���v���f�[�^�̍ŏ��̓���(Java����)
 	 */
-//	private long begin;	// XXXtodoXXX 要再考: ここにあるべきではないような気がする
+//	private long begin;	// XXXtodoXXX �v�čl: �����ɂ���ׂ��ł͂Ȃ��悤�ȋC������
 	
 	/**
-	 * このオブジェクトが保持している計測データの型(差分物として扱うかどうか)
+	 * ���̃I�u�W�F�N�g���ێ����Ă���v���f�[�^�̌^(�������Ƃ��Ĉ������ǂ���)
 	 */
 	private boolean diffmode = false;
 
 	/**
-	 * この観測対象において、SNMP カウンター値の折り返しが発生する数値
+	 * ���̊ϑ��Ώۂɂ����āASNMP �J�E���^�[�l�̐܂�Ԃ����������鐔�l
 	 */
 	private long max = 4294967295L; // SNMP int32 max.
 
 	/**
-	 * この計測データ系列の対象ホスト名
+	 * ���̌v���f�[�^�n��̑Ώۃz�X�g��
 	 */
 //	private String host;
 
 	/**
-	 * この計測データ系列の対象事象名
+	 * ���̌v���f�[�^�n��̑Ώێ��ۖ�
 	 */
 //	private String event;
 	
 	/**
-	 * この計測データ系列の計測間隔(in milli-seconds)
+	 * ���̌v���f�[�^�n��̌v���Ԋu(in milli-seconds)
 	 */
 //	private long interval;
 	
 	/**
-	 * この計測データのヒント名
+	 * ���̌v���f�[�^�̃q���g��
 	 */
 //	private String hint;
 	
 	/**
-	 * この計測データが処理対象として正しい状態にあるかどうか
+	 * ���̌v���f�[�^�������ΏۂƂ��Đ�������Ԃɂ��邩�ǂ���
 	 */
 	private boolean valid;
 	
 	/**
-	 * 計測データそのもの
+	 * �v���f�[�^���̂���
 	 */
 	private RawDataElement[] data;
 

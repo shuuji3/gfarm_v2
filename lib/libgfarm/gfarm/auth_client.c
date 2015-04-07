@@ -11,41 +11,11 @@
 #include <gfarm/gflog.h>
 #include <gfarm/error.h>
 #include <gfarm/gfarm_misc.h>
-
+#include "liberror.h"
 #include "gfutil.h"
 #include "gfevent.h"
-
-#include "context.h"
-#include "liberror.h"
 #include "gfp_xdr.h"
 #include "auth.h"
-
-#define staticp	(gfarm_ctxp->auth_client_static)
-
-struct gfarm_auth_client_static {
-	enum gfarm_auth_id_type gfarm_auth_type;
-};
-
-gfarm_error_t
-gfarm_auth_client_static_init(struct gfarm_context *ctxp)
-{
-	struct gfarm_auth_client_static *s;
-
-	GFARM_MALLOC(s);
-	if (s == NULL)
-		return (GFARM_ERR_NO_MEMORY);
-
-	s->gfarm_auth_type = GFARM_AUTH_ID_TYPE_USER;
-
-	ctxp->auth_client_static = s;
-	return (GFARM_ERR_NO_ERROR);
-}
-
-void
-gfarm_auth_client_static_term(struct gfarm_context *ctxp)
-{
-	free(ctxp->auth_client_static);
-}
 
 /*
  * currently 31 is enough,
@@ -53,7 +23,7 @@ gfarm_auth_client_static_term(struct gfarm_context *ctxp)
  */
 #define GFARM_AUTH_METHODS_BUFFER_SIZE	256
 
-static const struct gfarm_auth_client_method {
+struct gfarm_auth_client_method {
 	enum gfarm_auth_method method;
 	gfarm_error_t (*request)(struct gfp_xdr *,
 		const char *, const char *, enum gfarm_auth_id_type,
@@ -150,9 +120,10 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 		}
 		if (eof) {
 			gflog_debug(GFARM_MSG_1001028,
-			    "receiving auth shared secret md5 response: %s",
-			    gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF));
-			return (GFARM_ERR_UNEXPECTED_EOF);
+				"Unexpected EOF when receiving "
+				"auth shared secret md5 response: %s",
+				gfarm_error_string(GFARM_ERR_PROTOCOL));
+			return (GFARM_ERR_PROTOCOL);
 		}
 		if (error != GFARM_AUTH_ERROR_NO_ERROR)
 			break;
@@ -167,9 +138,10 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 		}
 		if (eof) {
 			gflog_debug(GFARM_MSG_1001030,
-			    "receiving challenge response: %s",
-			    gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF));
-			return (GFARM_ERR_UNEXPECTED_EOF);
+				"Unexpected EOF when receiving "
+				"challenge response: %s",
+				gfarm_error_string(GFARM_ERR_PROTOCOL));
+			return (GFARM_ERR_PROTOCOL);
 		}
 		gfarm_auth_sharedsecret_response_data(shared_key, challenge,
 		    response);
@@ -193,9 +165,9 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 		}
 		if (eof) {
 			gflog_debug(GFARM_MSG_1001033,
-			    "receiving expire response: %s",
-			    gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF));
-			return (GFARM_ERR_UNEXPECTED_EOF);
+			    "Unexpected EOF when receiving expire response: %s",
+				gfarm_error_string(GFARM_ERR_PROTOCOL));
+			return (GFARM_ERR_PROTOCOL);
 		}
 		if (error == GFARM_AUTH_ERROR_NO_ERROR)
 			return (GFARM_ERR_NO_ERROR); /* success */
@@ -220,9 +192,9 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 	}
 	if (eof) {
 		gflog_debug(GFARM_MSG_1001036,
-		    "receiving giveup response: %s",
-		    gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF));
-		return (GFARM_ERR_UNEXPECTED_EOF);
+			"Unexpected EOF when receiving giveup response: %s",
+			gfarm_error_string(GFARM_ERR_PROTOCOL));
+		return (GFARM_ERR_PROTOCOL);
 	}
 
 	if (e_save != GFARM_ERR_NO_ERROR) {
@@ -241,17 +213,9 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 		gflog_debug(GFARM_MSG_1001039,
 			"Authentication token expired");
 		return (GFARM_ERR_EXPIRED);
-	case GFARM_AUTH_ERROR_TEMPORARY_FAILURE:
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "gfarm_auth_request_sharedsecre: temporary failure");
-		/*
-		 * an error which satisfies IS_CONNECTION_ERROR(),
-		 * to make the caller retry
-		 */
-		return (GFARM_ERR_CONNECTION_ABORTED);
 	default:
-		gflog_debug(GFARM_MSG_UNFIXED,
-		    "Authentication failed: %d", (int)error);
+		gflog_debug(GFARM_MSG_1001040,
+			"Authentication failed");
 		return (GFARM_ERR_AUTHENTICATION);
 	}
 }
@@ -296,9 +260,9 @@ gfarm_auth_request(struct gfp_xdr *conn,
 	}
 	if (eof) {
 		gflog_debug(GFARM_MSG_1001044,
-		    "receiving methods response: %s",
-		    gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF));
-		return (GFARM_ERR_UNEXPECTED_EOF);
+			"Unexpected EOF when receiving methods response: %s",
+			gfarm_error_string(GFARM_ERR_PROTOCOL));
+		return (GFARM_ERR_PROTOCOL);
 	}
 
 	server_methods = 0;
@@ -334,14 +298,11 @@ gfarm_auth_request(struct gfp_xdr *conn,
 		}
 		if (eof || error != GFARM_AUTH_ERROR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1001047,
-			    "receiving method (%d) response (error = %u): %s",
-			    method, error,
-			    eof ?
-			    gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF) :
-			    gfarm_error_string(GFARM_ERR_PROTOCOL));
-			/* GFARM_ERR_PROTOCOL shouldn't happen */
-			return (eof ?
-			    GFARM_ERR_UNEXPECTED_EOF : GFARM_ERR_PROTOCOL);
+				"Unexpected EOF when receiving "
+				"method (%d) response (error = %u): %s",
+				method, error,
+				gfarm_error_string(GFARM_ERR_PROTOCOL));
+			return (GFARM_ERR_PROTOCOL); /* shouldn't happen */
 		}
 		if (method == GFARM_AUTH_METHOD_NONE) {
 			/* give up */
@@ -433,10 +394,10 @@ gfarm_auth_request_sharedsecret_receive_fin(int events, int fd,
 	state->error = gfp_xdr_recv(state->conn, 0, &eof, "i",
 	    &error_ignore);
 	if (state->error == GFARM_ERR_NO_ERROR && eof) {
-		state->error = GFARM_ERR_UNEXPECTED_EOF;
+		state->error = GFARM_ERR_PROTOCOL;
 		gflog_debug(GFARM_MSG_1001054,
-			"receiving fin %s",
-			gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF));
+			"Unexpected EOF when receiving fin %s",
+			gfarm_error_string(GFARM_ERR_PROTOCOL));
 	}
 	if (state->error != GFARM_ERR_NO_ERROR)
 		;
@@ -454,21 +415,10 @@ gfarm_auth_request_sharedsecret_receive_fin(int events, int fd,
 			gflog_debug(GFARM_MSG_1001056,
 				"Authentication token expired");
 			break;
-		case GFARM_AUTH_ERROR_TEMPORARY_FAILURE:
-			/*
-			 * an error which satisfies IS_CONNECTION_ERROR(),
-			 * to make the caller retry
-			 */
-			state->error = GFARM_ERR_CONNECTION_ABORTED;
-			gflog_debug(GFARM_MSG_UNFIXED,
-			    "gfarm_auth_request_sharedsecret_multiplexed: "
-			    "temporary failure");
-			break;
 		default:
 			state->error = GFARM_ERR_AUTHENTICATION;
-			gflog_error(GFARM_MSG_UNFIXED,
-			    "Authentication failed: %d",
-			    (int)state->proto_error);
+			gflog_debug(GFARM_MSG_1001057,
+				"Authentication failed");
 			break;
 		}
 	}
@@ -487,7 +437,7 @@ gfarm_auth_request_sharedsecret_send_giveup(int events, int fd,
 	state->error = gfp_xdr_send(state->conn, "i",
 	    GFARM_AUTH_SHAREDSECRET_GIVEUP);
 	if (state->error == GFARM_ERR_NO_ERROR &&
-	    (state->error = gfp_xdr_flush(state->conn)) == GFARM_ERR_NO_ERROR) {
+	    (state->error = gfp_xdr_flush(state->conn)) == GFARM_ERR_NO_ERROR){
 		gfarm_fd_event_set_callback(state->readable,
 		    gfarm_auth_request_sharedsecret_receive_fin, state);
 		timeout.tv_sec = GFARM_AUTH_TIMEOUT; timeout.tv_usec = 0;
@@ -527,7 +477,7 @@ gfarm_auth_request_sharedsecret_receive_result(int events, int fd,
 	state->error = gfp_xdr_recv(state->conn, 1, &eof, "i",
 	    &state->proto_error);
 	if (state->error == GFARM_ERR_NO_ERROR && eof)
-		state->error = GFARM_ERR_UNEXPECTED_EOF;
+		state->error = GFARM_ERR_PROTOCOL;
 	if (state->error == GFARM_ERR_NO_ERROR) {
 		if (state->proto_error != GFARM_AUTH_ERROR_NO_ERROR) {
 			gfarm_fd_event_set_callback(state->writable,
@@ -572,7 +522,7 @@ gfarm_auth_request_sharedsecret_receive_challenge(int events, int fd,
 	state->error = gfp_xdr_recv(state->conn, 0, &eof, "b",
 	    sizeof(challenge), &len, challenge);
 	if (state->error == GFARM_ERR_NO_ERROR && eof)
-		state->error = GFARM_ERR_UNEXPECTED_EOF;
+		state->error = GFARM_ERR_PROTOCOL;
 	if (state->error == GFARM_ERR_NO_ERROR) {
 		/* XXX It's better to check writable event here */
 		gfarm_auth_sharedsecret_response_data(
@@ -623,7 +573,7 @@ gfarm_auth_request_sharedsecret_receive_keytype(int events, int fd,
 	state->error = gfp_xdr_recv(state->conn, 1, &eof, "i",
 	    &state->proto_error);
 	if (state->error == GFARM_ERR_NO_ERROR && eof)
-		state->error = GFARM_ERR_UNEXPECTED_EOF;
+		state->error = GFARM_ERR_PROTOCOL;
 	if (state->error == GFARM_ERR_NO_ERROR) {
 		if (state->proto_error != GFARM_AUTH_ERROR_NO_ERROR) {
 			gfarm_fd_event_set_callback(state->writable,
@@ -679,7 +629,7 @@ gfarm_auth_request_sharedsecret_send_keytype(int events, int fd,
 	state->error = gfp_xdr_send(state->conn, "i",
 	    GFARM_AUTH_SHAREDSECRET_MD5);
 	if (state->error == GFARM_ERR_NO_ERROR &&
-	    (state->error = gfp_xdr_flush(state->conn)) == GFARM_ERR_NO_ERROR) {
+	    (state->error = gfp_xdr_flush(state->conn)) == GFARM_ERR_NO_ERROR){
 		timeout.tv_sec = GFARM_AUTH_TIMEOUT; timeout.tv_usec = 0;
 		if ((rv = gfarm_eventqueue_add_event(state->q,
 		    state->readable, &timeout)) == 0) {
@@ -879,7 +829,7 @@ gfarm_auth_request_dispatch_method(int events, int fd, void *closure,
 	assert(events == GFARM_EVENT_READ);
 	state->error = gfp_xdr_recv(state->conn, 1, &eof, "i", &error);
 	if (state->error == GFARM_ERR_NO_ERROR && eof)
-		state->error = GFARM_ERR_UNEXPECTED_EOF;
+		state->error = GFARM_ERR_PROTOCOL;
 	if (state->error == GFARM_ERR_NO_ERROR &&
 	    error != GFARM_AUTH_ERROR_NO_ERROR)
 		state->error = GFARM_ERR_PROTOCOL;
@@ -935,7 +885,7 @@ gfarm_auth_request_loop_ask_method(int events, int fd, void *closure,
 	}
 	state->error = gfp_xdr_send(state->conn, "i", method);
 	if (state->error == GFARM_ERR_NO_ERROR &&
-	    (state->error = gfp_xdr_flush(state->conn)) == GFARM_ERR_NO_ERROR) {
+	    (state->error = gfp_xdr_flush(state->conn)) == GFARM_ERR_NO_ERROR){
 		gfarm_fd_event_set_callback(state->readable,
 		    gfarm_auth_request_dispatch_method, state);
 		timeout.tv_sec = GFARM_AUTH_TIMEOUT; timeout.tv_usec = 0;
@@ -973,7 +923,7 @@ gfarm_auth_request_receive_server_methods(int events, int fd, void *closure,
 	state->error = gfp_xdr_recv(state->conn, 0, &eof, "b",
 	    sizeof(methods_buffer), &nmethods, methods_buffer);
 	if (state->error == GFARM_ERR_NO_ERROR && eof)
-		state->error = GFARM_ERR_UNEXPECTED_EOF;
+		state->error = GFARM_ERR_PROTOCOL;
 	if (state->error == GFARM_ERR_NO_ERROR) {
 		state->server_methods = 0;
 		for (i = 0; i < nmethods; i++) {
@@ -1119,15 +1069,17 @@ gfarm_auth_result_multiplexed(struct gfarm_auth_request_state *state,
 	return (e);
 }
 
+static enum gfarm_auth_id_type gfarm_auth_type = GFARM_AUTH_ID_TYPE_USER;
+
 gfarm_error_t
 gfarm_set_auth_id_type(enum gfarm_auth_id_type type)
 {
-	staticp->gfarm_auth_type = type;
+	gfarm_auth_type = type;
 	return (GFARM_ERR_NO_ERROR);
 }
 
 enum gfarm_auth_id_type
 gfarm_get_auth_id_type(void)
 {
-	return (staticp->gfarm_auth_type);
+	return (gfarm_auth_type);
 }

@@ -15,16 +15,14 @@ struct gfm_realpath_closure {
 };
 
 static gfarm_error_t
-gfm_realpath_request(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_realpath_request(struct gfm_connection *gfm_server, void *closure)
 {
 	return (GFARM_ERR_NO_ERROR);
 }
 
 
 static gfarm_error_t
-gfm_realpath_result(struct gfm_connection *gfm_server,
-	struct gfp_xdr_context *ctx, void *closure)
+gfm_realpath_result(struct gfm_connection *gfm_server, void *closure)
 {
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -123,7 +121,7 @@ gfs_realpath(const char *path, char **resolved)
 	struct gfm_realpath_closure closure;
 
 	closure.path = NULL;
-	if ((e = gfm_inode_op_readonly(path, GFARM_FILE_LOOKUP,
+	if ((e = gfm_inode_op(path, GFARM_FILE_LOOKUP,
 	    gfm_realpath_request,
 	    gfm_realpath_result,
 	    gfm_realpath_success,

@@ -6,7 +6,7 @@
 
 <refentry id="gfprep.1">
 
-<refentryinfo><date>9 Dec 2013</date></refentryinfo>
+<refentryinfo><date>29 Aug 2013</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfprep</refentrytitle>
@@ -45,30 +45,22 @@
 <refsect1 id="description"><title>DESCRIPTION</title>
 
 <para>
-<command moreinfo="none">gfprep</command> creates replicas of Gfarm
-files win parallel.
+<command moreinfo="none">gfprep</command> creates replicas of Gfarm files specified by
+the <parameter moreinfo="none">gfarm-url</parameter>(gfarm:///...) in parallel.
 </para>
 <para>
-A set of source/destination hosts can be specified by a domain name
-and/or a hostlist file.  When both a domain name and a hostlist file
-are specified, a set of hosts is determined by both conditions.  When
-a set of source hosts is specified, only files stored on the source
-hosts are replicated.
+When a set of source hosts are specified, only files stored on the set
+of source hosts are replicated.  A set of hosts can be specified by a
+domain name and/or a host file.  When both a domain name and a host
+file are specified, a set of hosts is determined by both conditions.
 </para>
 <para>
-Idler filesystem nodes will be selected for source or destination.
-The maximum number of parallel to send or receive per host is the
-number of CPUs.  Please see the manual page
-of <command moreinfo="none">gfhost</command> for information about the
-number of CPUs.
-</para>
-<para>
-If the <parameter moreinfo="none">path</parameter> parameter is a
-directory, files under the directory will be replicated recursively.
+If the <parameter moreinfo="none">gfarm-url</parameter> parameter is a directory,
+files under the directory will be replicated recursively.
 </para>
 <para>
 <command moreinfo="none">gfprep</command> can also read the directory and get
-information of the entries in parallel.
+informations of the entries in parallel.
 </para>
 </refsect1>
 
@@ -96,8 +88,8 @@ If this option is not specified, -N 1 is assumed.
 <term><option>-x</option></term>
 <listitem>
 <para>
-Removes extra file replicas when a set of destination nodes has more
-file replicas than specified by -N option.
+Removes file replicas when a set of destination nodes has more file
+replicas than specified by -N option.
 </para>
 </listitem>
 </varlistentry>
@@ -106,8 +98,7 @@ file replicas than specified by -N option.
 <term><option>-m</option></term>
 <listitem>
 <para>
-Migrates file replicas within a set of source nodes to destination
-nodes.
+Migrates replicas within a set of source nodes to destination nodes.
 </para>
 <para>
 This option requires -S or -h or -D or -H options.
@@ -123,8 +114,7 @@ This option and -N option are mutually exclusive.
 
 <refsect1 id="common-options"><title>COMMON OPTIONS</title>
 <para>
-<command moreinfo="none">gfprep</command> has the same options
-with <command moreinfo="none">gfpcopy</command>.
+<command moreinfo="none">gfprep</command> has the same options with <command moreinfo="none">gfpcopy</command>.
 </para>
 
 <variablelist>
@@ -132,8 +122,8 @@ with <command moreinfo="none">gfpcopy</command>.
 <term><option>-S</option> <parameter moreinfo="none">source-domainname</parameter></term>
 <listitem>
 <para>
-Specifies a domain name to select files.
-Only files which have the real file on the domain will be sended.
+Specifies the domain name of source filesystem nodes from which
+replicas will be copied.
 </para>
 </listitem>
 </varlistentry>
@@ -141,12 +131,10 @@ Only files which have the real file on the domain will be sended.
 <varlistentry>
 <term><option>-h</option> <parameter moreinfo="none">source-hostfile</parameter></term>
 <listitem>
-<para>
-Specifies a file of which describes hostnames of file system nodes to
-replicate or copy files.  Only files which have the real file on the
-host names will be selected.
-The <parameter moreinfo="none">source-hostfile</parameter> consists of
-a filesystem node name on each line.
+<para>Specifies a file which describes hostnames of
+source filesystem nodes from which the replica will be copied.
+The <parameter moreinfo="none">source-hostfile</parameter> consists of a filesystem
+node name on each line.
 </para>
 <para>
 If ``-'' is specified, standard input is used to read the host list.</para>
@@ -157,8 +145,9 @@ If ``-'' is specified, standard input is used to read the host list.</para>
 <term><option>-L</option></term>
 <listitem>
 <para>
-Filesystem nodes selected by -S or -h are only used to send for the
-source.
+Selects source filesystem nodes within a set of specified source nodes.
+</para>
+<para>
 </para>
 </listitem>
 </varlistentry>
@@ -167,10 +156,10 @@ source.
 <term><option>-D</option> <parameter moreinfo="none">destination-domainname</parameter></term>
 <listitem>
 <para>
-Specifies the domain name for destination.
+Specifies the domain name of destination filesystem nodes to which
+replicas will be copied.
 </para>
-<para>
-If neither this nor the <option>-H</option> option is specified,
+<para>If neither this nor the <option>-H</option> option is specified,
 replicas may be copied to any available host.
 </para>
 </listitem>
@@ -179,15 +168,13 @@ replicas may be copied to any available host.
 <varlistentry>
 <term><option>-H</option> <parameter moreinfo="none">destination-hostfile</parameter></term>
 <listitem>
-<para>
-
-Specifies a file which describes hostnames for destination.
-The <parameter moreinfo="none">destination-hostfile</parameter>
-consists of a filesystem node name on each line.
+<para>Specifies a file which describes hostnames of
+destination filesystem nodes on which the replica will be copied.
+The <parameter moreinfo="none">destination-hostfile</parameter> consists of a
+filesystem node name on each line.
 </para>
 <para>
-If ``-'' is specified, standard input is used to read the host list.
-</para>
+If ``-'' is specified, standard input is used to read the host list.</para>
 </listitem>
 </varlistentry>
 
@@ -195,16 +182,17 @@ If ``-'' is specified, standard input is used to read the host list.
 <term><option>-j</option> <parameter moreinfo="none">num-of-processes</parameter></term>
 <listitem>
 <para>
-Specifies the maximum number of processes to create file replicas (or
-copy files) simultaneously.
+Specifies the number of processes to create file replicas (or copy
+files) simultaneously.
 </para>
 <para>
 The default value is the parameter of client_parallel_copy in gfarm2.conf.
 (see man gfarm2.conf)
 </para>
 <para>
-The maximum number of process per filesystem node for source or destination
-is the number of CPUs (see man <command moreinfo="none">gfhost</command>).
+The source nodes and the destination nodes are selected/scheduled and
+used(read/written) up to the number of CPUs (see
+man <command moreinfo="none">gfhost</command>) at the same time.
 </para>
 </listitem>
 </varlistentry>
@@ -238,7 +226,7 @@ The default value is unlimited.
 <listitem>
 <para>
 Specifies the name of scheduling way.
-``noplan'' replicates/copies while files are found.
+``noplan'' replicates/copies in order that the files are found.
 ``greedy'' schedules greedily the order of replication/copy beforehand.
 </para>
 <para>
@@ -281,7 +269,7 @@ time.
 <term><option>-F</option> <parameter moreinfo="none">num-of-dirents</parameter></term>
 <listitem>
 <para>
-Specifies the number of entries to perform the directory readahead.
+Specifies a number of entries to perform the directory readahead.
 </para>
 <para>
 The default value is 10000.
@@ -294,7 +282,7 @@ The default value is 10000.
 <listitem>
 <para>
 Specifies a throughput(KB/s) to simulate the replication/copy, and
-does nothing (gets file information only).
+does nothing (gets file informations only).
 </para>
 </listitem>
 </varlistentry>
@@ -368,10 +356,6 @@ To replicate files under the directory recursively.
 <literallayout format="linespecific" class="normal">
 $ gfprep -N 3 gfarm:///dir
 </literallayout>
-<literallayout format="linespecific" class="normal">
-$ cd /mnt/gfarm2fs
-$ gfprep -N 3 dir
-</literallayout>
 
 <para>
 To replicate a file or reduce surplus replicas of the file.
@@ -390,8 +374,8 @@ $ gfprep -m -S gfsd1.example.com gfarm:///
 
 <refsect1 id="notes"><title>NOTES</title>
 <para>
-When the -L or -m option is not specified, a source node is not always
-selected within a set of specified source filesystem nodes.
+If the -L or -m option is not specified, a source node is not always
+selected within a set of specified source nodes.
 </para>
 <para>
 <command moreinfo="none">gfprep</command> command should be executed

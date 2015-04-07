@@ -1,13 +1,13 @@
 '\" t
 .\"     Title: gfarm2.conf
 .\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
-.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
-.\"      Date: 12 Nov 2013
+.\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
+.\"      Date: 20 Nov 2012
 .\"    Manual: Gfarm
 .\"    Source: Gfarm
 .\"  Language: English
 .\"
-.TH "GFARM2\&.CONF" "5" "12 Nov 2013" "Gfarm" "Gfarm"
+.TH "GFARM2\&.CONF" "5" "20 Nov 2012" "Gfarm" "Gfarm"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -249,6 +249,23 @@ gfsd起動時のスプールチェックを有効にします。スプールチ�
 .\}
 .nf
 	spool_check_level disable
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+spool_base_load \fICPU負荷\fR
+.RS 4
+指定されたCPU負荷をgfsdのCPU負荷に加えます。 このオプションはgfsdノード（ファイルシステムノード）でのみ有効です。 デフォルトは0\&.0です。 このオプションにより、スケジューリングの優先度を変更することができます。
+.sp
+例:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	spool_base_load 1\&.0
 .fi
 .if n \{\
 .RE
@@ -684,6 +701,11 @@ gsiの両方を、 それ以外の全てのホストにはgsi認証のみを試�
 gsi認証のみを試みることになります。
 .RE
 .PP
+shared_key_file \fIパス名\fR
+.RS 4
+sharedsecret認証に用いる秘密鍵ファイルのパス名を指定します。
+.RE
+.PP
 sockopt \fIオプション\fR\fI[=\fR\fI値\fR\fI] [\fR\fILISTENER\fR\fI | \fR\fI\fIホスト指定\fR\fR\fI]\fR
 .RS 4
 通信socket(2)に対して、setsockopt(2)システムコールを使って ソケット・オプションを指定します。
@@ -1065,43 +1087,9 @@ minimum_free_disk_space \fIバイト数\fR
 .\}
 .RE
 .PP
-gfs_proto_fhremove_request_window \fI同時処理数\fR
-.RS 4
-gfmd から gfsd に対する複製ファイル削除を、 同時にいくつまで並行して要求できるかを設定します。 デフォルトは 50 です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_fhremove_request_window 50
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-gfs_proto_replication_request_window \fI同時処理数\fR
-.RS 4
-gfmd 主導の複製処理を、gfmd から複製作成側の gfsd に対して、 同時にいくつまで並行して要求できるかを設定します。 デフォルトは 20 です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	gfs_proto_replication_request_window 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 simultaneous_replication_receivers \fI同時処理数\fR
 .RS 4
-gfarm\-2\&.6 以降では、 このパラメータは gfs_proto_replication_request_window と同じ意味となりますので、 そちらを利用してください。 このパラメータは以前のバージョンとの互換性のために残されています。 デフォルトは 20です。
+gfmd 主導の複製処理を、単一複製作成ホストに対して、 同時にいくつまで並行して行なうことを許すかを設定します。 デフォルトは 20です。
 .sp
 例:
 .sp
@@ -1109,24 +1097,7 @@ gfarm\-2\&.6 以降では、 このパラメータは gfs_proto_replication_requ
 .RS 4
 .\}
 .nf
-	simultaneous_replication_receivers 20
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-outstanding_file_replication_limit \fI同時処理数\fR
-.RS 4
-gfmd 主導の複製処理要求を、システム全体で、 同時にいくつまで未了のまま保持しておけるかを設定します。 このパラメータは、大量の複製要求によるメモリ不足を防ぐために存在します。 デフォルトは 4194304 であり、これはおよそ 512MB のメモリに対応します。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	outstanding_file_replication_limit 4194304
+	simultaneous_replication_receivers 40
 .fi
 .if n \{\
 .RE
@@ -1222,23 +1193,6 @@ gfarmライブラリが属性をキャッシュしている時間を、ミリ秒
 .\}
 .RE
 .PP
-page_cache_timeout \fIミリ秒数\fR
-.RS 4
-gfarmカーネルドライバにのみ関連する値で、ファイルデータを キャッシュしている時間を、ミリ秒単位で指定します。 デフォルトは 1000ミリ秒すなわち 1秒です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	page_cache_timeout 3600000
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 log_level \fI優先度レベル\fR
 .RS 4
 どの優先度レベル以上のログを出力するかを指定します。 ここで指定したレベル未満の優先度のログは、syslogや標準エラーへ 送られません。 レベルは、優先度の高い順に"emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"です。 デフォルトの出力レベルは"info"です。 "crit"以上の優先度を指定することは、お勧めできません。
@@ -1315,6 +1269,7 @@ fatal_action \fI動作名\fR
 \fIbacktrace_and_abort\fR
 です。
 .sp
+
 例:
 .sp
 .if n \{\
@@ -1345,12 +1300,14 @@ backtrace_and_exit
 .PP
 abort
 .RS 4
+
 \fBabort\fR(3)
 を呼びます。
 .RE
 .PP
 exit
 .RS 4
+
 \fBexit\fR(3)
 を呼びます。
 .RE
@@ -1559,6 +1516,8 @@ metadb_server_force_slave \fI有効性\fR
 .RS 4
 enable のとき、デフォルトのマスターgfmdとして設定されている場合でも、スレーブgfmdとして起動します。 デフォルトはdisableです。
 .sp
+注意: この機能の実装は不完全ですので、今のところ、利用しないでください。
+.sp
 この文はgfmd\&.confのみで有効です。
 .sp
 例:
@@ -1568,27 +1527,6 @@ enable のとき、デフォルトのマスターgfmdとして設定されてい
 .\}
 .nf
 	metadb_server_force_slave enable
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-metadb_server_slave_listen \fI有効性\fR
-.RS 4
-enable のとき、スレーブgfmdとして設定されている場合でも、クライアントからの要求を受け付けます。 デフォルトはdisableです。
-.sp
-注意: この機能は開発用に用意されていますので、通常の用途では設定しないでください。
-.sp
-この文はgfmd\&.confのみで有効です。
-.sp
-例:
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-	metadb_server_slave_listen enable
 .fi
 .if n \{\
 .RE
@@ -1764,6 +1702,7 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 	<spool_server_cred_service_statement> |
 	<spool_server_cred_name_statement> |
 	<spool_check_level_statement> |
+	<spool_base_load_statement> |
 	<metadb_server_host_statement> |
 	<metadb_server_port_statement> |
 	<metadb_server_cred_type_statement> |
@@ -1788,6 +1727,7 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 	<postgresql_password_statement> |
 	<postgresql_conninfo_statement> |
 	<auth_statement> |
+	<shared_key_file_statement> |
 
 	<sockopt_statement> |
 
@@ -1812,16 +1752,12 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 	<write_local_priority_statement> |
 	<write_target_domain_statement> |
 	<minimum_free_disk_space_statement> |
-	<gfs_proto_fhremove_request_window_statement> |
-	<gfs_proto_replication_request_window_statement> |
 	<simultaneous_replication_receivers_statement> |
-	<outstanding_file_replication_limit_statement> |
 	<gfsd_connection_cache_statement> |
 	<xmlattr_size_limit_statement> |
 	<xattr_size_limit_statement> |
 	<attr_cache_limit_statement> |
 	<attr_cache_timeout_statement> |
-	<page_cache_timeout_statement> |
 	<log_level_statement> |
 	<log_message_verbose_level_statement> |
 	<log_auth_verbose_statement> |
@@ -1838,7 +1774,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 	<synchronous_replication_timeout_statement> |
 	<synchronous_journaling_statement> |
 	<metadb_server_force_slave_statement> |
-	<metadb_server_slave_listen_statement> |
 	<metadb_server_slave_max_size_statement> |
 	<metadb_journal_dir_statement> |
 	<metadb_journal_max_size_statement> |
@@ -1945,6 +1880,20 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "spool_check_level" <spck_level>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+<spool_base_load_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"spool_base_load" <load>
 .fi
 .if n \{\
 .RE
@@ -2315,6 +2264,20 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .RE
 .PP
+<shared_key_file_statement> ::=
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+"shared_key_file" <pathname>
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
 <sockopt_statement> ::=
 .RS 4
 .sp
@@ -2626,34 +2589,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .RE
 .PP
-<gfs_proto_fhremove_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_fhremove_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<gfs_proto_replication_request_window_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"gfs_proto_replication_request_window" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
 <simultaneous_replication_receivers_statement> ::=
 .RS 4
 .sp
@@ -2662,20 +2597,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "simultaneous_replication_receivers" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<outstanding_file_replication_limit_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"outstanding_file_replication_limit" <number>
 .fi
 .if n \{\
 .RE
@@ -2746,20 +2667,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "attr_cache_timeout" <number>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<page_cache_timeout_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"page_cache_timeout" <number>
 .fi
 .if n \{\
 .RE
@@ -3013,20 +2920,6 @@ gfarm2\&.confの文法をBNFで記述すると、下記のようになります�
 .\}
 .nf
 "metadb_server_force_slave" <validity>
-.fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-<metadb_server_slave_listen_statement> ::=
-.RS 4
-.sp
-.if n \{\
-.RS 4
-.\}
-.nf
-"metadb_server_slave_listen" <validity>
 .fi
 .if n \{\
 .RE
@@ -3474,6 +3367,7 @@ $HOME/\&.gfarm2rc
 .RE
 .SH "SEE ALSO"
 .PP
+
 \fBgfmd\fR(8),
 \fBgfsd\fR(8),
 \fBsetsockopt\fR(2)
