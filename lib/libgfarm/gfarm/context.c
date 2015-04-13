@@ -70,6 +70,14 @@ static const struct gfarm_context_module_entry module_entries[] = {
 		gfarm_gfs_pio_section_static_term
 	},
 	{
+		gfarm_gfs_pio_local_static_init,
+		gfarm_gfs_pio_local_static_term
+	},
+	{
+		gfarm_gfs_pio_remote_static_init,
+		gfarm_gfs_pio_remote_static_term
+	},
+	{
 		gfarm_gfs_stat_static_init,
 		gfarm_gfs_stat_static_term
 	},
@@ -114,6 +122,7 @@ gfarm_context_init(void)
 	ctxp->log_level = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->no_file_system_node_timeout = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->gfmd_reconnection_timeout = GFARM_CONFIG_MISC_DEFAULT;
+	ctxp->gfsd_connection_timeout = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->attr_cache_limit = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->attr_cache_timeout = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->page_cache_timeout = GFARM_CONFIG_MISC_DEFAULT;
@@ -128,8 +137,10 @@ gfarm_context_init(void)
 	ctxp->schedule_rtt_thresh_diff = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->schedule_write_target_domain = NULL;
 	ctxp->schedule_write_local_priority = GFARM_CONFIG_MISC_DEFAULT;
+	ctxp->direct_local_access = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->gfsd_connection_cache = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->gfmd_connection_cache = GFARM_CONFIG_MISC_DEFAULT;
+	ctxp->client_digest_check = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->client_file_bufsize = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->client_parallel_copy = GFARM_CONFIG_MISC_DEFAULT;
 	ctxp->network_receive_timeout = GFARM_CONFIG_MISC_DEFAULT;

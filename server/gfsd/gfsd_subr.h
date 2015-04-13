@@ -12,8 +12,10 @@ int getloadavg(double *, int);
 
 int gfsd_statfs(char *, gfarm_int32_t *,
 	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *,
-	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *);
+	gfarm_off_t *, gfarm_off_t *, gfarm_off_t *,
+	int *);
 
+gfarm_error_t register_to_lost_found(int, int, gfarm_ino_t, gfarm_uint64_t);
 void gfsd_spool_check();
 
 #define fatal_metadb_proto(msg_no, diag, proto, e) \
@@ -32,3 +34,5 @@ void fatal_full(int, const char *, int, const char *,
 
 void gfsd_local_path(gfarm_ino_t, gfarm_uint64_t, const char *, char **);
 int gfsd_create_ancestor_dir(char *);
+gfarm_error_t gfsd_copy_file(int, char *);
+gfarm_error_t gfm_client_replica_lost(gfarm_ino_t, gfarm_uint64_t);
