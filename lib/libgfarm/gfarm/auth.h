@@ -17,11 +17,8 @@ enum gfarm_auth_id_type {
 
 enum gfarm_auth_method {
 	GFARM_AUTH_METHOD_NONE, /* never used */
-	GFARM_AUTH_METHOD_SHAREDSECRET_V2, /* used until gfarm v2 */
-	GFARM_AUTH_METHOD_GSI_OLD, /* not supported since 2003/07/09 */
-	GFARM_AUTH_METHOD_GSI_V2, /* used until gfarm v2 */
-	GFARM_AUTH_METHOD_GSI_AUTH_V2, /* used until gfarm v2 */
 	GFARM_AUTH_METHOD_SHAREDSECRET,
+	GFARM_AUTH_METHOD_GSI_OLD, /* not supported since 2003/07/09 */
 	GFARM_AUTH_METHOD_GSI,
 	GFARM_AUTH_METHOD_GSI_AUTH,
 
@@ -80,10 +77,6 @@ void gfarm_gsi_client_finalize(void);
 #define GFARM_IS_AUTH_GSI(auth) \
 	(((auth) == GFARM_AUTH_METHOD_GSI) || \
 	 ((auth) == GFARM_AUTH_METHOD_GSI_AUTH))
-
-/* privilege mutex */
-void gfarm_auth_privilege_lock(const char *);
-void gfarm_auth_privilege_unlock(const char *);
 
 /* auth_client */
 

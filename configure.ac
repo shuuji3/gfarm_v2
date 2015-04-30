@@ -1,5 +1,5 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT
+AC_INIT([gfarm], [2.6.4])
 AC_CONFIG_SRCDIR(RELNOTES)
 AC_CONFIG_AUX_DIR(makes)
 AC_CONFIG_HEADER(include/gfarm/gfarm_config.h)
@@ -35,6 +35,7 @@ if test x"$GCC" = x"yes"; then # CFLAGS='-g -O2'
 else # CFLAGS='-g'
   CFLAGS="-O" # don't use -g, but use -O
 fi
+AC_OPENMP
 
 # Check whether gcc accepts '-rdynamic' option
 # This check is performed for backtrace_symbols() function of glibc.
@@ -499,7 +500,7 @@ yes)
     ])
 
   # Checks for library functions with pthread enabled
-  AC_CHECK_FUNCS(pthread_barrier_wait)
+  AC_CHECK_FUNCS(pthread_barrier_wait pthread_mutex_timedlock)
 
   CPPFLAGS="$CPPFLAGS_SAVE"
   LIBS="$LIBS_SAVE"
@@ -995,7 +996,7 @@ fi
 ###### Checks for library functions.
 ######
 
-AC_CHECK_FUNCS(clock_gettime getdents fdatasync fdopendir poll pread pwrite snprintf getpassphrase mkdtemp setlogin strtoll strtoq setrlimit daemon getloadavg statvfs statfs random getifaddrs getopt_long backtrace_symbols utimensat)
+AC_CHECK_FUNCS(clock_gettime getdents fdatasync fdopendir poll pread pwrite snprintf getpassphrase mkdtemp setlogin sigtimedwait strtoll strtoq setrlimit daemon getloadavg statvfs statfs random getifaddrs getopt_long backtrace_symbols utimensat)
 
 ### Check epoll_create really implemented
 

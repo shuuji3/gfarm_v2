@@ -29,6 +29,7 @@
 #include "gfutil.h"
 #include "hash.h"
 #include "lru_cache.h"
+#include "msgdigest.h"
 
 #include "context.h"
 #include "liberror.h"
@@ -146,6 +147,14 @@ char *
 gfarm_config_get_filename(void)
 {
 	return (staticp->config_file);
+}
+
+const char *
+gfarm_version(void)
+{
+	const static char ver[] = PACKAGE_VERSION;
+
+	return (ver);
 }
 
 /* XXX move actual function definition here */
@@ -330,7 +339,7 @@ local_ug_maps_enter(const char *hostname, int port, int is_user,
 		}
 	}
 	/* for gfskd, linux helper daemon */
-	if(gfarm_ug_maps_notify){
+	if (gfarm_ug_maps_notify) {
 		gfarm_ug_maps_notify(hostname, port, is_user, s);
 	}
 
@@ -481,8 +490,7 @@ finish:
 	if (map != NULL)
 		fclose(map);
 	if (e != GFARM_ERR_NO_ERROR) {
-		if (*to_p != NULL)
-			free(*to_p);
+		free(*to_p);
 		gflog_error(GFARM_MSG_1000010,
 		    "%s line %d: %s", mapfile, lineno,
 		    gfarm_error_string(e));
@@ -797,7 +805,7 @@ gfarm_get_local_homedir(void)
 gfarm_error_t
 gfarm_set_local_user_for_this_local_account(void)
 {
-	return gfarm_set_local_user_for_this_uid(geteuid());
+	return (gfarm_set_local_user_for_this_uid(geteuid()));
 }
 gfarm_error_t
 gfarm_set_local_user_for_this_uid(uid_t uid)
@@ -851,6 +859,10 @@ static struct {
 static enum gfarm_spool_check_level gfarm_spool_check_level =
 	GFARM_SPOOL_CHECK_LEVEL_DEFAULT;
 static const char *gfarm_spool_check_level_name = NULL;
+#define GFARM_SPOOL_BASE_LOAD_DEFAULT	0.0F
+float gfarm_spool_base_load = GFARM_CONFIG_MISC_DEFAULT;
+#define GFARM_SPOOL_DIGEST_ERROR_CHECK_DEFAULT	1 /* enable */
+int gfarm_spool_digest_error_check = GFARM_CONFIG_MISC_DEFAULT;
 
 /* GFM dependent */
 enum gfarm_backend_db_type gfarm_backend_db_type =
@@ -893,13 +905,14 @@ char *gfarm_localfs_datadir = NULL;
 /* IO statistics */
 char *gfarm_iostat_gfmd_path;
 char *gfarm_iostat_gfsd_path;
-int	gfarm_iostat_max_client = GFARM_CONFIG_MISC_DEFAULT;
+int gfarm_iostat_max_client = GFARM_CONFIG_MISC_DEFAULT;
 #define GFARM_IOSTAT_MAX_CLIENT 1024
 
 /* miscellaneous */
 #define GFARM_LOG_MESSAGE_VERBOSE_DEFAULT	0
 #define GFARM_NO_FILE_SYSTEM_NODE_TIMEOUT_DEFAULT 30 /* 30 seconds */
 #define GFARM_GFMD_RECONNECTION_TIMEOUT_DEFAULT 30 /* 30 seconds */
+#define GFARM_GFSD_CONNECTION_TIMEOUT_DEFAULT 30 /* 30 seconds */
 #define GFARM_ATTR_CACHE_LIMIT_DEFAULT		40000 /* 40,000 entries */
 #define GFARM_ATTR_CACHE_TIMEOUT_DEFAULT	1000 /* 1,000 milli second */
 #define GFARM_PAGE_CACHE_TIMEOUT_DEFAULT	1000 /* 1,000 milli second */
@@ -913,16 +926,13 @@ int	gfarm_iostat_max_client = GFARM_CONFIG_MISC_DEFAULT;
 #define GFARM_SCHEDULE_RTT_THRESH_RATIO_DEFAULT	4000 /* 4.0 * F2LL_SCALE */
 #define GFARM_SCHEDULE_RTT_THRESH_DIFF_DEFAULT	1000 /* 1000 micro second */
 #define GFARM_SCHEDULE_WRITE_LOCAL_PRIORITY_DEFAULT 1 /* enable */
-#define GFARM_MINIMUM_FREE_DISK_SPACE_DEFAULT	(128 * 1024 * 1024) /* 128MB */
-#ifdef not_def_REPLY_QUEUE
-#define GFM_PROTO_REPLY_TO_GFSD_WINDOW_DEFAULT			200
-#endif
-#define GFS_PROTO_FHREMOVE_REQUEST_WINDOW_DEFAULT		50
-#define GFS_PROTO_REPLICATION_REQUEST_WINDOW_DEFAULT		20
-#define GFARM_OUTSTANDING_FILE_REPLICATION_LIMIT_DEFAULT	4194304 /* 512MB / (sizeof(file_replication), i.e. 128B) */
+#define GFARM_MINIMUM_FREE_DISK_SPACE_DEFAULT	(512 * 1024 * 1024) /* 512MB */
+#define GFARM_DIRECT_LOCAL_ACCESS_DEFAULT	1 /* enable */
+#define GFARM_SIMULTANEOUS_REPLICATION_RECEIVERS_DEFAULT	20
 #define GFARM_GFSD_CONNECTION_CACHE_DEFAULT 16 /* 16 free connections */
 #define GFARM_GFMD_CONNECTION_CACHE_DEFAULT  8 /*  8 free connections */
 #define GFARM_METADB_MAX_DESCRIPTORS_DEFAULT	(2*65536)
+#define GFARM_CLIENT_DIGEST_CHECK_DEFAULT	0
 #define GFARM_CLIENT_FILE_BUFSIZE_DEFAULT	(1024 * 1024)
 #define GFARM_CLIENT_PARALLEL_COPY_DEFAULT	4
 #define GFARM_PROFILE_DEFAULT 0 /* disable */
@@ -931,9 +941,9 @@ int	gfarm_iostat_max_client = GFARM_CONFIG_MISC_DEFAULT;
 #define GFARM_JOURNAL_RECVQ_SIZE_DEFAULT	100000
 #define GFARM_JOURNAL_SYNC_FILE_DEFAULT		1
 #define GFARM_JOURNAL_SYNC_SLAVE_TIMEOUT_DEFAULT 10 /* 10 second */
+#define GFARM_METADB_SERVER_SLAVE_REPLICATION_TIMEOUT_DEFAULT 120 /* 120 sec */
 #define GFARM_METADB_SERVER_SLAVE_MAX_SIZE_DEFAULT	16
 #define GFARM_METADB_SERVER_FORCE_SLAVE_DEFAULT		0
-#define GFARM_METADB_SERVER_SLAVE_LISTEN_DEFAULT	0
 #define GFARM_NETWORK_RECEIVE_TIMEOUT_DEFAULT  60 /* 60 seconds */
 #define GFARM_FILE_TRACE_DEFAULT 0 /* disable */
 #define GFARM_FATAL_ACTION_DEFAULT GFLOG_FATAL_ACTION_ABORT_BACKTRACE
@@ -941,12 +951,9 @@ int	gfarm_iostat_max_client = GFARM_CONFIG_MISC_DEFAULT;
 #define GFARM_REPLICA_CHECK_HOST_DOWN_THRESH_DEFAULT 10800 /* 3 hours */
 #define GFARM_REPLICA_CHECK_SLEEP_TIME_DEFAULT 100000 /* nanosec. */
 #define GFARM_REPLICA_CHECK_MINIMUM_INTERVAL_DEFAULT 10 /* 10 sec. */
-#ifdef not_def_REPLY_QUEUE
-int gfm_proto_reply_to_gfsd_window = GFARM_CONFIG_MISC_DEFAULT;
-#endif
-int gfs_proto_fhremove_request_window = GFARM_CONFIG_MISC_DEFAULT;
-int gfs_proto_replication_request_window = GFARM_CONFIG_MISC_DEFAULT;
-int gfarm_outstanding_file_replication_limit = GFARM_CONFIG_MISC_DEFAULT;
+
+char *gfarm_digest = NULL;
+int gfarm_simultaneous_replication_receivers = GFARM_CONFIG_MISC_DEFAULT;
 int gfarm_xattr_size_limit = GFARM_CONFIG_MISC_DEFAULT;
 int gfarm_xmlattr_size_limit = GFARM_CONFIG_MISC_DEFAULT;
 int gfarm_metadb_max_descriptors = GFARM_CONFIG_MISC_DEFAULT;
@@ -961,9 +968,9 @@ static int journal_max_size = GFARM_CONFIG_MISC_DEFAULT;
 static int journal_recvq_size = GFARM_CONFIG_MISC_DEFAULT;
 static int journal_sync_file = GFARM_CONFIG_MISC_DEFAULT;
 static int journal_sync_slave_timeout = GFARM_CONFIG_MISC_DEFAULT;
+static int metadb_server_slave_replication_timeout = GFARM_CONFIG_MISC_DEFAULT;
 static int metadb_server_slave_max_size = GFARM_CONFIG_MISC_DEFAULT;
 static int metadb_server_force_slave = GFARM_CONFIG_MISC_DEFAULT;
-static int metadb_server_slave_listen = GFARM_CONFIG_MISC_DEFAULT;
 int gfarm_replica_check = GFARM_CONFIG_MISC_DEFAULT;
 int gfarm_replica_check_host_down_thresh = GFARM_CONFIG_MISC_DEFAULT;
 int gfarm_replica_check_sleep_time = GFARM_CONFIG_MISC_DEFAULT;
@@ -1238,6 +1245,12 @@ gfarm_get_journal_sync_slave_timeout(void)
 }
 
 int
+gfarm_get_metadb_server_slave_replication_timeout(void)
+{
+	return (metadb_server_slave_replication_timeout);
+}
+
+int
 gfarm_get_metadb_server_slave_max_size(void)
 {
 	return (metadb_server_slave_max_size);
@@ -1253,12 +1266,6 @@ void
 gfarm_set_metadb_server_force_slave(int slave)
 {
 	metadb_server_force_slave = slave;
-}
-
-int
-gfarm_get_metadb_server_slave_listen(void)
-{
-	return (metadb_server_slave_listen);
 }
 
 char *
@@ -1582,7 +1589,7 @@ parse_auth_arguments(char *p, char **op)
 	}
 	return (e);
 #else /* __KERNEL__ */
-	return GFARM_ERR_NO_ERROR;
+	return (GFARM_ERR_NO_ERROR);
 #endif /* __KERNEL__ */
 }
 
@@ -2043,7 +2050,7 @@ parse_set_misc_int(char *p, int *vp)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-#if 0
+/* client cannot use this */
 static gfarm_error_t
 parse_set_misc_float(char *p, float *vp)
 {
@@ -2068,11 +2075,10 @@ parse_set_misc_float(char *p, float *vp)
 		return (GFARM_ERRMSG_INVALID_CHARACTER);
 	*vp = (float)v;
 #else /* __KERNEL__ */
-	gflog_warning(GFARM_MSG_UNFIXED, "floating %s is ignored", p);
+	gflog_warning(GFARM_MSG_1003862, "floating %s is ignored", p);
 #endif /* __KERNEL__ */
 	return (GFARM_ERR_NO_ERROR);
 }
-#endif
 
 static gfarm_error_t
 parse_set_misc_offset(char *p, gfarm_off_t *vp)
@@ -2252,6 +2258,24 @@ parse_cred_config(char *p, char *service,
 	}
 
 	return ((*set)(service, s));
+}
+
+static gfarm_error_t
+parse_digest_type(char *p, char **rv)
+{
+	gfarm_error_t e = parse_set_var(p, rv);
+
+	if (e != GFARM_ERR_NO_ERROR)
+		return (e);
+
+	if (!gfarm_msgdigest_name_verify(*rv)) {
+		/* XXX this leaves `*rv' as is */
+		gflog_debug(GFARM_MSG_1003863,
+		    "invalid digest type <%s>", *rv);
+		return (GFARM_ERRMSG_INVALID_DIGEST_TYPE);
+	}
+
+	return (GFARM_ERR_NO_ERROR);
 }
 
 static gfarm_error_t
@@ -2743,6 +2767,10 @@ parse_one_line(char *s, char *p, char **op)
 		    gfarm_auth_server_cred_name_set);
 	} else if (strcmp(s, o = "spool_check_level") == 0) {
 		e = parse_spool_check_level(p);
+	} else if (strcmp(s, o = "spool_base_load") == 0) {
+		e = parse_set_misc_float(p, &gfarm_spool_base_load);
+	} else if (strcmp(s, o = "spool_digest_error_check") == 0) {
+		e = parse_set_misc_enabled(p, &gfarm_spool_digest_error_check);
 
 	} else if (strcmp(s, o = "metadb_server_host") == 0) {
 		e = parse_set_var(p, &gfarm_ctxp->metadb_server_name);
@@ -2861,6 +2889,8 @@ parse_one_line(char *s, char *p, char **op)
 		e = parse_client_architecture(p, &o);
 #endif
 
+	} else if (strcmp(s, o = "digest") == 0) {
+		e = parse_digest_type(p, &gfarm_digest);
 	} else if (strcmp(s, o = "log_level") == 0) {
 		e = parse_log_level(p, &gfarm_ctxp->log_level);
 	} else if (strcmp(s, o = "log_message_verbose_level") == 0) {
@@ -2868,7 +2898,7 @@ parse_one_line(char *s, char *p, char **op)
 		if (e == GFARM_ERR_NO_ERROR)
 			gflog_set_message_verbose(staticp->log_message_verbose);
 	} else if (strcmp(s, o = "log_auth_verbose") == 0) {
-		int tmp;
+		int tmp = GFARM_CONFIG_MISC_DEFAULT;
 		e = parse_set_misc_enabled(p, &tmp);
 		if (e == GFARM_ERR_NO_ERROR)
 			gflog_auth_set_verbose(tmp);
@@ -2878,6 +2908,9 @@ parse_one_line(char *s, char *p, char **op)
 	} else if (strcmp(s, o = "gfmd_reconnection_timeout") == 0) {
 		e = parse_set_misc_int(
 		    p, &gfarm_ctxp->gfmd_reconnection_timeout);
+	} else if (strcmp(s, o = "gfsd_connection_timeout") == 0) {
+		e = parse_set_misc_int(
+		    p, &gfarm_ctxp->gfsd_connection_timeout);
 	} else if (strcmp(s, o = "attr_cache_limit") == 0) {
 		e = parse_set_misc_int(p, &gfarm_ctxp->attr_cache_limit);
 	} else if (strcmp(s, o = "attr_cache_timeout") == 0) {
@@ -2918,23 +2951,14 @@ parse_one_line(char *s, char *p, char **op)
 	} else if (strcmp(s, o = "write_target_domain") == 0) {
 		e = parse_set_var(p, &gfarm_ctxp->schedule_write_target_domain);
 	} else if (strcmp(s, o = "minimum_free_disk_space") == 0) {
-		e = parse_set_misc_offset(p, &staticp->minimum_free_disk_space);
-#ifdef not_def_REPLY_QUEUE
-	} else if (strcmp(s, o = "gfm_proto_reply_to_gfsd_window") == 0) {
-		e = parse_set_misc_int(p, &gfm_proto_reply_to_gfsd_window);
-#endif
-	} else if (strcmp(s, o = "gfs_proto_fhremove_request_window") == 0) {
-		e = parse_set_misc_int(p, &gfs_proto_fhremove_request_window);
-	} else if (strcmp(s, o = "gfs_proto_replication_request_window") == 0) {
-		e = parse_set_misc_int(p,
-		    &gfs_proto_replication_request_window);
+		e = parse_set_misc_offset(p,
+		    &staticp->minimum_free_disk_space);
+	} else if (strcmp(s, o = "direct_local_access") == 0) {
+		e = parse_set_misc_enabled(p,
+		    &gfarm_ctxp->direct_local_access);
 	} else if (strcmp(s, o = "simultaneous_replication_receivers") == 0) {
-		/* old name. for compatibility */
 		e = parse_set_misc_int(p,
-		    &gfs_proto_replication_request_window);
-	} else if (strcmp(s, o = "outstanding_file_replication_limit") == 0) {
-		e = parse_set_misc_int(p,
-		    &gfarm_outstanding_file_replication_limit);
+		    &gfarm_simultaneous_replication_receivers);
 	} else if (strcmp(s, o = "gfsd_connection_cache") == 0) {
 		e = parse_set_misc_int(p, &gfarm_ctxp->gfsd_connection_cache);
 	} else if (strcmp(s, o = "gfmd_connection_cache") == 0) {
@@ -2973,11 +2997,13 @@ parse_one_line(char *s, char *p, char **op)
 			gfarm_atime_type_set(GFARM_ATIME_DISABLE);
 	} else if (strcmp(s, o = "atime") == 0) {
 		e = parse_atime_type(p);
+	} else if (strcmp(s, o = "client_digest_check") == 0) {
+		e = parse_set_misc_enabled(p,
+		    &gfarm_ctxp->client_digest_check);
 	} else if (strcmp(s, o = "client_file_bufsize") == 0) {
 		e = parse_set_misc_int(p, &gfarm_ctxp->client_file_bufsize);
 	} else if (strcmp(s, o = "client_parallel_copy") == 0) {
-		e = parse_set_misc_int(p,
-		    &gfarm_ctxp->client_parallel_copy);
+		e = parse_set_misc_int(p, &gfarm_ctxp->client_parallel_copy);
 	} else if (strcmp(s, o = "profile") == 0) {
 		e = parse_profile(p, &staticp->profile);
 	} else if (strcmp(s, o = "iostat_gfmd_path") == 0) {
@@ -2998,12 +3024,14 @@ parse_one_line(char *s, char *p, char **op)
 		e = parse_set_misc_enabled(p, &journal_sync_file);
 	} else if (strcmp(s, o = "synchronous_replication_timeout") == 0) {
 		e = parse_set_misc_int(p, &journal_sync_slave_timeout);
+	} else if (strcmp(s, o = "metadb_server_slave_replication_timeout")
+	    == 0) {
+		e = parse_set_misc_int(p,
+		    &metadb_server_slave_replication_timeout);
 	} else if (strcmp(s, o = "metadb_server_slave_max_size") == 0) {
 		e = parse_set_misc_int(p, &metadb_server_slave_max_size);
 	} else if (strcmp(s, o = "metadb_server_force_slave") == 0) {
 		e = parse_set_misc_enabled(p, &metadb_server_force_slave);
-	} else if (strcmp(s, o = "metadb_server_slave_listen") == 0) {
-		e = parse_set_misc_enabled(p, &metadb_server_slave_listen);
 	} else if (strcmp(s, o = "network_receive_timeout") == 0) {
 		e = parse_set_misc_int(p, &gfarm_ctxp->network_receive_timeout);
 	} else if (strcmp(s, o = "file_trace") == 0) {
@@ -3090,7 +3118,7 @@ void
 gfarm_config_set_default_ports(void)
 {
 	if (gfarm_ctxp->metadb_server_name == NULL)
-		gflog_fatal(GFARM_MSG_UNFIXED,
+		gflog_fatal(GFARM_MSG_1003864,
 		    "metadb_server_host isn't specified in "
 		    GFARM_CONFIG " file");
 
@@ -3149,7 +3177,6 @@ gfarm_config_set_default_metadb_server(void)
 		    "%s", gfarm_error_string(e));
 		return (e);
 	}
-
 	if ((e = gfarm_metadb_server_new(&m, host,
 	    gfarm_ctxp->metadb_server_port)) != GFARM_ERR_NO_ERROR) {
 		free(host);
@@ -3172,6 +3199,11 @@ gfarm_config_set_default_misc(void)
 	if (gfarm_spool_check_level == GFARM_SPOOL_CHECK_LEVEL_DEFAULT)
 		(void)gfarm_spool_check_level_set(
 			GFARM_SPOOL_CHECK_LEVEL_LOST_FOUND);
+	if (gfarm_spool_base_load == GFARM_CONFIG_MISC_DEFAULT)
+		gfarm_spool_base_load = GFARM_SPOOL_BASE_LOAD_DEFAULT;
+	if (gfarm_spool_digest_error_check == GFARM_CONFIG_MISC_DEFAULT)
+		gfarm_spool_digest_error_check =
+		    GFARM_SPOOL_DIGEST_ERROR_CHECK_DEFAULT;
 
 	if (gfarm_spool_server_listen_backlog == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_spool_server_listen_backlog = LISTEN_BACKLOG_DEFAULT;
@@ -3193,6 +3225,9 @@ gfarm_config_set_default_misc(void)
 	if (gfarm_ctxp->gfmd_reconnection_timeout == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_ctxp->gfmd_reconnection_timeout =
 		    GFARM_GFMD_RECONNECTION_TIMEOUT_DEFAULT;
+	if (gfarm_ctxp->gfsd_connection_timeout == GFARM_CONFIG_MISC_DEFAULT)
+		gfarm_ctxp->gfsd_connection_timeout =
+		    GFARM_GFSD_CONNECTION_TIMEOUT_DEFAULT;
 	if (gfarm_ctxp->attr_cache_limit == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_ctxp->attr_cache_limit = GFARM_ATTR_CACHE_LIMIT_DEFAULT;
 	if (gfarm_ctxp->attr_cache_timeout == GFARM_CONFIG_MISC_DEFAULT)
@@ -3200,7 +3235,7 @@ gfarm_config_set_default_misc(void)
 		    GFARM_ATTR_CACHE_TIMEOUT_DEFAULT;
 	if (gfarm_ctxp->page_cache_timeout == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_ctxp->page_cache_timeout =
-				GFARM_PAGE_CACHE_TIMEOUT_DEFAULT;
+		    GFARM_PAGE_CACHE_TIMEOUT_DEFAULT;
 	if (gfarm_ctxp->schedule_cache_timeout == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_ctxp->schedule_cache_timeout =
 		    GFARM_SCHEDULE_CACHE_TIMEOUT_DEFAULT;
@@ -3236,21 +3271,13 @@ gfarm_config_set_default_misc(void)
 	if (staticp->minimum_free_disk_space == GFARM_CONFIG_MISC_DEFAULT)
 		staticp->minimum_free_disk_space =
 		    GFARM_MINIMUM_FREE_DISK_SPACE_DEFAULT;
-#ifdef not_def_REPLY_QUEUE
-	if (gfm_proto_reply_to_gfsd_window == GFARM_CONFIG_MISC_DEFAULT)
-		gfm_proto_reply_to_gfsd_window =
-		    GFM_PROTO_REPLY_TO_GFSD_WINDOW_DEFAULT;
-#endif
-	if (gfs_proto_fhremove_request_window == GFARM_CONFIG_MISC_DEFAULT)
-		gfs_proto_fhremove_request_window =
-		    GFS_PROTO_FHREMOVE_REQUEST_WINDOW_DEFAULT;
-	if (gfs_proto_replication_request_window == GFARM_CONFIG_MISC_DEFAULT)
-		gfs_proto_replication_request_window =
-		    GFS_PROTO_REPLICATION_REQUEST_WINDOW_DEFAULT;
-	if (gfarm_outstanding_file_replication_limit ==
+	if (gfarm_ctxp->direct_local_access == GFARM_CONFIG_MISC_DEFAULT)
+		gfarm_ctxp->direct_local_access =
+		    GFARM_DIRECT_LOCAL_ACCESS_DEFAULT;
+	if (gfarm_simultaneous_replication_receivers ==
 	    GFARM_CONFIG_MISC_DEFAULT)
-		gfarm_outstanding_file_replication_limit =
-		    GFARM_OUTSTANDING_FILE_REPLICATION_LIMIT_DEFAULT;
+		gfarm_simultaneous_replication_receivers =
+		    GFARM_SIMULTANEOUS_REPLICATION_RECEIVERS_DEFAULT;
 	if (gfarm_ctxp->gfsd_connection_cache == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_ctxp->gfsd_connection_cache =
 		    GFARM_GFSD_CONNECTION_CACHE_DEFAULT;
@@ -3279,6 +3306,9 @@ gfarm_config_set_default_misc(void)
 		gfarm_metadb_dbq_size = GFARM_METADB_DBQ_SIZE_DEFAULT;
 	if (gfarm_atime_type == GFARM_ATIME_DEFAULT)
 		(void)gfarm_atime_type_set(GFARM_ATIME_RELATIVE);
+	if (gfarm_ctxp->client_digest_check == GFARM_CONFIG_MISC_DEFAULT)
+		gfarm_ctxp->client_digest_check =
+		    GFARM_CLIENT_DIGEST_CHECK_DEFAULT;
 	if (gfarm_ctxp->client_file_bufsize == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_ctxp->client_file_bufsize =
 		    GFARM_CLIENT_FILE_BUFSIZE_DEFAULT;
@@ -3299,15 +3329,16 @@ gfarm_config_set_default_misc(void)
 	if (journal_sync_slave_timeout == GFARM_CONFIG_MISC_DEFAULT)
 		journal_sync_slave_timeout =
 		    GFARM_JOURNAL_SYNC_SLAVE_TIMEOUT_DEFAULT;
+	if (metadb_server_slave_replication_timeout ==
+	    GFARM_CONFIG_MISC_DEFAULT)
+		metadb_server_slave_replication_timeout =
+		    GFARM_METADB_SERVER_SLAVE_REPLICATION_TIMEOUT_DEFAULT;
 	if (metadb_server_slave_max_size == GFARM_CONFIG_MISC_DEFAULT)
 		metadb_server_slave_max_size =
 		    GFARM_METADB_SERVER_SLAVE_MAX_SIZE_DEFAULT;
 	if (metadb_server_force_slave == GFARM_CONFIG_MISC_DEFAULT)
 		metadb_server_force_slave =
 		    GFARM_METADB_SERVER_FORCE_SLAVE_DEFAULT;
-	if (metadb_server_slave_listen == GFARM_CONFIG_MISC_DEFAULT)
-		metadb_server_slave_listen =
-		    GFARM_METADB_SERVER_SLAVE_LISTEN_DEFAULT;
 	if (gfarm_ctxp->network_receive_timeout == GFARM_CONFIG_MISC_DEFAULT)
 		gfarm_ctxp->network_receive_timeout =
 		    GFARM_NETWORK_RECEIVE_TIMEOUT_DEFAULT;
@@ -3337,9 +3368,11 @@ gfarm_config_set_default_misc(void)
 void
 gfs_display_timers(void)
 {
-#ifndef __KERNEL__	/* gfs_display_timers :: profile */
+#ifndef __KERNEL__	/*  gfs_display_timers :: profile */
 	gfs_pio_display_timers();
 	gfs_pio_section_display_timers();
+	gfs_pio_local_display_timers();
+	gfs_pio_remote_display_timers();
 	gfs_stat_display_timers();
 	gfs_unlink_display_timers();
 	gfs_xattr_display_timers();
