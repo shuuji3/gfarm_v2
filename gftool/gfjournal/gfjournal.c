@@ -3,7 +3,6 @@
  */
 
 #include <libgen.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,15 +23,15 @@
 #include "nanosec.h"
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
+#include "context.h"
 #include "config.h"
 #include "metadb_common.h"
 #include "metadb_server.h"
 #include "xattr_info.h"
 #include "quota_info.h"
 #include "gfm_proto.h"
-
 #include "quota.h"
+
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_ops.h"
@@ -491,6 +490,7 @@ main(int argc, char **argv)
 	if (argc > 0)
 		program_name = basename(argv[0]);
 	gflog_initialize();
+	gfarm_context_init();
 
 	while ((c = getopt(argc, argv, "dhlmrv?")) != -1) {
 		switch (c) {
@@ -531,10 +531,15 @@ main(int argc, char **argv)
 		exit_code = EXIT_FAILURE;
 		goto end;
 	}
+	if (opt_max_seqnum_only) {
+		max_seqnum = journal_file_get_inital_max_seqnum(jf);
+		printf("%" GFARM_PRId64 "\n", max_seqnum);
+		goto end;
+	}
 
 	reader = journal_file_main_reader(jf);
 
-	if (opt_list && !opt_record_only && !opt_max_seqnum_only) {
+	if (opt_list && !opt_record_only) {
 		printf(
 		    "seqnum       operation              "
 		    "length  ");
@@ -549,8 +554,6 @@ main(int argc, char **argv)
 	ave_reclen = num_rec > 0 ? ave_reclen / num_rec : 0;
 	if (num_rec == 0)
 		min_seqnum = 0;
-	if (opt_max_seqnum_only)
-		printf("%" GFARM_PRId64 "\n", max_seqnum);
 	else if (!opt_record_only) {
 		if (opt_list)
 			printf("\n");
@@ -569,6 +572,7 @@ main(int argc, char **argv)
 	}
 end:
 	journal_file_close(jf);
+	gfarm_context_term();
 	gflog_terminate();
 	return (exit_code);
 }

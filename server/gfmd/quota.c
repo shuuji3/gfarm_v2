@@ -3,7 +3,6 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,10 +10,7 @@
 #include <assert.h>
 
 #include <gfarm/gfarm.h>
-
-#include "gfp_xdr.h"
 #include "auth.h"
-
 #include "peer.h"
 #include "subr.h"
 #include "rpcsubr.h"
@@ -24,8 +20,6 @@
 #include "quota.h"
 #include "quota_info.h"
 #include "db_access.h"
-#include "gfm_proto.h"
-#include "relay.h"
 
 #define QUOTA_NOT_CHECK_YET -1
 #define is_checked(q) (q->space != QUOTA_NOT_CHECK_YET ? 1 : 0)
@@ -633,8 +627,7 @@ quota_check(void)
 
 /* server operations */
 static gfarm_error_t
-quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int is_group)
+quota_get_common(struct peer *peer, int from_client, int skip, int is_group)
 {
 	const char *diag = is_group ?
 	    "GFM_PROTO_QUOTA_GROUP_GET" : "GFM_PROTO_QUOTA_USER_GET";
@@ -644,13 +637,13 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	char *name;
 	struct quota *q;
 	struct gfarm_quota_get_info qi;
-	struct relayed_request *relay;
 
-	e = gfm_server_relay_get_request(peer, sizep, skip, &relay, diag,
-	    is_group ? GFM_PROTO_QUOTA_GROUP_GET : GFM_PROTO_QUOTA_USER_GET,
-	    "s", &name);
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "s", &name);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1002053,
+			"%s request failed: %s", diag, gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(name);
 		return (GFARM_ERR_NO_ERROR);
@@ -660,93 +653,86 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		gflog_debug(GFARM_MSG_1002054,
 			    "%s: !from_client or invalid peer_user ", diag);
 		free(name);
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-		    relay, diag, &e, ""));
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
 
 	if (db_state != GFARM_ERR_NO_ERROR) {
 		free(name);
 		gflog_debug(GFARM_MSG_1002055, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-						relay, diag, &db_state, ""));
-	}
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		giant_lock();
-		if (is_group) {
-			if (strcmp(name, "") == 0)
-				e = GFARM_ERR_NO_SUCH_GROUP;
-			else if ((group = group_lookup(name)) == NULL) {
-				if (user_is_admin(peer_user))
-					e = GFARM_ERR_NO_SUCH_GROUP;
-				else  /* hidden groupnames */
-					e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			} else if ((!user_in_group(peer_user, group)) &&
-				   !user_is_admin(peer_user))
-				e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			/* user_in_group() || user_is_admin() : permit */
-		} else {
-			if (strcmp(name, "") == 0) {
-				user = peer_user; /* permit not-admin */
-				free(name);
-				name = strdup_log(user_name(peer_user), diag);
-				if (name == NULL)
-					e = GFARM_ERR_NO_MEMORY;
-			} else if (strcmp(name, user_name(peer_user)) == 0)
-				user = peer_user; /* permit not-admin */
-			else if (!user_is_admin(peer_user))
-				e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			else if ((user = user_lookup(name)) == NULL)
-				e = GFARM_ERR_NO_SUCH_USER;
-		}
-		if (e != GFARM_ERR_NO_ERROR) {
-			giant_unlock();
-			gflog_debug(GFARM_MSG_1002056,
-			    "%s: name=%s: %s", diag, name,
-			    gfarm_error_string(e));
-			free(name);
-			return (gfm_server_relay_put_reply(peer, xid,
-			    sizep, relay, diag, &e, ""));
-		}
-		if (is_group)
-			q = group_quota(group);
-		else
-			q = user_quota(user);
-		if (!is_checked(q)) { /* quota is not enabled */
-			giant_unlock();
-			gflog_debug(GFARM_MSG_1002057,
-			    "%s: %s's quota is not enabled", diag, name);
-			free(name);
-			e = GFARM_ERR_NO_SUCH_OBJECT;
-			return (gfm_server_relay_put_reply(peer, xid,
-			    sizep, relay, diag, &e, ""));
-		}
-		quota_convert_1(q, name, &qi);
-		giant_unlock();
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
-	e = gfm_server_relay_put_reply(
-			peer, xid, sizep, relay, diag, &e,
-			"slllllllllllllllll",
-			&qi.name,
-			&qi.grace_period,
-			&qi.space,
-			&qi.space_grace,
-			&qi.space_soft,
-			&qi.space_hard,
-			&qi.num,
-			&qi.num_grace,
-			&qi.num_soft,
-			&qi.num_hard,
-			&qi.phy_space,
-			&qi.phy_space_grace,
-			&qi.phy_space_soft,
-			&qi.phy_space_hard,
-			&qi.phy_num,
-			&qi.phy_num_grace,
-			&qi.phy_num_soft,
-			&qi.phy_num_hard);
+	giant_lock();
+	if (is_group) {
+		if (strcmp(name, "") == 0)
+			e = GFARM_ERR_NO_SUCH_GROUP;
+		else if ((group = group_lookup(name)) == NULL) {
+			if (user_is_admin(peer_user))
+				e = GFARM_ERR_NO_SUCH_GROUP;
+			else  /* hidden groupnames */
+				e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		} else if ((!user_in_group(peer_user, group)) &&
+			!user_is_admin(peer_user))
+			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		/* user_in_group() || user_is_admin() : permit */
+	} else {
+		if (strcmp(name, "") == 0) {
+			user = peer_user; /* permit not-admin */
+			free(name);
+			name = strdup_log(user_name(peer_user), diag);
+			if (name == NULL)
+				e = GFARM_ERR_NO_MEMORY;
+		} else if (strcmp(name, user_name(peer_user)) == 0)
+			user = peer_user; /* permit not-admin */
+		else if (!user_is_admin(peer_user))
+			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		else if ((user = user_lookup(name)) == NULL)
+			e = GFARM_ERR_NO_SUCH_USER;
+	}
+	if (e != GFARM_ERR_NO_ERROR) {
+		giant_unlock();
+		gflog_debug(GFARM_MSG_1002056,
+			    "%s: name=%s: %s", diag, name,
+			    gfarm_error_string(e));
+		free(name);
+		return (gfm_server_put_reply(peer, diag, e, ""));
+	}
+	if (is_group)
+		q = group_quota(group);
+	else
+		q = user_quota(user);
+	if (!is_checked(q)) { /* quota is not enabled */
+		giant_unlock();
+		gflog_debug(GFARM_MSG_1002057,
+			    "%s: %s's quota is not enabled", diag, name);
+		free(name);
+		e = GFARM_ERR_NO_SUCH_OBJECT;
+		return (gfm_server_put_reply(peer, diag, e, ""));
+	}
+	quota_convert_1(q, name, &qi);
+	giant_unlock();
+
+	e = gfm_server_put_reply(
+			peer, diag, e, "slllllllllllllllll",
+			qi.name,
+			qi.grace_period,
+			qi.space,
+			qi.space_grace,
+			qi.space_soft,
+			qi.space_hard,
+			qi.num,
+			qi.num_grace,
+			qi.num_soft,
+			qi.num_hard,
+			qi.phy_space,
+			qi.phy_space_grace,
+			qi.phy_space_soft,
+			qi.phy_space_hard,
+			qi.phy_num,
+			qi.phy_num_grace,
+			qi.phy_num_soft,
+			qi.phy_num_hard);
 	free(name);
 	return (e);
 }
@@ -792,8 +778,7 @@ quota_lookup(const char *name, int is_group, struct quota **qp,
 }
 
 static gfarm_error_t
-quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int is_group)
+quota_set_common(struct peer *peer, int from_client, int skip, int is_group)
 {
 	const char *diag = is_group ?
 	    "GFM_PROTO_QUOTA_GROUP_SET" : "GFM_PROTO_QUOTA_USER_SET";
@@ -801,11 +786,8 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct gfarm_quota_set_info qi;
 	struct quota *q;
 	struct user *peer_user = peer_get_user(peer);
-	struct relayed_request *relay;
 
-	e = gfm_server_relay_get_request(peer, sizep, skip, &relay, diag,
-	    is_group ? GFM_PROTO_QUOTA_GROUP_SET : GFM_PROTO_QUOTA_USER_SET,
-				   "slllllllll",
+	e = gfm_server_get_request(peer, diag, "slllllllll",
 				   &qi.name,
 				   &qi.grace_period,
 				   &qi.space_soft,
@@ -816,8 +798,11 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 				   &qi.phy_space_hard,
 				   &qi.phy_num_soft,
 				   &qi.phy_num_hard);
-	if (e != GFARM_ERR_NO_ERROR)
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1002058, "%s request failed: %s",
+			diag, gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(qi.name);
 		return (GFARM_ERR_NO_ERROR);
@@ -827,122 +812,105 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		gflog_debug(GFARM_MSG_1002059, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
 		free(qi.name);
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-						relay, diag, &db_state, ""));
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		giant_lock();
-		if (!from_client || peer_user == NULL
-				 || !user_is_admin(peer_user)) {
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			gflog_debug(GFARM_MSG_1002060,
+	giant_lock();
+	if (!from_client || peer_user == NULL || !user_is_admin(peer_user)) {
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		gflog_debug(GFARM_MSG_1002060,
 			    "%s: !from_client or invalid peer_user"
 			    " or !user_is_admin", diag);
-			goto end;
-		} else if ((e = quota_lookup(qi.name, is_group, &q, diag))
-			   != GFARM_ERR_NO_ERROR) {
-			goto end;
-		}
-
-		/* set limits */
-		set_limit(q->grace_period, qi.grace_period);
-		set_limit(q->space_soft, qi.space_soft);
-		set_limit(q->space_hard, qi.space_hard);
-		set_limit(q->num_soft, qi.num_soft);
-		set_limit(q->num_hard, qi.num_hard);
-		set_limit(q->phy_space_soft, qi.phy_space_soft);
-		set_limit(q->phy_space_hard, qi.phy_space_hard);
-		set_limit(q->phy_num_soft, qi.phy_num_soft);
-		set_limit(q->phy_num_hard, qi.phy_num_hard);
-
-		/* check softlimit and update exceeded time */
-		quota_check_softlimit_exceed(q);
-
-		if (is_group)
-			e = db_quota_group_set(q, qi.name);
-		else
-			e = db_quota_user_set(q, qi.name);
-		if (e == GFARM_ERR_NO_ERROR)
-			q->on_db = 1;
-end:
-		giant_unlock();
+		goto end;
+	} else if ((e = quota_lookup(qi.name, is_group, &q, diag))
+	    != GFARM_ERR_NO_ERROR) {
+		goto end;
 	}
+
+	/* set limits */
+	set_limit(q->grace_period, qi.grace_period);
+	set_limit(q->space_soft, qi.space_soft);
+	set_limit(q->space_hard, qi.space_hard);
+	set_limit(q->num_soft, qi.num_soft);
+	set_limit(q->num_hard, qi.num_hard);
+	set_limit(q->phy_space_soft, qi.phy_space_soft);
+	set_limit(q->phy_space_hard, qi.phy_space_hard);
+	set_limit(q->phy_num_soft, qi.phy_num_soft);
+	set_limit(q->phy_num_hard, qi.phy_num_hard);
+
+	/* check softlimit and update exceeded time */
+	quota_check_softlimit_exceed(q);
+
+	if (is_group)
+		e = db_quota_group_set(q, qi.name);
+	else
+		e = db_quota_user_set(q, qi.name);
+	if (e == GFARM_ERR_NO_ERROR)
+		q->on_db = 1;
+end:
+	giant_unlock();
 	free(qi.name);
-	return (gfm_server_relay_put_reply(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_quota_user_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_user_get(struct peer *peer, int from_client, int skip)
 {
-	return (quota_get_common(peer, xid, sizep, from_client, skip, 0));
+	return (quota_get_common(peer, from_client, skip, 0));
 }
 
 gfarm_error_t
-gfm_server_quota_user_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_user_set(struct peer *peer, int from_client, int skip)
 {
-	return (quota_set_common(peer, xid, sizep, from_client, skip, 0));
+	return (quota_set_common(peer, from_client, skip, 0));
 }
 
 gfarm_error_t
-gfm_server_quota_group_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_group_get(struct peer *peer, int from_client, int skip)
 {
-	return (quota_get_common(peer, xid, sizep, from_client, skip, 1));
+	return (quota_get_common(peer, from_client, skip, 1));
 }
 
 gfarm_error_t
-gfm_server_quota_group_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_group_set(struct peer *peer, int from_client, int skip)
 {
-	return (quota_set_common(peer, xid, sizep, from_client, skip, 1));
+	return (quota_set_common(peer, from_client, skip, 1));
 }
 
 gfarm_error_t
-gfm_server_quota_check(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_check(struct peer *peer, int from_client, int skip)
 {
 	static const char diag[] = "GFM_PROTO_QUOTA_CHECK";
 	gfarm_error_t e;
 	struct user *peer_user = peer_get_user(peer);
-	struct relayed_request *relay;
 
-	e = gfm_server_relay_get_request(peer, sizep, skip, &relay, diag,
-	    GFM_PROTO_QUOTA_CHECK, "");
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "");
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1002063,
+			"%s request failed: %s", diag, gfarm_error_string(e));
 		return (e);
+	}
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
 	if (db_state != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002064, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-						relay, diag, &db_state, ""));
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		giant_lock();
-		if (!from_client || peer_user == NULL
-				 || !user_is_admin(peer_user)) {
-			giant_unlock();
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			gflog_debug(GFARM_MSG_1002065,
+	giant_lock();
+	if (!from_client || peer_user == NULL || !user_is_admin(peer_user)) {
+		giant_unlock();
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		gflog_debug(GFARM_MSG_1002065,
 			    "%s: !from_client or invalid peer_user"
 			    " or !user_is_admin", diag);
-			return (gfm_server_relay_put_reply(peer, xid,
-			    sizep, relay, diag, &e, ""));
-		}
-		/* XXX FIXME too long giant lock */
-		quota_check();
-		giant_unlock();
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
+	/* XXX FIXME too long giant lock */
+	quota_check();
+	giant_unlock();
 
-	return (gfm_server_relay_put_reply(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
