@@ -11,7 +11,10 @@
 
 #include <gfarm/gfarm.h>
 #include <gfarm/gfarm_iostat.h>
+/* #define GFARM_NOCONTEXT */
+#ifndef GFARM_NOCONTEXT
 #include "context.h"
+#endif
 #include "iostat.h"
 
 struct gfarm_iostat_static {
@@ -20,10 +23,14 @@ struct gfarm_iostat_static {
 	struct gfarm_iostat_items	*stat_local_ip;
 	gfarm_off_t		stat_size;
 };
-#define staticp (gfarm_ctxp->iostat_static)
+
 #define is_statfile_valid(hp, sip)	\
 	(staticp && (hp = staticp->stat_hp) && (sip = staticp->stat_sip))
 
+#ifdef GFARM_NOCONTEXT
+struct gfarm_iostat_static iostat_static, *staticp;
+#else
+#define staticp (gfarm_ctxp->iostat_static)
 
 gfarm_error_t
 gfarm_iostat_static_init(struct gfarm_context *ctxp)
@@ -49,6 +56,7 @@ gfarm_iostat_static_term(struct gfarm_context *ctxp)
 
 	free(s);
 }
+#endif
 
 
 gfarm_error_t
@@ -120,8 +128,12 @@ gfarm_iostat_mmap(char *path, struct gfarm_iostat_spec *specp,
 		return (e);
 	}
 	close(fd);
+#ifdef GFARM_NOCONTEXT
+	if (!staticp)
+		staticp = &iostat_static;
+#endif
 	staticp->stat_hp = (struct gfarm_iostat_head *)addr;
-	staticp->stat_sip = (struct gfarm_iostat_items *)((char *)addr + off);
+	staticp->stat_sip = (struct gfarm_iostat_items *)((char*)addr + off);
 	staticp->stat_size = size;
 
 	return (GFARM_ERR_NO_ERROR);
@@ -129,14 +141,13 @@ gfarm_iostat_mmap(char *path, struct gfarm_iostat_spec *specp,
 void
 gfarm_iostat_sync(void)
 {
-	if (staticp && staticp->stat_hp) {
+	if (staticp && staticp->stat_hp)
 		msync(staticp->stat_hp, staticp->stat_size, MS_SYNC);
-	}
 }
 static inline struct gfarm_iostat_items *
 gfarm_iostat_find_row(struct gfarm_iostat_head *hp,
-	struct gfarm_iostat_items *sip,
-	gfarm_uint64_t id, int i, int upto, int *ind)
+	struct gfarm_iostat_items *sip, gfarm_uint64_t id, int i, int upto,
+	int *ind)
 {
 	struct gfarm_iostat_items *ip;
 	int isize = hp->s_item_size;
@@ -161,7 +172,6 @@ gfarm_iostat_clear_id(gfarm_uint64_t id, unsigned int hint)
 
 	if (!is_statfile_valid(hp, sip))
 		return;
-
 
 	ip = gfarm_iostat_find_row(hp, sip, id, hint, hp->s_rowcur, &i);
 	if (!ip && hint)
@@ -224,7 +234,7 @@ gfarm_iostat_clear_ip(struct gfarm_iostat_items *ip)
 	}
 }
 
-struct gfarm_iostat_items *
+struct gfarm_iostat_items*
 gfarm_iostat_find_space(unsigned int hint)
 {
 	int i;
@@ -246,9 +256,8 @@ gfarm_iostat_find_space(unsigned int hint)
 			hp->s_row, &i);
 		if (ip) {
 			hp->s_rowcur = i + 1;
-			if (i >= hp->s_rowmax) {
+			if (i >= hp->s_rowmax)
 				hp->s_rowmax = i + 1;
-			}
 		} else {
 			gflog_error(GFARM_MSG_1003601,
 				"gfarm_iostat_find_space(%s) small row %d",
@@ -259,7 +268,7 @@ gfarm_iostat_find_space(unsigned int hint)
 
 	return (ip);
 }
-struct gfarm_iostat_items *
+struct gfarm_iostat_items*
 gfarm_iostat_get_ip(unsigned int i)
 {
 	struct gfarm_iostat_items *ip;
@@ -278,9 +287,8 @@ gfarm_iostat_get_ip(unsigned int i)
 	ip->s_valid = i;
 	if (i >= hp->s_rowcur) {
 		hp->s_rowcur = i + 1;
-		if (i >= hp->s_rowmax) {
+		if (i >= hp->s_rowmax)
 			hp->s_rowmax = i + 1;
-		}
 	}
 	hp->s_update_sec = time(0);
 
