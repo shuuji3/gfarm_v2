@@ -41,6 +41,21 @@ gfarm_mutex_trylock(pthread_mutex_t *mutex, const char *where,
 	return (err == 0);
 }
 
+#ifdef HAVE_PTHREAD_MUTEX_TIMEDLOCK
+/* false: ETIMEDOUT */
+int
+gfarm_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *timeout,
+	const char *where, const char *what)
+{
+	int err = pthread_mutex_timedlock(mutex, timeout);
+
+	if (err != 0 && err != ETIMEDOUT)
+		gflog_fatal(GFARM_MSG_1004199, "%s: %s mutex timedlock: %s",
+		    where, what, strerror(err));
+	return (err == 0);
+}
+#endif /* HAVE_PTHREAD_MUTEX_TIMEDLOCK */
+
 void
 gfarm_mutex_unlock(pthread_mutex_t *mutex, const char *where, const char *what)
 {

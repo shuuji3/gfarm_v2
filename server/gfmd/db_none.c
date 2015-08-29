@@ -17,7 +17,6 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -25,11 +24,8 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
 #include "quota.h"
 #include "metadb_server.h"
@@ -55,6 +51,13 @@ gfarm_none_terminate(void)
 static gfarm_error_t
 gfarm_none_nop(gfarm_uint64_t seqnum, void *arg)
 {
+	return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
+}
+
+static gfarm_error_t
+gfarm_none_string_free(gfarm_uint64_t seqnum, char *arg)
+{
+	free(arg);
 	return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
 }
 
@@ -493,10 +496,12 @@ const struct db_ops db_none_ops = {
 
 	gfarm_none_filecopy_free,
 	gfarm_none_filecopy_free,
+	gfarm_none_string_free,
 	gfarm_none_filecopy_load,
 
 	gfarm_none_deadfilecopy_free,
 	gfarm_none_deadfilecopy_free,
+	gfarm_none_string_free,
 	gfarm_none_deadfilecopy_load,
 
 	gfarm_none_direntry_add,

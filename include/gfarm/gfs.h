@@ -50,6 +50,12 @@ struct gfs_stat {
 	struct gfarm_timespec st_ctimespec;
 };
 
+struct gfs_stat_cksum {
+	char *type, *cksum;
+	size_t len;
+	int flags;
+};
+
 /*
  * File/Directory operations
  */
@@ -78,7 +84,7 @@ int gfs_desc_fileno(GFS_Desc);
 #define GFARM_FILE_REPLICA_SPEC		0x00010000
 #endif
 #ifdef GFARM_INTERNAL_USE /* internal use only, never passed via protocol */
-#define GFARM_FILE_SLAVE_ONLY		0x00400000 /* used by gfmd only */
+#define GFARM_FILE_GFSD_ACCESS_REVOKED	0x00400000 /* used by gfmd only */
 #define GFARM_FILE_SYMLINK_NO_FOLLOW	0x00400000 /* used by libgfarm only */
 #define GFARM_FILE_UNBUFFERED		0x00200000
 #define GFARM_FILE_TRUNC_PENDING	0x00800000 /* used by gfmd only */
@@ -141,6 +147,7 @@ void gfs_client_connection_gc(void);
 typedef struct gfs_file *GFS_File;
 
 gfarm_error_t gfs_pio_open(const char *, int, GFS_File *);
+gfarm_error_t gfs_pio_fhopen(gfarm_ino_t, gfarm_uint64_t, int, GFS_File *);
 gfarm_error_t gfs_pio_create(const char *, int, gfarm_mode_t mode, GFS_File *);
 
 #if 0 /* not yet on Gfarm v2 */
@@ -189,6 +196,12 @@ gfarm_error_t gfs_pio_readdelim(GFS_File, char **, size_t *, size_t *,
 	const char *, size_t);
 
 gfarm_error_t gfs_pio_stat(GFS_File, struct gfs_stat *);
+gfarm_error_t gfs_pio_cksum(GFS_File, const char *, struct gfs_stat_cksum *);
+
+gfarm_error_t gfs_pio_sendfile(GFS_File, gfarm_off_t, int, gfarm_off_t,
+	gfarm_off_t, gfarm_off_t *);
+gfarm_error_t gfs_pio_recvfile(GFS_File, gfarm_off_t, int, gfarm_off_t,
+	gfarm_off_t, gfarm_off_t *);
 
 /*
  * Directory operations
@@ -213,10 +226,12 @@ int gfs_mode_to_type(gfarm_mode_t);
 typedef struct gfs_dir *GFS_Dir;
 
 gfarm_error_t gfs_opendir(const char *, GFS_Dir *);
+gfarm_error_t gfs_fhopendir(gfarm_ino_t, gfarm_uint64_t, GFS_Dir *);
 gfarm_error_t gfs_closedir(GFS_Dir);
 gfarm_error_t gfs_seekdir(GFS_Dir, gfarm_off_t);
 gfarm_error_t gfs_telldir(GFS_Dir, gfarm_off_t *);
 gfarm_error_t gfs_readdir(GFS_Dir, struct gfs_dirent **);
+gfarm_error_t gfs_fgetdirpath(GFS_Dir, char **);
 
 typedef struct gfs_dirplus *GFS_DirPlus;
 
@@ -267,6 +282,10 @@ gfarm_error_t gfs_fstat(GFS_File, struct gfs_stat *);
 gfarm_error_t gfs_stat_section(const char *, const char *, struct gfs_stat *);
 gfarm_error_t gfs_stat_index(char *, int, struct gfs_stat *);
 #endif
+gfarm_error_t gfs_stat_cksum(const char *, struct gfs_stat_cksum *);
+gfarm_error_t gfs_fstat_cksum(GFS_File, struct gfs_stat_cksum *);
+gfarm_error_t gfs_stat_cksum_free(struct gfs_stat_cksum *);
+gfarm_error_t gfs_fstat_cksum_set(GFS_File, struct gfs_stat_cksum *);
 
 gfarm_error_t gfs_access(const char *, int);
 #define GFS_F_OK	0
