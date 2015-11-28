@@ -46,11 +46,8 @@ gfarm_error_t (*gfarm_authorization_table[])(struct gfp_xdr *, int,
 	 * This table entry should be ordered by enum gfarm_auth_method.
 	 */
 	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_NONE */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_SHAREDSECRET_V2 */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_OLD */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_V2 */
-	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_AUTH_V2 */
 	gfarm_authorize_sharedsecret,	/* GFARM_AUTH_METHOD_SHAREDSECRET */
+	gfarm_authorize_panic,		/* GFARM_AUTH_METHOD_GSI_OLD */
 #ifdef HAVE_GSI
 	gfarm_authorize_gsi,		/* GFARM_AUTH_METHOD_GSI */
 	gfarm_authorize_gsi_auth,	/* GFARM_AUTH_METHOD_GSI_AUTH */
@@ -110,7 +107,7 @@ gfarm_auth_sharedsecret_giveup_response(struct gfp_xdr *conn,
 
 static gfarm_error_t
 gfarm_auth_sharedsecret_md5_response(struct gfp_xdr *conn,
-	const char *hostname, const char *global_username, 
+	const char *hostname, const char *global_username,
 	struct passwd *pwd, gfarm_int32_t *errorp)
 {
 	int eof;
@@ -154,7 +151,7 @@ gfarm_auth_sharedsecret_md5_response(struct gfp_xdr *conn,
 	if (pwd == NULL) {
 		/* *errorp should have a valid value only in this case */
 		error = *errorp;
-		gflog_debug(GFARM_MSG_UNFIXED, "Password is null (%d)",
+		gflog_debug(GFARM_MSG_1003723, "Password is null (%d)",
 		    (int)error);
 		/* already logged at gfarm_authorize_sharedsecret() */
 	} else if ((e = gfarm_auth_shared_key_get(&expire_expected,

@@ -6,6 +6,7 @@
 /* GFS dependent */
 extern int gfarm_spool_server_listen_backlog;
 extern char *gfarm_spool_server_listen_address;
+extern int gfarm_spool_server_back_channel_rcvbuf_limit;
 extern char *gfarm_spool_root;
 enum gfarm_spool_check_level {
 	GFARM_SPOOL_CHECK_LEVEL_DEFAULT,
@@ -18,6 +19,8 @@ enum gfarm_spool_check_level gfarm_spool_check_level_get(void);
 const char *gfarm_spool_check_level_get_by_name(void);
 gfarm_error_t gfarm_spool_check_level_set(enum gfarm_spool_check_level);
 gfarm_error_t gfarm_spool_check_level_set_by_name(const char *);
+extern float gfarm_spool_base_load;
+extern int gfarm_spool_digest_error_check;
 
 /* GFM dependent */
 enum gfarm_atime_type {
@@ -48,14 +51,12 @@ extern int gfarm_metadb_thread_pool_size;
 extern int gfarm_metadb_job_queue_length;
 extern int gfarm_metadb_heartbeat_interval;
 extern int gfarm_metadb_dbq_size;
-#ifdef not_def_REPLY_QUEUE
-extern int gfm_proto_reply_to_gfsd_window;
-#endif
-extern int gfs_proto_fhremove_request_window;
-extern int gfs_proto_replication_request_window;
-extern int gfarm_outstanding_file_replication_limit;
-extern int gfarm_relatime;
+extern int gfarm_metadb_server_back_channel_sndbuf_limit;
+extern int gfarm_metadb_replica_remover_by_host_sleep_time;
+extern int gfarm_metadb_replica_remover_by_host_inode_step;
 extern int gfarm_replica_check;
+extern int gfarm_replica_check_remove;
+extern int gfarm_replica_check_reduced_log;
 extern int gfarm_replica_check_host_down_thresh;
 extern int gfarm_replica_check_sleep_time;
 extern int gfarm_replica_check_minimum_interval;
@@ -100,6 +101,10 @@ extern char *gfarm_iostat_gfmd_path;
 extern char *gfarm_iostat_gfsd_path;
 extern int gfarm_iostat_max_client;
 
+/* miscellaneous configurations */
+extern char *gfarm_digest;
+extern int gfarm_simultaneous_replication_receivers;
+
 gfarm_error_t gfarm_get_global_username_by_host_for_connection_cache(
 	const char *, int, char **);
 
@@ -118,10 +123,10 @@ int gfarm_get_journal_max_size(void);
 int gfarm_get_journal_recvq_size(void);
 int gfarm_get_journal_sync_file(void);
 int gfarm_get_journal_sync_slave_timeout(void);
+int gfarm_get_metadb_server_slave_replication_timeout(void);
 int gfarm_get_metadb_server_slave_max_size(void);
 int gfarm_get_metadb_server_force_slave(void);
 void gfarm_set_metadb_server_force_slave(int);
-int gfarm_get_metadb_server_slave_listen(void);
 
 /* miscellaneous */
 extern int gfarm_network_receive_timeout;
@@ -134,10 +139,9 @@ void gfarm_config_clear(void);
 #ifdef GFARM_USE_STDIO
 gfarm_error_t gfarm_config_read_file(FILE *, int *);
 #endif
-gfarm_error_t gfarm_init_config(void);
-gfarm_error_t gfarm_free_config(void);
 void gfarm_config_set_default_ports(void);
 void gfarm_config_set_default_misc(void);
+gfarm_error_t gfarm_sockbuf_apply_limit(int, int, int, const char *);
 void gfs_display_timers(void);
 
 int gfarm_xattr_caching_patterns_number(void);
