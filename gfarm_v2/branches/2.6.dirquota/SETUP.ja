@@ -1,0 +1,681 @@
+[This is written in Japanese, please look at SETUP.en for English version.]
+
+		 Gfarm ファイルシステム設定マニュアル
+
+● 目次
+=======
+
+● 本ドキュメントについて
+　 ▽ コマンド行の表記について
+● 概要
+　 ▽ ファイアウォール設定
+   ▽ SELinux について
+● メタデータサーバの設定
+● ファイルシステムノードの設定
+● クライアントノードの設定
+　 ▽ クライアントノードの設定
+● Gfarm ファイルシステムの利用確認
+　 ▽ gfls - ディレクトリ・リスティング
+　 ▽ gfhost - ファイルシステムノード情報の表示
+　 ▽ gfdf - ファイルシステムノードのファイル容量の表示
+● 利用ユーザの登録
+● 管理者権限，gfarmroot 権限をもつユーザの登録
+● Gfarm の基本的な利用
+　 ▽ ファイルのコピー
+　 ▽ ファイルの参照
+　 ▽ マウント
+● Gfarm の進んだ利用
+　 ▽ ファイルの複製
+
+● 本ドキュメントについて
+=========================
+
+本ドキュメントは Gfarm ファイルシステムの設定方法を記述したものです．
+
+ユーザ権限で Gfarm ファイルシステムを構築したい場合は，
+SETUP.private.ja を御覧ください．
+
+このマニュアルを利用する前に，Gfarm ソフトウェアのインストールを行なって
+ください．インストール方法は，ソースコードからのインストールの場合は
+INSTALL.ja に，RPM バイナリパッケージからのインストールの場合は
+INSTALL.RPM.ja にあります．
+
+なにか問題が生じた場合には，Gfarm-FAQ.ja のトラブル・シューティングの
+項も参照してください．
+
+▽ コマンド行の表記について
+
+以下，本ドキュメントでは，コマンドの実行行を記す際，オペレーティング
+システムの root 権限での実行が必要なときはプロンプト '#'，それ以外の
+ユーザの権限で実行するときはプロンプト '$' で記しています．
+
+	# su _gfarmfs				[root 権限で実行]
+	$ gfkey -f -p 31536000		[root 以外のユーザ権限で実行]
+
+● 概要
+=======
+
+Gfarm ファイルシステムの導入にあたり，まず，メタデータサーバを設定し，
+その後，ファイルシステムノード，クライアントノードの設定を行います．
+
+導入後，一般および管理者権限，gfarmroot 権限をもつ Gfarm グローバル
+ユーザの登録を行います．
+
+▽ ファイアウォール設定一覧
+
+次のようなネットワーク通信を許可する必要があります．
+
+差出側アドレス   宛先側アドレス   proto 用途
+IP     port      IP     port
+------ --------- ------ --------- ----- -------------------------------
+gfmd   ephemeral gfmd   gfmd_port TCP   metadata replication
+gfmd   ephemeral gfsd   gfsd_port UDP   gfmd failover notification 要求
+gfsd   ephemeral gfmd   gfmd_port TCP   metadata access
+gfsd   ephemeral gfsd   gfsd_port TCP   data replication
+gfsd   gfsd_port gfmd   ephemeral UDP   gfmd failover notification 応答
+gfsd   gfsd_port client ephemeral UDP   gfsd health check 応答
+client ephemeral gfmd   gfmd_port TCP   metadata access
+client ephemeral gfsd   gfsd_port TCP   data access
+client ephemeral gfsd   gfsd_port UDP   gfsd health check 要求
+
+    gfmd_port: config-gfarm の -m オプションで指定したポート番号
+    gfsd_port: config-gfsd  の -p オプションで指定したポート番号
+    ephemeral: 通信の発呼側が利用する範囲のポート番号．
+	この範囲はOSによって異なるが、通常は1024番以上のポート番号．
+
+なおこの表の TCP については，コネクションの発呼側→着呼側で必要となる
+ルールのみ記載しており，逆方向については省略しています．
+ファイアウォールでステートフル・インスペクション機能を用いてない場合，
+逆方向についても適切なTCP通信許可を与える必要があるので注意してください．
+
+また，icmp パケットについては特に記載していませんが，
+icmp type:3 (unreachable) code:4 (need fragment) を禁止すると，
+Path MTU discovery 機能が働かなくなり，通信性能が劣化したり，
+場合によっては通信できないことがあります．
+これ以外の icmp パケットについても，禁止すると，通信エラーの検知が遅れたり，
+エラー原因が得られないことがありますので，注意してください．
+
+▽ SELinux について
+
+現時点での配布パッケージに、SELinux 用の設定は附属していません。
+メタデータサーバおよびファイルシステムノードを設定する際には、
+SELinux を、Permissive ないし Disabled と設定するか、
+独自に SELinux の権限設定を行なってください。
+
+以下のコマンドで、Enforcing と表示された場合には、設定作業が必要と
+なります。
+	# getenforce
+
+● メタデータサーバの設定
+=========================
+
+メタデータサーバを設定するためには設定するオペレーティングシステムの
+root 権限が必要です．以下の設定は root 権限で行います．
+
+設定にあたり，まず以下を決める必要があります．
+
+・管理者のグローバルユーザ名		[-A]
+・管理者のユーザ証明書の Subject DN	[-D]	(GSI 認証のときだけ)
+
+  グローバルユーザ名とは，Gfarm ファイルシステムで利用されるユーザ名で
+  す．異なるアカウント体系をもつ複数の管理ドメインをまたがってファイル
+  共有を行うために Gfarm ファイルシステムにおいてユニークな名前を設定
+  します．
+
+  オペレーティングシステムに一般ユーザ権限でログインし，su コマンドを
+  用いて root 権限を得て config-gfarm コマンドを実行している場合，
+  オペレーティングシステムへのログイン時の一般ユーザのアカウント名が，
+  Gfarm管理者のグローバルユーザ名のデフォルトとして用いられます
+  デフォルト以外にしたい場合には，config-gfarm コマンドの -A オプション
+  で指定してください．
+
+  共有鍵認証の場合，デフォルトでは，オペレーティングシステムにログイン
+  する際に用いるアカウント名が，Gfarm のグローバルユーザ名として用いら
+  れます．このオペレーティングシステムのアカウント名と，Gfarm の
+  グローバルユーザー名の間の対応は， gfarm2.conf の local_user_map で
+  指定したユーザマップファイルを用いてカスタマイズできます．
+  このユーザーマップファイルには，各行に，対応するグローバルユーザ名と
+  ローカルアカウント名を，空白で区切って記述します．
+
+  GSI 認証の場合は，ここで設定した Subject DN のユーザ証明書を持つユー
+  ザが管理者となります．この場合，指定した Subject DN のエントリを
+  /etc/grid-security/grid-mapfile に追加します．
+
+メタデータサーバ上で以下のコマンドを実行して，これから行う設定に関して，
+適切なデフォルト値が設定されているか確認します．ここで指定している
+-t オプションは，設定値やデフォルトの確認のみ行ない，設定の実行は
+しないことを意味するオプションです．
+
+	# config-gfarm -t -A <global_admin_name> -a gsi_auth -D <Subject DN>
+
+-a オプション，-D オプションは GSI 認証を利用しない場合は必要ありません．
+-a オプションは，Gfarm における認証方式を指定するものです．デフォルトは
+sharedsecret（共有鍵認証）となります．認証方式に関する詳細は gfarm2.conf(5)
+のマニュアルページあるいは Gfarm-FAQ.ja を参照してください．
+
+XPath による検索が可能な XML 拡張属性を利用する際には，-X オプションを
+指定する必要があります．
+
+メタデータサーバの冗長化を有効にしたい場合は，-r オプションを指定する必
+要があります．詳細はメタデータ冗長化のチュートリアル
+(html/ja/user/redundancy-tutorial.html) を参照してください．
+
+もしデフォルト値が適切でない場合には，表示されるオプションを指定して設
+定を変更できます．適切な設定になったら，config-gfarm コマンドのオプショ
+ンから -t を取り除いて実行します．
+
+	# config-gfarm -A <global_admin_name> -a gsi_auth -D <Subject DN>
+
+config-gfarm は，順番に次の処理を行います．
+
+  1. バックエンド DB の設定を行います．
+  2. Gfarm の設定ファイル <sysconfdir>/gfarm2.conf および
+     <sysconfdir>/gfmd.conf を作成します．
+
+       ここで <sysconfdir> は，Gfarm をコンパイルした際に，configure の
+       --sysconfdir オプションとして指定した値 (詳しくは INSTALL.ja 参照)
+       を意味します．Gfarm を PRM バイナリパッケージからインストールした
+       場合は /etc になります．
+
+       同一サーバで複数の Gfarm ファイルシステムに対するメタデータサーバを
+       立ち上げる場合には，config-gfarm に、--prefix <directory> オプション
+       に，それぞれのメタデータサーバ毎に異なるディレクトリを指定します．
+       この場合，指定したディレクトリの下に etc ディレクトリが作成され，
+       <sysconfdir> はそこになります．設定ファイルはその下に生成され，
+       またサーバープログラムの利用するデータディレクトリのデフォルトも，
+       --prefix で指定されたディレクトリの下になります．
+       以下のコマンド実行例では、<sysconfdir> として /etc を仮定して記載
+       されていますので，適宜読みかえてください．
+
+  3. バックエンド DB およびメタデータサーバ gfmd の起動/停止スクリプト
+     (ないし設定ファイル) を配置します．
+
+       ほとんどのシステムでは，config-gfarm は起動/停止スクリプト
+       'gfmd' および 'gfarm-pgsql' を /etc/init.d または /etc/rc.d/init.d
+       の下に配置します．どちらに配置するかは，OS によって異なります．
+
+       Red Hat Enterprise Linux 7 以降のように，systemd を採用している
+       Linux では，config-gfarm はユニットファイル 'gfmd.service' と
+       'gfarm-pgsql.service' を /etc/systemd/system の下に配置して，
+       'systemctl enable gfmd.service' と 'systemctl enable
+       gfarm-pgsql.service' をそれぞれ実行します．
+
+  4. バックエンド DB と gfmd を起動します．
+
+共有鍵認証で gfsd との認証を行う場合は，ユーザ「_gfarmfs」を作成し，そ
+のホームディレクトリに，認証鍵ファイルを置きます．
+
+	# useradd -c "Gfarm gfsd" -m _gfarmfs
+
+  Debian では，--force-badname オプションが必要な場合があります．
+  もし，メタデータサーバとファイルシステムノードが，NFS でディスクを共
+  有しているならば，ユーザ _gfarmfs のホームディレクトリを NFS 上に置
+  き，認証鍵を NFS で共有することをお勧めします．
+
+ユーザ「_gfarmfs」の権限で，ホームディレクトリに認証鍵ファイル
+「.gfarm_shared_key」を作成します．
+
+	# su _gfarmfs
+	$ gfkey -f -p 31536000
+
+  ここでは，認証鍵の期限を，ほぼ1年(31536000秒) に設定しています．
+
+共有鍵認証を用いる場合で，Gfarm の利用者のオペレーティングシステム上での
+アカウント名が，Gfarm のグローバルユーザ名と異なる場合には，gfmd.conf と
+gfarm2.conf に local_user_map の設定も行ない，gfmd を再起動しておきます．
+
+共有鍵認証を利用するユーザーのホームディレクトリをNFSで共有していないか，
+共有していても NFS サーバー側の export オプションとして no_root_squash を
+指定している場合，gfmd.conf に次の設定を入れて gfmd を再起動しておくと，
+gfmd の CPU 負荷をいくぶん低減することができます．
+	metadb_server_nfs_root_squash_support disable
+no_root_squash なしで NFS 共有している場合は，この設定をしてはいけません．
+
+以上で，メタデータサーバー上での設定は完了です．
+下記を実行して，gfmd が動作していることを確認してください．
+
+  Red Hat Enterprise Linux 7 またはそれ以降:
+	# systemctl status gfmd.service
+
+  その他:
+	# /etc/init.d/gfmd status
+
+ブート時における自動起動の設定を行うには，以下のコマンドを用います．
+
+  Red Hat Enterprise Linux 7 またはそれ以降:
+	# systemctl enable gfarm-pgsql.service
+	# systemctl enable gfmd.service
+
+  Red Hat Enterprise Linux 6 またはそれ以前:
+	# chkconfig --add gfmd
+	# chkconfig --add gfarm-pgsql
+
+  Debian:
+	# update-rc.d gfmd defaults
+	# update-rc.d gfarm-pgsql defaults
+
+上記作業によって作成されたファイルを消去したい場合には，消去用
+スクリプトが <sysconfdir>/unconfig-gfarm.sh として生成されています
+ので，これを実行してください．
+
+	# /etc/unconfig-gfarm.sh
+
+すると、以下のように尋ねてきますので「y」と答えます．
+
+	Do you unconfigure gfarm? [y/n]:
+
+これで，gfmd が停止し，設定ファイルが消去されます。また，この
+Gfarm ファイルシステムのメタデータも消去されます．
+
+unconfig-gfarm.sh が実行する内容は，unconfig-gfarm.sh に -t オプションを
+指定することで，事前に確認できます．
+
+● ファイルシステムノードの設定
+===============================
+
+ファイルシステムノードを設定するためには設定するホストの root 権限が必
+要です．以下の設定は root 権限で行います．
+
+ユーザ「_gfarmfs」が無い場合は作成します．
+
+	# useradd -c "Gfarm gfsd" -m _gfarmfs
+
+共有鍵認証の場合は，ユーザ「_gfarmfs」のホームディレクトリに，メタデー
+タサーバで作成した認証鍵ファイル「.gfarm_shared_key」をコピーします．
+
+  メタデータサーバとファイルシステムノードが，NFS でホームディレ
+  クトリを共有している場合は，既に存在するためコピーする必要はあ
+  りません
+
+  「.gfarm_shared_key」のファイルのモードが「0600」，ファイル
+  の所有者が「_gfarmfs」となっているかどうか確認してください．
+
+  「.gfarm_shared_key」ファイルは，生成時に gfkey コマンドの -p オプション
+  で指定した期限に達すると無効になりますので，それより前に新しい鍵を
+  生成して，全ファイルシステムノードに再配布する必要があります．
+
+GSI 認証の場合は，gfsd 用のサービス証明書を取得します．
+サービス証明書は，Distinguished Name の「CN=」の部分に，
+「gfsd/ファイルシステムノードのホスト名」と設定されている
+必要がありますので，注意してください．たとえばファイルシステム・ノード
+「linux-1.example.com」に対応する CN 部は，「CN=gfsd/linux-1.example.com」
+となります．
+
+  証明書は /etc/grid-security/gfsd/gfsdcert.pem に置き，
+  秘密鍵は /etc/grid-security/gfsd/gfsdkey.pem に置き，
+  ディレクトリとファイルのオーナを _gfarmfs とします．
+  gfsdkey.pem のファイルモードは 0400 とします．
+
+  複数の gfsd を異なる仮想IPアドレスを用い同一ホストで立ち上げたい場合は
+  以下の config-gfsd に対し -l オプションでホスト名，あるいはIPアドレスを
+  指定します．その場合，
+  証明書は /etc/grid-security/gfsd-<ホスト名 or IPアドレス>/gfsdcert.pem
+  秘密鍵は /etc/grid-security/gfsd-<ホスト名 or IPアドレス>/gfsdkey.pem
+  に置きます．
+
+次に，メタデータサーバで生成された <sysconfdir>/gfarm2.conf ファイルを
+ファイルシステムノードの <sysconfdir> にコピーします．
+
+  ここで <sysconfdir> は，Gfarm をコンパイルした際に，configure の
+  --sysconfdir オプションとして指定した値 (詳しくは INSTALL.ja 参照)
+  を意味します．Gfarm を PRM バイナリパッケージからインストールした場
+  合は /etc になります．
+  ただし，config-gfsd コマンドに --prefix <directory> オプションを指定
+  した場合には、指定したディレクトリの下の etc ディレクトリとなります．
+  以下のコマンド実行例では、<sysconfdir> として /etc を仮定して記載さ
+  れていますので，適宜読みかえてください．
+
+ファイルシステムノード上で以下のコマンドを実行して，これから行う設定に
+関して，適切なデフォルト値が設定されているか確認します．
+
+	# config-gfsd -t /var/gfarm
+
+  もしデフォルト値が適切でない場合には，表示されるオプションを指定して
+  設定を変更できます．
+
+  config-gfsd コマンドの最後の引数は Gfarm ファイルシステムの実体ファ
+  イルが格納されるスプール・ディレクトリです．スプール・ディレクトリは，
+  他のファイルシステムノードと共有されない領域を指定してください．
+
+適切な設定になったら，config-gfsd コマンドのオプションから -t を取り除
+いて実行します．
+
+	# config-gfsd /var/gfarm
+
+エラーが起きなければ，設定ファイル <sysconfdir>/gfsd.conf の作成，
+起動スクリプト <sysconfdir>/init.d/gfsd の配置が行われます．
+(OS によっては <sysconfdir>/rc.d/gfsd に配置されます．)
+
+config-gfsd は，最後に「gfhost」コマンドの実行をうながす表示を行います．
+その表示を Gfarm ファイルシステムの管理者に伝え，実行してもらってくだ
+さい．
+
+  この時，管理者はメタデータサーバを設定したホストで gfhost コマンドを
+  実行します．共有鍵認証の場合は，管理者として指定したグローバルユーザ
+  名と同一名，あるいはユーザマップファイルでマップされたアカウントの一
+  般ユーザ権限で実行します．GSI 認証の場合は，-D オプションで指定した
+  ユーザ証明書を利用して実行します．
+
+	$ /usr/bin/gfhost -c -a i386-fedora5-linux -p 600 -n 2 node1.example.org
+
+  GSI 認証の場合は，gfmd の /etc/grid-security/grid-mapfile に gfsd の
+  サービス証明書を以下の形式で追加します．@host@ は共通の固定文字列で
+  す．変更することはできません．
+
+	"Subject DN of gfsd server cert" @host@ FQDN
+
+  共有鍵認証を用いる場合で，Gfarm の利用者のオペレーティングシステム上での
+  アカウント名が，Gfarm のグローバルユーザ名と異なる場合には，gfarm2.conf
+  に local_user_map の設定も行なっておきます．
+
+root 権限になり，下記のコマンドで gfsd を起動します．
+
+  Red Hat Enterprise Linux 7 またはそれ以降:
+	# systemctl start gfsd.service
+
+  その他:
+	# /etc/init.d/gfsd start
+
+以上で設定は完了です．
+
+下記を実行して，gfsd が動作していることを確認してください．
+
+  Red Hat Enterprise Linux 7 またはそれ以降:
+	# systemctl status gfsd.service
+
+  その他:
+	# /etc/init.d/gfsd status
+
+ブート時における自動起動の設定を行うには，以下のコマンドを用います．
+
+  Red Hat Enterprise Linux 7 またはそれ以降:
+	# systemctl enable gfsd.service
+
+  Red Hat Enterprise Linux 6 またはそれ以前:
+	# chkconfig --add gfsd
+
+  Debian:
+	# update-rc.d gfsd defaults
+
+上記作業によって作成されたファイルを消去したい場合には，消去用
+スクリプトが <sysconfdir>/unconfig-gfsd.sh として生成されています
+ので，これを実行してください．
+
+	# /etc/unconfig-gfsd.sh
+
+すると、以下のように尋ねてきますので「y」と答えます．
+
+	Do you run unconfiguration? [y/n]:
+
+これで，gfsd が停止し，設定ファイルが消去されます。また，この
+ノード上に存在する Gfarm ファイルシステムのデータも消去されます．
+
+unconfig-gfsd.sh は，最後に「gfhost -d」コマンドの実行をうながす表示を
+行います．表示されたコマンドを上述の「gfhost -c」を実行した管理権限で，
+実行してください．上述の「gfhost -c」に対応する例だと，以下のような
+コマンドになります．
+
+	$ /usr/bin/gfhost -d node1.example.org
+
+unconfig-gfsd.sh が実行する内容は，unconfig-gfsd.sh に -t オプションを
+指定することで，事前に確認できます．
+
+● クライアントノードの設定
+===========================
+
+メタデータサーバで生成された /etc/gfarm2.conf ファイルを /etc にコピー
+します．
+
+共有鍵認証の場合:
+
+   メタデータサーバやファイルシステムノードとの間で，各ユーザの
+   ホームディレクトリが NFS で共有されている場合:
+      以上で設定は完了です．
+
+   ホームディレクトリが共有されていない場合:
+      各グローバルユーザーに対応する，オペレーティングシステムの
+      アカウントの権限でコマンド「gfkey -f -p 有効期限秒数」を実行します．
+      すると各アカウントのホームディレクトリに，認証鍵ファイル
+      「.gfarm_shared_key」が生成されます．
+      この生成された認証鍵ファイルを，全メタデータサーバ，
+      全ファイルシステムノード，全クライアントの，各ユーザーの
+      ホームディレクトリへ，それぞれコピーします．
+      コピーの際には，「.gfarm_shared_key」のファイルのモードが「0600」，
+      ファイルの所有者がそのアカウントとなっているかどうか確認してください．
+      有効期限秒数が経過すると鍵は無効になりますので，それより前に
+      この鍵生成とコピー作業はやり直す必要があります。
+
+   Gfarm の利用者のオペレーティングシステムのアカウント名が， Gfarm の
+   グローバルユーザ名と異なる場合には，gfarm2.conf に local_user_map の
+   設定を行なっておきます．
+
+GSI 認証の場合:
+    ユーザ証明書を取得して，gfmd および各ファイルシステムノードの
+    grid-mapfile に自分のエントリを追加してもらいます．
+
+● Gfarm ファイルシステムの利用確認
+===================================
+
+Gfarm ファイルシステムは，クライアントの設定をしているノードであれば，
+どのノードでも利用（共有）することができます．
+
+▽ gfls - ディレクトリ・リスティング
+
+	$ gfls -la
+	drwxrwxr-x gfarmadm gfarmadm          4 Aug 23 06:33 .
+	drwxrwxr-x gfarmadm gfarmadm          4 Aug 23 06:33 ..
+	drwxr-xr-x tatebe   gfarmadm          0 Aug 22 16:08 tmp
+
+▽ gfhost - ファイルシステムノード情報の表示
+
+ファイルシステムノードが正しく登録されているかどうか，gfhost コマンドで
+確認します．
+
+	$ gfhost -M
+	i386-fedora3-linux 2 linux-1.example.com 600 0
+	i386-fedora3-linux 2 linux-2.example.com 600 0
+	i386-fedora3-linux 2 linux-3.example.com 600 0
+	i386-redhat8.0-linux 1 linux-4.example.com 600 0
+	sparc-sun-solaris8 1 solaris-1.example.com 600 0
+	sparc-sun-solaris8 1 solaris-2.example.com 600 0
+	...
+
+次に，利用可能かどうか確認します．
+
+	$ gfhost -lv
+	0.01/0.03/0.03 s i386-fedora3-linux 2 linux-1.example.com 600 0(10.0.0.1)
+	0.00/0.00/0.00 s i386-fedora3-linux 2 linux-2.example.com 600 0(10.0.0.2)
+	-.--/-.--/-.-- - i386-fedora3-linux 2 linux-3.example.com 600 0(10.0.0.3)
+	0.00/0.02/0.00 x i386-redhat8.0-linux 1 linux-4.example.com 600 0(10.0.0.4)
+	0.10/0.00/0.00 G sparc-sun-solaris8 1 solaris-1.example.com 600 0(10.0.1.1)
+	x.xx/x.xx/x.xx - sparc-sun-solaris8 1 solaris-2.example.com 600 0(10.0.1.2)
+	...
+
+左から二番目の文字が 's', 'g', 'G' であれば，そのファイルシステムノード
+が利用可能です．'x' の場合は認証に失敗しています．
+
+また，一番左が '-.--/-.--/-.--' と表示される場合は，gfsd が正しく起動し
+ていないことを示しており，'x.xx/x.xx/x.xx' と表示される場合は，そのノー
+ドに接続できない（落ちている）ことを示しています．
+
+▽ gfdf - ファイルシステムノードのファイル容量の表示
+
+現在利用可能なファイルシステムの容量を表示します．
+
+	$ gfdf
+	   1K-blocks        Used       Avail Capacity Host
+	  1824815008      213068  1824601940     0%   linux-1.example.com
+	  6835798016    71836400  6763961616     1%   linux-2.example.com
+	  1669232308    44224088  1625008220     3%   solaris-1.example.com
+	---------------------------------------------
+	 10329845332   116273556 10213571776     1%
+
+なお，上記コマンドの詳細は，man ページを参照してください．
+
+● 利用ユーザの登録
+===================
+
+Gfarm ファイルシステムを利用するためには，グローバルユーザーとしての
+登録が必要です．
+
+  グローバルユーザーには，一般利用のためのユーザーの他に，Gfarm の
+  管理者権限を持つユーザーや，gfarmroot 権限を持つユーザーが含まれます．
+
+  Gfarm の管理者権限とは，Gfarm ファイルシステムのグローバルユーザー，
+  グループ，メタデータサーバ，ファイルシステムノードの，追加，修正，
+  削除を行う権限です．
+  Gfarm のメタデータサーバに登録されている gfarmadm グループに所属している
+  グローバルユーザは，Gfarm の管理者権限を持ちます．
+
+  gfarmroot 権限とは，Gfarm ファイルシステムの全ディレクトリや全データに
+  アクセスできる権限です．Gfarm のメタデータサーバに登録されている
+  gfarmroot グループに所属しているグローバルユーザは，gfaromroot 権限を
+  持ちます．
+
+  config-gfarm の -A オプションで指定された管理者は、Gfarm の 管理者権限
+  を持つグローバルユーザとして初期設定されています．従って，このユーザー
+  に限っては，gfuser コマンドを用いたユーザ登録の必要はありません．
+
+Gfarm の新たなグローバルユーザーの登録には gfuser コマンドを利用します．
+これには，Gfarm の 管理者権限が必要です．
+
+	$ gfuser -c global_username realname homedir gsi_dn
+
+global_username は，Gfarm ファイルシステム上のグローバルなユーザ名，
+realname は人間がユーザを識別できる名前，homedir は Gfarm 上のホームディ
+レクトリ，gsi_dn は GSI 認証におけるユーザ証明書の Subject DN です．
+
+  ホームディレクトリは 2009年9月現在利用されていません．
+
+realname などに space を含む場合は，ダブルクオートなどで括ります．例え
+ば，以下のようにしてグローバルユーザ taro を登録します．
+
+	$ gfuser -c taro "Taro Tsukuba" /home/taro ""
+
+その後，ユーザのホームディレクトリを作成します．ユーザディレクトリの作
+成は，gfarmroot 権限が必要となります．デフォルトでは gfarmroot 権限を
+持つユーザーは存在しませんので、次の節に説明する gfgroup コマンドを
+用いて，権限を追加しておきます．
+
+上記の gfuser -c の例の場合，以下の様なコマンドを利用してホーム
+ディレクトリを作成します．
+
+	$ gfmkdir -p /home/taro
+	$ gfchown taro /home/taro
+
+共有鍵認証の場合は，グローバルユーザを追加するたびに，そのグローバル
+ユーザーに対応するオペレーティングシステムのアカウントを，全メタデータ
+サーバ，全ファイルシステムノード，全クライアントにそれぞれ作成します．
+config-gfarm コマンドの -A オプションで指定した，デフォルトの Gfarm 管理者に
+ついても，同様にオペレーティングシステムのアカウントを作成しておきます．
+さらに，Gfarm 管理者を含む全てのグローバルユーザについて，アクセス用の
+共有鍵を生成し，全メタデータサーバ，全ファイルシステムノード，
+全クライアントのユーザのホームディレクトリの「.gfarm_shared_key」に
+コピーします．
+共有鍵のコピーについては，上述の「クライアントノードの設定」の項を
+参照してください．
+
+GSI 認証の場合は，全メタデータサーバ，全ファイルシステムノードの
+grid-mapfile に，ユーザの Subject DN を登録し，nobody にマップします．
+
+● 管理者権限，gfarmroot 権限の追加
+===================================
+
+この節では，Gfarm のグローバルユーザーに，Gfarm の管理者権限および
+gfarmroot 権限を付与する方法を説明します．
+付与には Gfarm の管理者権限が必要です．
+
+config-gfarm コマンドの -A オプションで指定した管理者は，
+最初からこの Gfarm の管理者権限を保持しています。
+
+ユーザーを gfarmadm グループに所属させると，そのユーザーは管理権限を
+得ます．以下のコマンドで，現在所属しているユーザを表示できます．
+	$ gfgroup -l gfarmadm
+所属ユーザの追加は以下で行います．
+	$ gfgroup -ma gfarmadm user1 user2 ...
+
+ユーザーを gfarmroot グループに所属させると，そのユーザーは gfarmroot
+権限を得ます．
+	$ gfgroup -ma gfarmroot user1 user2 ...
+初期状態では、誰も gfarmroot 権限を保持していませんので，必要に応じて
+追加しておきます．
+
+● Gfarm の基本的な利用
+=======================
+
+▽ ファイルのコピー
+
+ファイルを Gfarm ファイルシステムにコピーするためには，gfreg コマンドを
+利用します．
+
+	$ gfreg .gfarmrc foo
+
+この例では，ファイル .gfarmrc を Gfarm ファイルシステムに foo（より正
+確には /foo）としてコピーしています．
+
+▽ ファイルの参照
+
+Gfarm ファイルシステムのファイルは gfexport コマンドで参照できます．
+
+	$ gfexport foo
+
+この例では，Gfarm ファイルシステム上のファイル foo の内容を標準出力に
+出力します．
+
+▽ マウント
+
+gfarm2fs コマンドを導入すると，Gfarm ファイルシステムをマウントするこ
+とができます．
+
+	$ mkdir /tmp/foo
+	$ gfarm2fs /tmp/foo
+
+マウント後は，通常のコマンドでファイル操作を行うことが可能です．アンマ
+ウントは，fusermount コマンドで行います．
+
+	$ fusermount -u /tmp/foo
+
+詳細は，gfarm2fs のパッケージに含まれるドキュメントを参照してください．
+
+
+● Gfarm の進んだ利用
+=====================
+
+▽ ファイルの複製
+
+Gfarm ファイルシステムでは，ファイルはどこかのファイルシステムノードに
+格納されますが，二つ以上のファイルシステムノードにファイルの複製を保持
+することもできます．
+
+ファイルの複製を保持することにより，ファイルシステムノードの障害時でも，
+ファイルアクセスが可能になる他，ファイルアクセスの分散によりファイルア
+クセス性能の劣化を防ぐことができます．
+
+ファイルがどこに格納されているかを知るためには gfwhere コマンドを利用し
+ます．
+
+	$ gfwhere .bashrc
+	linux-1.example.com
+
+ファイル複製を作成するためには gfrep コマンドが準備されています．例えば，
+もう一つファイル複製を作成したい場合は，以下のようにします．
+
+	$ gfrep -N 2 .bashrc
+	$ gfwhere .bashrc
+	linux-1.example.com linux-2.example.com
+
+この場合，linux-1 と linux-2 に，ファイルが複製されて格納されています．
+
+▽ ファイルの自動複製
+
+ディレクトリの拡張属性 gfarm.ncopy にファイル複製数を指定することによ
+り，ファイル作成時に自動的に指定された数のファイル複製が作成されます．
+以下は /（root ディレクトリ）の拡張属性 gfarm.ncopy に 2 を指定する例
+です．
+
+	$ gfncopy -s 2 /
+
+このとき，自動的にファイル複製が二つ作成されます．ファイルシステムノー
+ドが故障して，必要な複製数が足りなくなった場合，
+replica_check_host_down_threshで指定される時間後に自動的に必要数の複製
+が作成されます．デフォルトは3時間後です．
