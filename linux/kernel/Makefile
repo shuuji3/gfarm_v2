@@ -28,7 +28,6 @@ gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfm_client.o
 gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfm_conn_follow.o
 gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfm_schedule.o
 gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfp_xdr.o
-gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfp_xdr_client.o
 ##s gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfp_xdr_server.o
 ##a gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfs_acl.o
 gfarm2-y += $(GFARMDIR)/lib/libgfarm/gfarm/gfs_attrplus.o
