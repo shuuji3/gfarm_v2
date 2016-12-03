@@ -1,5 +1,5 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT
+AC_INIT([gfarm], [2.6.15])
 AC_CONFIG_SRCDIR(RELNOTES)
 AC_CONFIG_AUX_DIR(makes)
 AC_CONFIG_HEADER(include/gfarm/gfarm_config.h)
@@ -35,6 +35,7 @@ if test x"$GCC" = x"yes"; then # CFLAGS='-g -O2'
 else # CFLAGS='-g'
   CFLAGS="-O" # don't use -g, but use -O
 fi
+AC_OPENMP
 
 # Check whether gcc accepts '-rdynamic' option
 # This check is performed for backtrace_symbols() function of glibc.
@@ -499,7 +500,7 @@ yes)
     ])
 
   # Checks for library functions with pthread enabled
-  AC_CHECK_FUNCS(pthread_barrier_wait)
+  AC_CHECK_FUNCS(pthread_barrier_wait pthread_mutex_timedlock)
 
   CPPFLAGS="$CPPFLAGS_SAVE"
   LIBS="$LIBS_SAVE"
@@ -578,6 +579,7 @@ AC_SUBST(largefile64_cflags)
 AC_SUBST(largefile64_targets)
 
 ### sanity check whether OpenSSL is really usable or not
+### only OpenSSL-0.9.7 or later is supported since Gfarm-2.6.15
 
 AC_MSG_CHECKING([openssl])
 
@@ -588,19 +590,23 @@ CPPFLAGS="${openssl_includes} $CPPFLAGS_SAVE"
 LIBS="`echo ${openssl_libs} | sed 's/-R[[^ ]]*//g'` $LIBS_SAVE"
 
 AC_TRY_LINK([
+#include <stdio.h>
 #include <openssl/evp.h>],[
-EVP_MD_CTX md_ctx;
+EVP_MD_CTX *md_ctx = EVP_MD_CTX_create();
 EVP_MD *md_type = EVP_get_digestbyname("sha1");
 
-EVP_DigestInit(&md_ctx, md_type);
+EVP_DigestInit_ex(md_ctx, md_type, NULL);
 ], [], [
   AC_MSG_ERROR([OpenSSL cannot be linked with \"${openssl_includes} ${openssl_libs}\" options, aborted])
 ])
 
+AC_MSG_RESULT([using \"${openssl_includes} ${openssl_libs}\"])
+
+# these functions disappeared since OpenSSL-1.1.0
+AC_CHECK_FUNCS(CRYPTO_set_locking_callback CRYPTO_set_id_callback)
+
 CPPFLAGS="$CPPFLAGS_SAVE"
 LIBS="$LIBS_SAVE"
-
-AC_MSG_RESULT([using \"${openssl_includes} ${openssl_libs}\"])
 
 ###
 ### --with-openldap=OpenLDAP_ROOT
@@ -995,7 +1001,7 @@ fi
 ###### Checks for library functions.
 ######
 
-AC_CHECK_FUNCS(clock_gettime getdents fdatasync fdopendir poll pread pwrite snprintf getpassphrase mkdtemp setlogin strtoll strtoq setrlimit daemon getloadavg statvfs statfs random getifaddrs getopt_long backtrace_symbols utimensat)
+AC_CHECK_FUNCS(clock_gettime getdents fdatasync fdopendir poll pread pwrite snprintf getpassphrase mkdtemp setlogin sigtimedwait strtoll strtoq setrlimit daemon getloadavg statvfs statfs random getifaddrs getopt_long backtrace_symbols futimes futimesat utimensat)
 
 ### Check epoll_create really implemented
 
@@ -1264,7 +1270,6 @@ AC_SUBST(optional_targets)
 # The following is for --srcdir option.
 # AC_OUTPUT() assumes that parent directory of the Makefile exists
 test -d include || mkdir include
-test -d gfptool || mkdir gfptool
 test -d package || mkdir package
 test -d util || mkdir util
 
