@@ -3,7 +3,6 @@
  */
 
 #include <libgen.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,15 +23,15 @@
 #include "nanosec.h"
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
+#include "context.h"
 #include "config.h"
 #include "metadb_common.h"
 #include "metadb_server.h"
 #include "xattr_info.h"
 #include "quota_info.h"
 #include "gfm_proto.h"
-
 #include "quota.h"
+
 #include "journal_file.h"
 #include "db_common.h"
 #include "db_ops.h"
@@ -247,6 +246,29 @@ print_quota(struct quota *q)
 }
 
 static void
+print_quota_metadata(struct quota_metadata *q)
+{
+	printf(
+	    ";space=%" GFARM_PRId64 ";space_soft=%" GFARM_PRId64
+	    ";space_hard=%" GFARM_PRId64 ";num=%" GFARM_PRId64
+	    ";num_soft=%" GFARM_PRId64 ";num_hard=%" GFARM_PRId64
+	    ";phy_space=%" GFARM_PRId64 ";phy_space_soft=%" GFARM_PRId64
+	    ";phy_space_hard=%" GFARM_PRId64 ";phy_num=%" GFARM_PRId64
+	    ";phy_num_soft=%" GFARM_PRId64 ";phy_num_hard=%" GFARM_PRId64,
+	    q->usage.space, q->limit.soft.space, q->limit.hard.space,
+	    q->usage.num, q->limit.soft.num, q->limit.hard.num,
+	    q->usage.phy_space,
+	    q->limit.soft.phy_space, q->limit.hard.phy_space,
+	    q->usage.phy_num, q->limit.soft.phy_num, q->limit.hard.phy_num);
+
+	print_time("grace_period", q->limit.grace_period);
+	print_time("space_exceed", q->exceed.space_time);
+	print_time("num_exceed", q->exceed.num_time);
+	print_time("phy_space_exceed", q->exceed.phy_space_time);
+	print_time("phy_num_exceed", q->exceed.phy_num_time);
+}
+
+static void
 print_bin_value(const char *name, const char *s, size_t sz)
 {
 #define ABBREV_LEN 16
@@ -372,7 +394,8 @@ print_obj(enum journal_operation ope, void *obj)
 		break;
 	}
 	case GFM_JOURNAL_INODE_CKSUM_REMOVE:
-	case GFM_JOURNAL_SYMLINK_REMOVE: {
+	case GFM_JOURNAL_SYMLINK_REMOVE:
+	case GFM_JOURNAL_QUOTA_DIR_REMOVE: {
 		struct db_inode_inum_arg *m = obj;
 		printf("ino=%" GFARM_PRId64, m->inum);
 		break;
@@ -437,6 +460,27 @@ print_obj(enum journal_operation ope, void *obj)
 		printf("name=%s;is_group=%d", m->name, m->is_group);
 		break;
 	}
+	case GFM_JOURNAL_QUOTA_DIRSET_ADD:
+	case GFM_JOURNAL_QUOTA_DIRSET_MODIFY: {
+		struct db_quota_dirset_arg *m = obj;
+		printf("username=%s;dirsetname=%s",
+		    m->dirset.username, m->dirset.dirsetname);
+		if (opt_verbose)
+			print_quota_metadata(&m->q);
+		break;
+	}
+	case GFM_JOURNAL_QUOTA_DIRSET_REMOVE: {
+		struct gfarm_dirset_info *m = obj;
+		printf("username=%s;dirsetname=%s",
+		    m->username, m->dirsetname);
+		break;
+	}
+	case GFM_JOURNAL_QUOTA_DIR_ADD: {
+		struct db_inode_dirset_arg *m = obj;
+		printf("ino=%" GFARM_PRId64 ";username=%s;dirsetname=%s",
+		    m->inum, m->dirset.username, m->dirset.dirsetname);
+		break;
+	}
 	case GFM_JOURNAL_MDHOST_ADD:
 		print_mdhost(obj);
 		break;
@@ -492,6 +536,7 @@ main(int argc, char **argv)
 	if (argc > 0)
 		program_name = basename(argv[0]);
 	gflog_initialize();
+	gfarm_context_init();
 
 	while ((c = getopt(argc, argv, "dhlmrv?")) != -1) {
 		switch (c) {
@@ -575,6 +620,7 @@ main(int argc, char **argv)
 	}
 end:
 	journal_file_close(jf);
+	gfarm_context_term();
 	gflog_terminate();
 	return (exit_code);
 }

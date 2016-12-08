@@ -18,7 +18,6 @@
 
 #include <pthread.h>	/* db_access.h currently needs this */
 #include <assert.h>
-#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -32,11 +31,10 @@
 
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
+#include "quota_info.h"
 #include "metadb_common.h"
 #include "xattr_info.h"
-#include "quota_info.h"
 #include "metadb_server.h"
 
 #include "quota.h"
@@ -135,8 +133,12 @@ free_arg(void *arg)
 
 static PGconn *conn = NULL;
 static int transaction_nesting = 0;
+static int transaction_postponed = 0;
 static int transaction_ok;
 static int connection_recovered = 0;
+
+/* XXX FIXME - workaround for SourceForge #549 */
+static int invalid_XML_value = 0;
 
 static char *
 gfarm_pgsql_make_conninfo(const char **varnames, char **varvalues, int n,
@@ -409,7 +411,7 @@ pgsql_should_retry(PGresult *res)
 		 * we execute SQL commands requested by the upper layer
 		 * module anyway, since there is no way to keep consistency
 		 * of the database in such a situation.
-		 * 
+		 *
 		 * We enable 'connection_recovered' flag here.  While the
 		 * flag is enabled, we check 'transaction_nesting' value
 		 * lazily.  Once "START TRANSACTION", "COMMIT" or "ROLLBACK"
@@ -418,6 +420,7 @@ pgsql_should_retry(PGresult *res)
 		gflog_info(GFARM_MSG_1002333,
 		    "PostgreSQL connection recovered");
 		transaction_nesting = 0;
+		transaction_postponed = 0;
 		connection_recovered = 1;
 		transaction_ok = 0;
 		return (1);
@@ -498,10 +501,9 @@ gfarm_pgsql_check_insert(PGresult *res,
 	return (e);
 }
 
-/* this interface is exported for a use from a private extension */
 gfarm_error_t
-gfarm_pgsql_check_update_or_delete(PGresult *res,
-	const char *command, const char *diag)
+gfarm_pgsql_check_update_or_delete0(PGresult *res,
+	const char *command, int object_must_exist, const char *diag)
 {
 	gfarm_error_t e;
 	char *pge;
@@ -517,7 +519,8 @@ gfarm_pgsql_check_update_or_delete(PGresult *res,
 			e = GFARM_ERR_UNKNOWN;
 		gflog_error(GFARM_MSG_1000426, "%s: %s: %s", diag, command,
 		    PQresultErrorMessage(res));
-	} else if (strtol(PQcmdTuples(res), NULL, 0) == 0) {
+	} else if (object_must_exist &&
+	    strtol(PQcmdTuples(res), NULL, 0) == 0) {
 		e = GFARM_ERR_NO_SUCH_OBJECT;
 		gflog_error(GFARM_MSG_1000427,
 		    "%s: %s: %s", diag, command, "no such object");
@@ -525,6 +528,14 @@ gfarm_pgsql_check_update_or_delete(PGresult *res,
 		e = GFARM_ERR_NO_ERROR;
 	}
 	return (e);
+}
+
+/* this interface is exported for a use from a private extension */
+gfarm_error_t
+gfarm_pgsql_check_update_or_delete(PGresult *res,
+	const char *command, const char *diag)
+{
+	return (gfarm_pgsql_check_update_or_delete0(res, command, 1, diag));
 }
 
 static gfarm_error_t
@@ -617,10 +628,12 @@ gfarm_pgsql_start(const char *diag)
 
 	if (connection_recovered)
 		connection_recovered = 0;
-	if (transaction_nesting++ > 0)
+	if (transaction_nesting++ > 0 && !transaction_postponed)
 		return (GFARM_ERR_NO_ERROR);
 
+	transaction_postponed = 0;
 	transaction_ok = 1;
+	invalid_XML_value = 0;
 	res = PQexec(conn, "START TRANSACTION");
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK) {
@@ -643,10 +656,12 @@ gfarm_pgsql_start_with_retry(const char *diag)
 
 	if (connection_recovered)
 		connection_recovered = 0;
-	if (transaction_nesting++ > 0)
+	if (transaction_nesting++ > 0 && !transaction_postponed)
 		return (GFARM_ERR_NO_ERROR);
 
+	transaction_postponed = 0;
 	transaction_ok = 1;
+	invalid_XML_value = 0;
 	do {
 		res = PQexec(conn, "START TRANSACTION");
 	} while (PQresultStatus(res) != PGRES_COMMAND_OK &&
@@ -670,9 +685,18 @@ gfarm_pgsql_commit_sn(gfarm_uint64_t seqnum, const char *diag)
 		return (GFARM_ERR_NO_ERROR);
 
 	assert(transaction_nesting == 0);
+	if (transaction_postponed) {
+		/*
+		 * this means this transaction is actually empty,
+		 * because all entries in db_pgsql_ops call gfarm_pgsql_start()
+		 * explicitly.
+		 */
+		transaction_postponed = 0;
+		return (GFARM_ERR_NO_ERROR);
+	}
 
 	if (gfarm_get_metadb_replication_enabled() && seqnum > 0) {
-		gfarm_error_t e, e2;
+		gfarm_error_t e;
 		struct db_seqnum_arg a;
 
 		a.name = "";
@@ -680,11 +704,18 @@ gfarm_pgsql_commit_sn(gfarm_uint64_t seqnum, const char *diag)
 		if ((e = gfarm_pgsql_seqnum_modify(&a))
 		    != GFARM_ERR_NO_ERROR) {
 			gflog_debug(GFARM_MSG_1003245,
-			    "gfarm_pgsql_seqnum_modify : %s",
+			    "gfarm_pgsql_seqnum_modify: %s",
 			    gfarm_error_string(e));
-			e2 = gfarm_pgsql_exec_and_log("ROLLBACK", diag);
-			(void)e2;
-			return (e);
+			/* XXX FIXME - workaround for SourceForge #549 */
+			if (invalid_XML_value) {
+				transaction_ok = 0;
+				invalid_XML_value = 0;
+				gflog_notice(GFARM_MSG_1004084,
+				    "transaction aborted by invalid XML value:"
+				    " seqnum %lld: %s", (long long)seqnum,
+				    gfarm_error_string(e));
+			} else
+				return (e);
 		}
 	}
 	return (gfarm_pgsql_exec_and_log(transaction_ok ?
@@ -724,7 +755,7 @@ gfarm_pgsql_insert0(gfarm_uint64_t seqnum,
 	PGresult *res;
 	gfarm_error_t e;
 
-	if (transaction_nesting == 0) {
+	if (transaction_nesting == 0 || transaction_postponed) {
 		e = start_op(diag);
 		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
@@ -794,19 +825,21 @@ gfarm_pgsql_update_or_delete0(gfarm_uint64_t seqnum,
 	gfarm_error_t (*start_op)(const char *),
 	PGresult *(*exec_params_op)(const char *, int, const Oid *,
 	    const char *const *, const int *, const int *, int),
+	int object_must_exist,
 	const char *diag)
 {
 	PGresult *res;
 	gfarm_error_t e;
 
-	if (transaction_nesting == 0) {
+	if (transaction_nesting == 0 || transaction_postponed) {
 		e = start_op(diag);
 		if (e != GFARM_ERR_NO_ERROR)
 			return (e);
 		res = PQexecParams(conn, command, nParams,
 		    paramTypes, paramValues, paramLengths, paramFormats,
 		    resultFormat);
-		e = gfarm_pgsql_check_update_or_delete(res, command, diag);
+		e = gfarm_pgsql_check_update_or_delete0(
+		    res, command, object_must_exist, diag);
 		if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
 			return (e);
 		if (e == GFARM_ERR_NO_ERROR)
@@ -817,7 +850,8 @@ gfarm_pgsql_update_or_delete0(gfarm_uint64_t seqnum,
 		res = exec_params_op(command, nParams,
 		    paramTypes, paramValues, paramLengths, paramFormats,
 		    resultFormat);
-		e = gfarm_pgsql_check_update_or_delete(res, command, diag);
+		e = gfarm_pgsql_check_update_or_delete0(
+		    res, command, object_must_exist, diag);
 		if (e == GFARM_ERR_DB_ACCESS_SHOULD_BE_RETRIED)
 			return (e);
 	}
@@ -839,7 +873,7 @@ gfarm_pgsql_update_or_delete(gfarm_uint64_t seqnum,
 {
 	return (gfarm_pgsql_update_or_delete0(seqnum, command, nParams,
 	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat,
-	    gfarm_pgsql_start, gfarm_pgsql_exec_params, diag));
+	    gfarm_pgsql_start, gfarm_pgsql_exec_params, 1, diag));
 }
 
 /* this interface is exported for a use from a private extension */
@@ -856,7 +890,24 @@ gfarm_pgsql_update_or_delete_with_retry(const char *command,
 	return (gfarm_pgsql_update_or_delete0(0, command, nParams,
 	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat,
 	    gfarm_pgsql_start_with_retry, gfarm_pgsql_exec_params_with_retry,
-	    diag));
+	    1, diag));
+}
+
+/* similar to gfarm_pgsql_update_or_delete(), but "no such object" is OK */
+static gfarm_error_t
+gfarm_pgsql_try_delete(gfarm_uint64_t seqnum,
+	const char *command,
+	int nParams,
+	const Oid *paramTypes,
+	const char *const *paramValues,
+	const int *paramLengths,
+	const int *paramFormats,
+	int resultFormat,
+	const char *diag)
+{
+	return (gfarm_pgsql_update_or_delete0(seqnum, command, nParams,
+	    paramTypes, paramValues, paramLengths, paramFormats, resultFormat,
+	    gfarm_pgsql_start, gfarm_pgsql_exec_params, 0, diag));
 }
 
 static gfarm_error_t
@@ -1297,7 +1348,15 @@ static gfarm_error_t
 gfarm_pgsql_begin(gfarm_uint64_t seqnum, void *arg)
 {
 	assert(transaction_nesting == 0);
-	return (gfarm_pgsql_start("pgsql_begin"));
+	transaction_nesting++;
+	/*
+	 * `transaction_postponed' means that db_begin() has been called,
+	 * but no SQL statement is issued yet.
+	 * this handling depends on the fact that all all entries in
+	 * db_pgsql_ops call gfarm_pgsql_start() explicitly.
+	 */
+	transaction_postponed = 1;
+	return (GFARM_ERR_NO_ERROR);
 }
 
 static gfarm_error_t
@@ -1334,7 +1393,7 @@ gen_scheme_check_query(const char *tablename,
 	if (of == 0 && sz > 0)
 		tmp = (char *)malloc(sz);
 	if (tmp == NULL) {
-		gflog_error(GFARM_MSG_UNFIXED,
+		gflog_error(GFARM_MSG_1004085,
 			"Can't allocate an SQL query string "
 		"for table scheme check.");
 		return (NULL);
@@ -1394,13 +1453,13 @@ gfarm_pgsql_check_scheme(const char *tablename,
 	}
 
 	if (gfarm_pgsql_start(diag) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED, "pgsql restart failed");
+		gflog_debug(GFARM_MSG_1004086, "pgsql restart failed");
 		goto bailout;
 	}
 
 	res = PQexec(conn, sql);
 	if (res == NULL) {
-		gflog_error(GFARM_MSG_UNFIXED,
+		gflog_error(GFARM_MSG_1004087,
 			"A PostgreSQL qurey result is NULL: %s",
 			PQerrorMessage(conn));
 		goto bailout;
@@ -1427,10 +1486,10 @@ gfarm_pgsql_check_scheme(const char *tablename,
 		emsg = PQresultErrorMessage(res);
 		dbe = gfarm_pgsql_sql_error_to_gfarm_rdbms_error(res);
 		if (dbe != RDBMS_ERROR_ANY_OTHERS)
-			gflog_error(GFARM_MSG_UNFIXED,
+			gflog_error(GFARM_MSG_1004088,
 				"SQL realated error: %s", emsg);
 		else
-			gflog_error(GFARM_MSG_UNFIXED,
+			gflog_error(GFARM_MSG_1004089,
 				"Unexpected PostgreSQL error: %s", emsg);
 		break;
 	default:
@@ -1440,7 +1499,7 @@ gfarm_pgsql_check_scheme(const char *tablename,
 		 * PGRES_COPY_IN */
 		emsg = PQresultErrorMessage(res);
 		dbe = RDBMS_ERROR_ANY_OTHERS;
-		gflog_error(GFARM_MSG_UNFIXED,
+		gflog_error(GFARM_MSG_1004090,
 			"must not happen, unexpected query status: %s", emsg);
 		assert(0);
 		break;
@@ -1622,10 +1681,49 @@ gfarm_pgsql_host_modify(gfarm_uint64_t seqnum, struct db_host_modify_arg *arg)
 }
 
 static gfarm_error_t
+pgsql_filecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
+{
+	const char *paramValues[1];
+
+	paramValues[0] = hostname;
+	/* use gfarm_pgsql_try_delete, because there may be no filecopy */
+	return (gfarm_pgsql_try_delete(seqnum,
+	    "DELETE FROM FileCopy WHERE hostname = $1",
+	    1, /* number of params */
+	    NULL, /* param types */
+	    paramValues,
+	    NULL, /* param lengths */
+	    NULL, /* param formats */
+	    0, /* ask for text results */
+	    "pgsql_filecopy_remove_by_host"));
+}
+
+static gfarm_error_t
+pgsql_deadfilecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
+{
+	const char *paramValues[1];
+
+	paramValues[0] = hostname;
+	/* use gfarm_pgsql_try_delete, because there may be no deadfilecopy */
+	return (gfarm_pgsql_try_delete(seqnum,
+	    "DELETE FROM DeadFileCopy WHERE hostname = $1",
+	    1, /* number of params */
+	    NULL, /* param types */
+	    paramValues,
+	    NULL, /* param lengths */
+	    NULL, /* param formats */
+	    0, /* ask for text results */
+	    "pgsql_filecopy_remove_by_host"));
+}
+
+static gfarm_error_t
 gfarm_pgsql_host_remove(gfarm_uint64_t seqnum, char *hostname)
 {
 	gfarm_error_t e;
 	const char *paramValues[1];
+
+	pgsql_filecopy_remove_by_host(seqnum, hostname);
+	pgsql_deadfilecopy_remove_by_host(seqnum, hostname);
 
 	paramValues[0] = hostname;
 	e = gfarm_pgsql_update_or_delete(seqnum,
@@ -1664,19 +1762,19 @@ gfarm_pgsql_host_check_scheme(void)
 
 		switch (dbe) {
 		case RDBMS_ERROR_INVALID_SCHEME:
-			gflog_fatal(GFARM_MSG_UNFIXED,
+			gflog_fatal(GFARM_MSG_1004091,
 				"The Host table scheme is not valid. "
 				"Running the config-gfarm-update might "
 				"solve this.");
 			break;
 		case RDBMS_ERROR_SQL_SYNTAX_ERROR:
-			gflog_error(GFARM_MSG_UNFIXED,
+			gflog_error(GFARM_MSG_1004092,
 				"Must not happen. "
 				"SQL syntax error(s) in query??");
 			assert(0);
 			break;
 		default:
-			gflog_fatal(GFARM_MSG_UNFIXED,
+			gflog_fatal(GFARM_MSG_1004093,
 				"Got an error while checking the Host "
 				"table scheme. Exit anyway to prevent "
 				"any filesystem metadata corruptions.");
@@ -1801,6 +1899,7 @@ static gfarm_error_t
 gfarm_pgsql_user_add(gfarm_uint64_t seqnum, struct gfarm_user_info *info)
 {
 	gfarm_error_t e;
+
 	e = pgsql_user_call(seqnum, info,
 		"INSERT INTO GfarmUser (username, homedir, realname, gsiDN) "
 		     "VALUES ($1, $2, $3, $4)",
@@ -2567,7 +2666,22 @@ gfarm_pgsql_filecopy_add(gfarm_uint64_t seqnum,
 	struct db_filecopy_arg *arg)
 {
 	return (pgsql_filecopy_call(seqnum, arg,
-		"INSERT INTO FileCopy (inumber, hostname) VALUES ($1, $2)",
+		"INSERT INTO FileCopy (inumber, hostname) "
+#if 0
+		"VALUES ($1, $2)",
+#else /* XXX FIXME: workaround for SourceForge #431 */
+		/*
+		 * without "::varchar" just after $2,
+		 * the following error occurrs with PostgreSQL-8.4.4:
+		 * ERROR:  inconsistent types deduced for parameter $2
+		 * DETAIL:  text versus character varying
+		 *
+		 * "::int8" was not necessary, but added for
+		 * style consistency.
+		 */
+		"SELECT $1::int8, $2::varchar WHERE NOT EXISTS "
+		"(SELECT * FROM FileCopy WHERE inumber=$1 AND hostname=$2)",
+#endif
 		gfarm_pgsql_insert,
 		"pgsql_filecopy_add"));
 }
@@ -2576,10 +2690,25 @@ static gfarm_error_t
 gfarm_pgsql_filecopy_remove(gfarm_uint64_t seqnum,
 	struct db_filecopy_arg *arg)
 {
+	/*
+	 * We use gfarm_pgsql_try_delete, because master gfmd before
+	 * SF.net #860 may send stale GFM_JOURNAL_FILECOPY_REMOVE
+	 */
 	return (pgsql_filecopy_call(seqnum, arg,
 		"DELETE FROM FileCopy WHERE inumber = $1 AND hostname = $2",
-		gfarm_pgsql_update_or_delete,
+		gfarm_pgsql_try_delete,
 		"pgsql_filecopy_remove"));
+}
+
+/* only called at initialization, bypass journal */
+static gfarm_error_t
+gfarm_pgsql_filecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
+{
+	gfarm_error_t e;
+
+	e = pgsql_filecopy_remove_by_host(seqnum, hostname);
+	free_arg(hostname);
+	return (e);
 }
 
 static void
@@ -2656,7 +2785,23 @@ gfarm_pgsql_deadfilecopy_add(gfarm_uint64_t seqnum,
 {
 	return (pgsql_deadfilecopy_call(seqnum, arg,
 		"INSERT INTO DeadFileCopy (inumber, igen, hostname) "
+#if 0
 			"VALUES ($1, $2, $3)",
+#else /* XXX FIXME: workaround for SourceForge #407 */
+			/*
+			 * without "::varchar" just after $3,
+			 * the following error occurrs with PostgreSQL-8.4.4:
+			 * ERROR:  inconsistent types deduced for parameter $3
+			 * DETAIL:  text versus character varying
+			 *
+			 * "::int8" was not necessary, but added for
+			 * style consistency.
+			 */
+			"SELECT $1::int8, $2::int8, $3::varchar "
+			"WHERE NOT EXISTS (SELECT * FROM DeadFileCopy "
+			"WHERE inumber=$1 AND igen=$2 "
+			"AND hostname=$3)",
+#endif
 		gfarm_pgsql_insert,
 		"pgsql_deadfilecopy_add"));
 }
@@ -2665,11 +2810,26 @@ static gfarm_error_t
 gfarm_pgsql_deadfilecopy_remove(gfarm_uint64_t seqnum,
 	struct db_deadfilecopy_arg *arg)
 {
+	/*
+	 * We use gfarm_pgsql_try_delete, because master gfmd before
+	 * SF.net #860 may send stale GFM_JOURNAL_DEADFILECOPY_REMOVE
+	 */
 	return (pgsql_deadfilecopy_call(seqnum, arg,
 		"DELETE FROM DeadFileCopy "
 			"WHERE inumber = $1 AND igen = $2 AND hostname = $3",
-		gfarm_pgsql_update_or_delete,
-		"pgsql_deadfilecopy_remove"));
+		gfarm_pgsql_try_delete,
+		"pgsql_dilecopy_remove"));
+}
+
+/* only called at initialization, bypass journal */
+static gfarm_error_t
+gfarm_pgsql_deadfilecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
+{
+	gfarm_error_t e;
+
+	e = pgsql_deadfilecopy_remove_by_host(seqnum, hostname);
+	free_arg(hostname);
+	return (e);
 }
 
 static void
@@ -2937,6 +3097,16 @@ gfarm_pgsql_xattr_add(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1004094, "%s: inum %lld attr %s value "
+		    "\'%*s\': %s", diag, (long long)arg->inum,
+		    (char *)arg->attrname, (int)arg->size, (char *)arg->value,
+		    gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -2984,6 +3154,16 @@ gfarm_pgsql_xattr_modify(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1004095, "%s: inum %lld attr %s value "
+		    "\'%*s\': %s", diag, (long long)arg->inum,
+		    (char *)arg->attrname, (int)arg->size, (char *)arg->value,
+		    gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -3022,6 +3202,14 @@ gfarm_pgsql_xattr_remove(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1004096, "%s: attr %s: %s", diag,
+		    (char *)arg->attrname, gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -3057,6 +3245,14 @@ gfarm_pgsql_xattr_removeall(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 		0, /* ask for text results */
 		diag);
 
+	/* XXX FIXME - workaround for SourceForge #549 */
+	if (gfarm_get_metadb_replication_enabled() &&
+	    arg->xmlMode && e != GFARM_ERR_NO_ERROR) {
+		gflog_notice(GFARM_MSG_1004097, "%s: inum %lld: %s", diag,
+		    (long long)arg->inum, gfarm_error_string(e));
+		invalid_XML_value = 1;
+		e = GFARM_ERR_NO_ERROR;
+	}
 	free_arg(arg);
 	return (e);
 }
@@ -3115,12 +3311,12 @@ gfarm_pgsql_xattr_get(gfarm_uint64_t seqnum, struct db_xattr_arg *arg)
 	if (arg->xmlMode) {
 		command = "SELECT attrvalue FROM XmlAttr "
 			"WHERE inumber = $1 AND attrname = $2";
-		diag = "pgsql_xmlattr_load";
+		diag = "pgsql_xmlattr_get";
 		set_fields = pgsql_xattr_set_attrvalue_string;
 	} else {
 		command = "SELECT attrvalue FROM XAttr "
 			"WHERE inumber = $1 AND attrname = $2";
-		diag = "pgsql_xattr_load";
+		diag = "pgsql_xattr_get";
 		set_fields = pgsql_xattr_set_attrvalue_binary;
 	}
 
@@ -3485,6 +3681,313 @@ gfarm_pgsql_quota_load(void *closure, int is_group,
 /**********************************************************************/
 
 static gfarm_error_t
+pgsql_quota_dirset_call(gfarm_uint64_t seqnum, struct db_quota_dirset_arg *arg,
+	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+{
+	gfarm_error_t e;
+	const char *paramValues[19];
+
+	char grace_period[GFARM_INT64STRLEN + 1];
+	char space[GFARM_INT64STRLEN + 1];
+	char space_exceed[GFARM_INT64STRLEN + 1];
+	char space_soft[GFARM_INT64STRLEN + 1];
+	char space_hard[GFARM_INT64STRLEN + 1];
+	char num[GFARM_INT64STRLEN + 1];
+	char num_exceed[GFARM_INT64STRLEN + 1];
+	char num_soft[GFARM_INT64STRLEN + 1];
+	char num_hard[GFARM_INT64STRLEN + 1];
+	char phy_space[GFARM_INT64STRLEN + 1];
+	char phy_space_exceed[GFARM_INT64STRLEN + 1];
+	char phy_space_soft[GFARM_INT64STRLEN + 1];
+	char phy_space_hard[GFARM_INT64STRLEN + 1];
+	char phy_num[GFARM_INT64STRLEN + 1];
+	char phy_num_exceed[GFARM_INT64STRLEN + 1];
+	char phy_num_soft[GFARM_INT64STRLEN + 1];
+	char phy_num_hard[GFARM_INT64STRLEN + 1];
+
+	sprintf(grace_period, "%" GFARM_PRId64, arg->q.limit.grace_period);
+	sprintf(space, "%" GFARM_PRId64, arg->q.usage.space);
+	sprintf(space_exceed, "%" GFARM_PRId64, arg->q.exceed.space_time);
+	sprintf(space_soft, "%" GFARM_PRId64, arg->q.limit.soft.space);
+	sprintf(space_hard, "%" GFARM_PRId64, arg->q.limit.hard.space);
+	sprintf(num, "%" GFARM_PRId64, arg->q.usage.num);
+	sprintf(num_exceed, "%" GFARM_PRId64, arg->q.exceed.num_time);
+	sprintf(num_soft, "%" GFARM_PRId64, arg->q.limit.soft.num);
+	sprintf(num_hard, "%" GFARM_PRId64, arg->q.limit.hard.num);
+	sprintf(phy_space, "%" GFARM_PRId64, arg->q.usage.phy_space);
+	sprintf(phy_space_exceed, "%" GFARM_PRId64,
+	    arg->q.exceed.phy_space_time);
+	sprintf(phy_space_soft, "%" GFARM_PRId64, arg->q.limit.soft.phy_space);
+	sprintf(phy_space_hard, "%" GFARM_PRId64, arg->q.limit.hard.phy_space);
+	sprintf(phy_num, "%" GFARM_PRId64, arg->q.usage.phy_num);
+	sprintf(phy_num_exceed, "%" GFARM_PRId64, arg->q.exceed.phy_num_time);
+	sprintf(phy_num_soft, "%" GFARM_PRId64, arg->q.limit.soft.phy_num);
+	sprintf(phy_num_hard, "%" GFARM_PRId64, arg->q.limit.hard.phy_num);
+
+	paramValues[0] = arg->dirset.username;
+	paramValues[1] = arg->dirset.dirsetname;
+	paramValues[2] = grace_period;
+	paramValues[3] = space;
+	paramValues[4] = space_exceed;
+	paramValues[5] = space_soft;
+	paramValues[6] = space_hard;
+	paramValues[7] = num;
+	paramValues[8] = num_exceed;
+	paramValues[9] = num_soft;
+	paramValues[10] = num_hard;
+	paramValues[11] = phy_space;
+	paramValues[12] = phy_space_exceed;
+	paramValues[13] = phy_space_soft;
+	paramValues[14] = phy_space_hard;
+	paramValues[15] = phy_num;
+	paramValues[16] = phy_num_exceed;
+	paramValues[17] = phy_num_soft;
+	paramValues[18] = phy_num_hard;
+
+	e = (*op)(
+		seqnum,
+		sql,
+		19, /* number of params */
+		NULL, /* param types */
+		paramValues,
+		NULL, /* param lengths */
+		NULL, /* param formats */
+		0, /* ask for text results */
+		diag);
+
+	free_arg(arg);
+	return (e);
+}
+
+static gfarm_error_t
+gfarm_pgsql_quota_dirset_add(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	return (pgsql_quota_dirset_call(seqnum, arg,
+	    "INSERT INTO QuotaDirSet "
+	    "(username, dirSetName, gracePeriod, "
+	    "fileSpace, fileSpaceExceed, fileSpaceSoft, fileSpaceHard, "
+	    "fileNum, fileNumExceed, fileNumSoft, fileNumHard, "
+	    "phySpace, phySpaceExceed, phySpaceSoft, phySpaceHard, "
+	    "phyNum, phyNumExceed, phyNumSoft, phyNumHard) "
+	    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9 ,$10, "
+	    "$11, $12, $13, $14, $15, $16, $17, $18, $19)",
+	     gfarm_pgsql_insert, "pgsql_quota_dirset_add"));
+}
+
+static gfarm_error_t
+gfarm_pgsql_quota_dirset_modify(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	return (pgsql_quota_dirset_call(seqnum, arg,
+	    "UPDATE QuotaDirSet SET gracePeriod = $3, "
+	    "fileSpace = $4, fileSpaceExceed = $5, "
+	    "fileSpaceSoft = $6, fileSpaceHard = $7, "
+	    "fileNum = $8, fileNumExceed = $9, "
+	    "fileNumSoft = $10, fileNumHard = $11, "
+	    "phySpace = $12, phySpaceExceed = $13, "
+	    "phySpaceSoft = $14, phySpaceHard = $15, "
+	    "phyNum = $16, phyNumExceed = $17, "
+	    "phyNumSoft = $18, phyNumHard = $19 "
+	    "WHERE username = $1 AND dirSetName = $2",
+	    gfarm_pgsql_update_or_delete, "pgsql_quota_dirset_modify"));
+}
+
+static gfarm_error_t
+gfarm_pgsql_quota_dirset_remove(gfarm_uint64_t seqnum,
+	struct gfarm_dirset_info *arg)
+{
+	gfarm_error_t e;
+	const char *paramValues[2];
+
+	paramValues[0] = arg->username;
+	paramValues[1] = arg->dirsetname;
+	e = gfarm_pgsql_update_or_delete(
+	    seqnum,
+	    "DELETE FROM QuotaDirSet WHERE username = $1 AND dirSetName = $2",
+	    2, /* number of params */
+	    NULL, /* param types */
+	    paramValues,
+	    NULL, /* param lengths */
+	    NULL, /* param formats */
+	    0, /* ask for text results */
+	    "pgsql_quota_dirset_remove");
+
+	free_arg(arg);
+	return (e);
+}
+
+static void
+quota_dirset_info_set_fields_from_copy_binary(
+	const char *buf, int residual, void *vinfo)
+{
+	struct db_quota_dirset_arg *info = vinfo;
+	uint16_t num_fields;
+
+	COPY_BINARY(num_fields, buf, residual,
+	    "pgsql_quota_dirset_load: field number");
+	num_fields = ntohs(num_fields);
+	if (num_fields < 19) /* allow fields addition in future */
+		gflog_fatal(GFARM_MSG_1004714,
+		    "pgsql_quota_dirset_load: fields = %d", num_fields);
+
+	info->dirset.username =
+	    get_string_from_copy_binary(&buf, &residual);
+	info->dirset.dirsetname =
+	    get_string_from_copy_binary(&buf, &residual);
+	info->q.limit.grace_period =
+	    get_int64_from_copy_binary(&buf, &residual);
+	info->q.usage.space = get_int64_from_copy_binary(&buf, &residual);
+	info->q.exceed.space_time =
+	    get_int64_from_copy_binary(&buf, &residual);
+	info->q.limit.soft.space = get_int64_from_copy_binary(&buf, &residual);
+	info->q.limit.hard.space = get_int64_from_copy_binary(&buf, &residual);
+	info->q.usage.num = get_int64_from_copy_binary(&buf, &residual);
+	info->q.exceed.num_time = get_int64_from_copy_binary(&buf, &residual);
+	info->q.limit.soft.num = get_int64_from_copy_binary(&buf, &residual);
+	info->q.limit.hard.num = get_int64_from_copy_binary(&buf, &residual);
+	info->q.usage.phy_space = get_int64_from_copy_binary(&buf, &residual);
+	info->q.exceed.phy_space_time = get_int64_from_copy_binary(
+		&buf, &residual);
+	info->q.limit.soft.phy_space = get_int64_from_copy_binary(
+		&buf, &residual);
+	info->q.limit.hard.phy_space = get_int64_from_copy_binary(
+		&buf, &residual);
+	info->q.usage.phy_num = get_int64_from_copy_binary(&buf, &residual);
+	info->q.exceed.phy_num_time = get_int64_from_copy_binary(
+		&buf, &residual);
+	info->q.limit.soft.phy_num =
+	    get_int64_from_copy_binary(&buf, &residual);
+	info->q.limit.hard.phy_num =
+	    get_int64_from_copy_binary(&buf, &residual);
+}
+
+static gfarm_error_t
+gfarm_pgsql_quota_dirset_load(void *closure,
+	void (*callback)(void *,
+	    struct gfarm_dirset_info *, struct quota_metadata *))
+{
+	struct db_quota_dirset_arg tmp_info;
+	struct db_quota_dirset_trampoline_closure c;
+
+	c.closure = closure;
+	c.callback = callback;
+
+	return (gfarm_pgsql_generic_load(
+	    "COPY QuotaDirSet TO STDOUT BINARY",
+	    &tmp_info, db_quota_dirset_callback_trampoline, &c,
+	    &db_base_quota_dirset_arg_ops,
+	    quota_dirset_info_set_fields_from_copy_binary,
+	    "pgsql_quota_dirset_load"));
+}
+
+/**********************************************************************/
+
+static gfarm_error_t
+pgsql_quota_dir_call(gfarm_uint64_t seqnum, struct db_inode_dirset_arg *arg,
+	const char *sql, gfarm_pgsql_dml_sn_t op, const char *diag)
+{
+	gfarm_error_t e;
+	const char *paramValues[3];
+	char inumber[GFARM_INT64STRLEN + 1];
+
+	sprintf(inumber, "%" GFARM_PRId64, arg->inum);
+	paramValues[0] = inumber;
+	paramValues[1] = arg->dirset.username;
+	paramValues[2] = arg->dirset.dirsetname;
+	e = (*op)(
+		seqnum,
+		sql,
+		3, /* number of params */
+		NULL, /* param types */
+		paramValues,
+		NULL, /* param lengths */
+		NULL, /* param formats */
+		0, /* ask for text results */
+		diag);
+
+	free_arg(arg);
+	return (e);
+}
+
+static gfarm_error_t
+gfarm_pgsql_quota_dir_add(gfarm_uint64_t seqnum,
+	struct db_inode_dirset_arg *arg)
+{
+	return  (pgsql_quota_dir_call(seqnum, arg,
+	    "INSERT INTO QuotaDirectory "
+	    "(inumber, username, dirSetName) VALUES ($1, $2, $3)",
+	     gfarm_pgsql_insert, "pgsql_quota_dir_add"));
+};
+
+static gfarm_error_t
+gfarm_pgsql_quota_dir_remove(gfarm_uint64_t seqnum,
+	struct db_inode_inum_arg *arg)
+{
+	gfarm_error_t e;
+	const char *paramValues[1];
+	char inumber[GFARM_INT64STRLEN + 1];
+
+	sprintf(inumber, "%" GFARM_PRId64, arg->inum);
+	paramValues[0] = inumber;
+
+	e = gfarm_pgsql_update_or_delete(
+	    seqnum,
+	    "DELETE FROM QuotaDirectory WHERE inumber = $1",
+	    1, /* number of params */
+	    NULL, /* param types */
+	    paramValues,
+	    NULL, /* param lengths */
+	    NULL, /* param formats */
+	    0, /* ask for text results */
+	    "pgsql_quota_dir_remove");
+
+	free_arg(arg);
+	return (e);
+}
+
+static void
+quota_dir_info_set_fields_from_copy_binary(
+	const char *buf, int residual, void *vinfo)
+{
+	struct db_inode_dirset_arg *info = vinfo;
+	uint16_t num_fields;
+
+	COPY_BINARY(num_fields, buf, residual,
+	    "pgsql_quota_dir_load: field number");
+	num_fields = ntohs(num_fields);
+	if (num_fields < 3) /* allow fields addition in future */
+		gflog_fatal(GFARM_MSG_1004715,
+		    "pgsql_quota_dir_load: fields = %d", num_fields);
+
+	info->inum = get_int64_from_copy_binary(&buf, &residual);
+	info->dirset.username =
+	    get_string_from_copy_binary(&buf, &residual);
+	info->dirset.dirsetname =
+	    get_string_from_copy_binary(&buf, &residual);
+}
+
+static gfarm_error_t
+gfarm_pgsql_quota_dir_load(void *closure,
+	void (*callback)(void *, gfarm_ino_t, struct gfarm_dirset_info *))
+{
+	struct db_inode_dirset_arg tmp_info;
+	struct db_quota_dir_trampoline_closure c;
+
+	c.closure = closure;
+	c.callback = callback;
+
+	return (gfarm_pgsql_generic_load(
+	    "COPY QuotaDirectory TO STDOUT BINARY",
+	    &tmp_info, db_quota_dir_callback_trampoline, &c,
+	    &db_base_quota_dir_arg_ops,
+	    quota_dir_info_set_fields_from_copy_binary,
+	    "pgsql_quota_dir_load"));
+}
+
+/**********************************************************************/
+
+static gfarm_error_t
 pgsql_seqnum_call(struct db_seqnum_arg *arg,
 	const char *sql, gfarm_pgsql_dml_t op, const char *diag)
 {
@@ -3807,10 +4310,12 @@ const struct db_ops db_pgsql_ops = {
 
 	gfarm_pgsql_filecopy_add,
 	gfarm_pgsql_filecopy_remove,
+	gfarm_pgsql_filecopy_remove_by_host,
 	gfarm_pgsql_filecopy_load,
 
 	gfarm_pgsql_deadfilecopy_add,
 	gfarm_pgsql_deadfilecopy_remove,
+	gfarm_pgsql_deadfilecopy_remove_by_host,
 	gfarm_pgsql_deadfilecopy_load,
 
 	gfarm_pgsql_direntry_add,
@@ -3833,6 +4338,15 @@ const struct db_ops db_pgsql_ops = {
 	gfarm_pgsql_quota_modify,
 	gfarm_pgsql_quota_remove,
 	gfarm_pgsql_quota_load,
+
+	gfarm_pgsql_quota_dirset_add,
+	gfarm_pgsql_quota_dirset_modify,
+	gfarm_pgsql_quota_dirset_remove,
+	gfarm_pgsql_quota_dirset_load,
+
+	gfarm_pgsql_quota_dir_add,
+	gfarm_pgsql_quota_dir_remove,
+	gfarm_pgsql_quota_dir_load,
 
 	gfarm_pgsql_seqnum_get,
 	gfarm_pgsql_seqnum_add,

@@ -17,7 +17,6 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -25,14 +24,13 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
-#include "quota.h"
+#include "quota_info.h"
 #include "metadb_server.h"
+
+#include "quota.h"
 #include "db_access.h"
 #include "db_ops.h"
 
@@ -55,6 +53,13 @@ gfarm_none_terminate(void)
 static gfarm_error_t
 gfarm_none_nop(gfarm_uint64_t seqnum, void *arg)
 {
+	return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
+}
+
+static gfarm_error_t
+gfarm_none_string_free(gfarm_uint64_t seqnum, char *arg)
+{
+	free(arg);
 	return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
 }
 
@@ -389,6 +394,63 @@ gfarm_none_quota_load(void *closure, int is_group,
 /**********************************************************************/
 
 static gfarm_error_t
+gfarm_none_quota_dirset_add(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_none_quota_dirset_modify(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_none_quota_dirset_remove(gfarm_uint64_t seqnum,
+	struct gfarm_dirset_info *arg)
+{
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_none_quota_dirset_load(void *closure,
+	void (*callback)(void *,
+	    struct gfarm_dirset_info *, struct quota_metadata *))
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+/**********************************************************************/
+
+static gfarm_error_t
+gfarm_none_quota_dir_add(gfarm_uint64_t seqnum,
+		struct db_inode_dirset_arg *arg)
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_none_quota_dir_remove(gfarm_uint64_t seqnum,
+	struct db_inode_inum_arg *arg)
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_none_quota_dir_load(void *closure,
+	void (*callback)(void *, gfarm_ino_t, struct gfarm_dirset_info *))
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+/**********************************************************************/
+
+static gfarm_error_t
 gfarm_none_seqnum_get(const char *name, gfarm_uint64_t *seqnump)
 {
 	return (GFARM_ERR_OPERATION_NOT_SUPPORTED);
@@ -493,10 +555,12 @@ const struct db_ops db_none_ops = {
 
 	gfarm_none_filecopy_free,
 	gfarm_none_filecopy_free,
+	gfarm_none_string_free,
 	gfarm_none_filecopy_load,
 
 	gfarm_none_deadfilecopy_free,
 	gfarm_none_deadfilecopy_free,
+	gfarm_none_string_free,
 	gfarm_none_deadfilecopy_load,
 
 	gfarm_none_direntry_add,
@@ -519,6 +583,15 @@ const struct db_ops db_none_ops = {
 	gfarm_none_quota_modify,
 	gfarm_none_quota_remove,
 	gfarm_none_quota_load,
+
+	gfarm_none_quota_dirset_add,
+	gfarm_none_quota_dirset_modify,
+	gfarm_none_quota_dirset_remove,
+	gfarm_none_quota_dirset_load,
+
+	gfarm_none_quota_dir_add,
+	gfarm_none_quota_dir_remove,
+	gfarm_none_quota_dir_load,
 
 	gfarm_none_seqnum_get,
 	gfarm_none_seqnum_add,

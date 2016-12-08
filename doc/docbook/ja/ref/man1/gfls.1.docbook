@@ -5,7 +5,7 @@
 
 <refentry id="gfls.1">
 
-<refentryinfo><date>27 Apr 2007</date></refentryinfo>
+<refentryinfo><date>11 Nov 2016</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfls</refentrytitle>
@@ -67,6 +67,13 @@
 </varlistentry>
 
 <varlistentry>
+<term><option>-D</option></term>
+<listitem>
+<para>directory quota 機能で所属する dirset 名を表示します。</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
 <term><option>-d</option></term>
 <listitem>
 <para>そのディレクトリに属する内容ではなく、ディレクトリ自身を表示します。</para>
@@ -87,6 +94,14 @@
 <term><option>-F</option></term>
 <listitem>
 <para>名称の直後に、その種類を表す文字 (*/=@| のいずれか) を表示します。</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term><option>-h</option></term>
+<listitem>
+<para>数字を「M(メガ)」のような単位つきで読みやすく表示します。
+単位には2の累乗を用いますので、「M」は 1,048,576 を意味します。</para>
 </listitem>
 </varlistentry>
 

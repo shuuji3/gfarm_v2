@@ -4,7 +4,6 @@
 
 #include <pthread.h>
 #include <assert.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -13,17 +12,14 @@
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
 #include "gfutil.h"
 #include "thrsubr.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
-
-#include "subr.h"
 #include "quota_info.h"
 #include "metadb_server.h"
+
+#include "subr.h"
 #include "quota.h"
 #include "mdhost.h"
 #include "journal_file.h"	/* for enum journal_operation */
@@ -612,7 +608,7 @@ db_fsngroup_modify_arg_alloc(const char *hostname, const char *fsngroupname)
 		arg = (struct db_fsngroup_modify_arg *)malloc(sz);
 alloc_check:
 	if (arg == NULL) {
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1004038,
 			"allocation of 'db_fsngroup_modify_arg' failed.");
 		return (NULL);
 	}
@@ -1144,7 +1140,8 @@ db_inode_cksum_arg_alloc(gfarm_ino_t inum,
 
 	arg->inum = inum;
 	strcpy(arg->type, type);
-	memcpy(arg->sum, sum, len + 1);
+	memcpy(arg->sum, sum, len);
+	arg->sum[len] = '\0';
 	return (arg);
 }
 
@@ -1262,6 +1259,19 @@ db_filecopy_remove(gfarm_ino_t inum, const char *hostname)
 }
 
 gfarm_error_t
+db_filecopy_remove_by_host(const char *hostname)
+{
+	char *arg = strdup_log(hostname, "db_filecopy_remove_by_host");
+
+	if (arg == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+
+	/* only called at initialization, bypass journal */
+	return (db_enter_nosn(
+	    (dbq_entry_func_t)ops->filecopy_remove_by_host, arg));
+}
+
+gfarm_error_t
 db_filecopy_load(void *closure,
 	void (*callback)(void *, gfarm_ino_t, char *))
 {
@@ -1332,6 +1342,20 @@ db_deadfilecopy_remove(gfarm_ino_t inum, gfarm_uint64_t igen,
 		return (GFARM_ERR_NO_MEMORY);
 	}
 	return (db_enter_sn((dbq_entry_func_t)ops->deadfilecopy_remove, arg));
+}
+
+/* only called at initialization, bypass journal */
+gfarm_error_t
+db_deadfilecopy_remove_by_host(const char *hostname)
+{
+	char *arg = strdup_log(hostname, "db_deadfilecopy_remove_by_host");
+
+	if (arg == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+
+	/* bypass journal */
+	return (db_enter_nosn(
+	    (dbq_entry_func_t)ops->deadfilecopy_remove_by_host, arg));
 }
 
 gfarm_error_t
@@ -1593,7 +1617,7 @@ db_xattr_modify(int xmlMode, gfarm_ino_t inum, char *attrname,
 }
 
 gfarm_error_t
-db_xattr_remove(int xmlMode, gfarm_ino_t inum, char *attrname)
+db_xattr_remove(int xmlMode, gfarm_ino_t inum, const char *attrname)
 {
 	struct db_xattr_arg *arg = db_xattr_arg_alloc(xmlMode, inum,
 	    attrname, NULL, 0);
@@ -1810,6 +1834,132 @@ db_quota_group_load(void *closure,
 
 	gfarm_mutex_lock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
 	e = ((*ops->quota_load)(closure, 1, callback));
+	gfarm_mutex_unlock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
+	return (e);
+}
+
+void *
+db_dirset_dup(const char *username, const char *dirsetname, size_t size)
+{
+	size_t usize = strlen(username) + 1;
+	size_t dsize = strlen(dirsetname) + 1;
+	size_t sz;
+	int overflow = 0;
+	struct gfarm_dirset_info *r;
+
+#ifdef __GNUC__ /* workaround gcc warning: might be used uninitialized */
+	r = NULL;
+#endif
+	sz = gfarm_size_add(&overflow, size, usize);
+	sz = gfarm_size_add(&overflow, sz, dsize);
+	if (!overflow)
+		r = malloc(sz);
+	if (overflow || r == NULL) {
+		gflog_debug(GFARM_MSG_1004631,
+		    "db_dirset_dup(%s, %s, %zd): no memory",
+		    username, dirsetname, size);
+		return (NULL);
+	}
+	r->username = (char *)r + size;
+	r->dirsetname = r->username + usize;
+	strcpy(r->username, username);
+	strcpy(r->dirsetname, dirsetname);
+	return (r);
+}
+
+gfarm_error_t
+db_quota_dirset_add(const char *username, const char *dirsetname,
+	const struct quota_metadata *q)
+{
+	struct db_quota_dirset_arg *arg;
+
+	arg = db_dirset_dup(username, dirsetname, sizeof(*arg));
+	if (arg == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+	arg->q = *q;
+
+	return (db_enter_sn((dbq_entry_func_t)ops->quota_dirset_add, arg));
+}
+
+gfarm_error_t
+db_quota_dirset_modify(const char *username, const char *dirsetname,
+	const struct quota_metadata *q)
+{
+	struct db_quota_dirset_arg *arg;
+
+	arg = db_dirset_dup(username, dirsetname, sizeof(*arg));
+	if (arg == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+	arg->q = *q;
+
+	return (db_enter_sn((dbq_entry_func_t)ops->quota_dirset_modify, arg));
+}
+
+gfarm_error_t
+db_quota_dirset_remove(const char *username, const char *dirsetname)
+{
+	struct gfarm_dirset_info *arg;
+
+	arg = db_dirset_dup(username, dirsetname, sizeof(*arg));
+	if (arg == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+
+	return (db_enter_sn((dbq_entry_func_t)ops->quota_dirset_remove, arg));
+}
+
+gfarm_error_t
+db_quota_dirset_load(void *closure,
+	void (*callback)(void *,
+	    struct gfarm_dirset_info *, struct quota_metadata *))
+{
+	gfarm_error_t e;
+	static const char diag[] = "db_quota_dirset_load";
+
+	gfarm_mutex_lock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
+	e = (*ops->quota_dirset_load)(closure, callback);
+	gfarm_mutex_unlock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
+	return (e);
+}
+
+gfarm_error_t
+db_quota_dir_add(gfarm_ino_t inum,
+	const char *username, const char *dirsetname)
+{
+	struct db_inode_dirset_arg *arg;
+
+	arg = db_dirset_dup(username, dirsetname, sizeof(*arg));
+	if (arg == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+	arg->inum = inum;
+
+	return (db_enter_sn((dbq_entry_func_t)ops->quota_dir_add, arg));
+}
+
+gfarm_error_t
+db_quota_dir_remove(gfarm_ino_t inum)
+{
+	struct db_inode_inum_arg *arg;
+
+	GFARM_MALLOC(arg);
+	if (arg == NULL) {
+		gflog_debug(GFARM_MSG_1004632,
+			"allocation of 'db_inode_inum_arg' failed");
+		return (GFARM_ERR_NO_MEMORY);
+	}
+	arg->inum = inum;
+
+	return (db_enter_sn((dbq_entry_func_t)ops->quota_dir_remove, arg));
+}
+
+gfarm_error_t
+db_quota_dir_load(void *closure,
+	void (*callback)(void *, gfarm_ino_t, struct gfarm_dirset_info *))
+{
+	gfarm_error_t e;
+	static const char diag[] = "db_quota_dir_load";
+
+	gfarm_mutex_lock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
+	e = (*ops->quota_dir_load)(closure, callback);
 	gfarm_mutex_unlock(&db_access_mutex, diag, DB_ACCESS_MUTEX_DIAG);
 	return (e);
 }
