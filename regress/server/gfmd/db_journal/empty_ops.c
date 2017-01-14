@@ -3,7 +3,6 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
@@ -12,9 +11,9 @@
 
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
-#include "config.h"
+#include "quota_info.h"
 #include "metadb_server.h"
+#include "config.h"
 
 #include "quota.h"
 #include "db_access.h"
@@ -201,6 +200,12 @@ empty_filecopy(gfarm_uint64_t seqnum, struct db_filecopy_arg *arg)
 }
 
 static gfarm_error_t
+empty_filecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
+{
+	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
 empty_filecopy_load(
 	void *closure,
 	void (*callback)(void *, gfarm_ino_t, char *))
@@ -212,6 +217,12 @@ empty_filecopy_load(
 
 static gfarm_error_t
 empty_deadfilecopy(gfarm_uint64_t seqnum, struct db_deadfilecopy_arg *arg)
+{
+	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+empty_deadfilecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
 {
 	return (GFARM_ERR_NO_ERROR);
 }
@@ -298,6 +309,60 @@ empty_quota_load(void *closure, int is_group,
 		void (*callback)(void *, struct gfarm_quota_info *))
 {
 	return (GFARM_ERR_NO_ERROR);
+}
+
+/**********************************************************************/
+
+static gfarm_error_t
+empty_quota_dirset_add(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+empty_quota_dirset_modify(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+empty_quota_dirset_remove(gfarm_uint64_t seqnum,
+	struct gfarm_dirset_info *arg)
+{
+	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+empty_quota_dirset_load(void *closure,
+	void (*callback)(void *,
+	    struct gfarm_dirset_info *, struct quota_metadata *))
+{
+	return (GFARM_ERR_NO_ERROR);
+}
+
+/**********************************************************************/
+
+static gfarm_error_t
+empty_quota_dir_add(gfarm_uint64_t seqnum,
+		struct db_inode_dirset_arg *arg)
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+empty_quota_dir_remove(gfarm_uint64_t seqnum,
+	struct db_inode_inum_arg *arg)
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+empty_quota_dir_load(void *closure,
+	void (*callback)(void *, gfarm_ino_t, struct gfarm_dirset_info *))
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
 }
 
 /**********************************************************************/
@@ -396,10 +461,12 @@ const struct db_ops empty_ops = {
 
 	empty_filecopy,
 	empty_filecopy,
+	empty_filecopy_remove_by_host,
 	empty_filecopy_load,
 
 	empty_deadfilecopy,
 	empty_deadfilecopy,
+	empty_deadfilecopy_remove_by_host,
 	empty_deadfilecopy_load,
 
 	empty_direntry,
@@ -422,6 +489,15 @@ const struct db_ops empty_ops = {
 	empty_quota,
 	empty_quota_remove,
 	empty_quota_load,
+
+	empty_quota_dirset_add,
+	empty_quota_dirset_modify,
+	empty_quota_dirset_remove,
+	empty_quota_dirset_load,
+
+	empty_quota_dir_add,
+	empty_quota_dir_remove,
+	empty_quota_dir_load,
 
 	empty_seqnum_get,
 	empty_seqnum,

@@ -5,7 +5,7 @@
 
 <refentry id="gfedquota.1">
 
-<refentryinfo><date>23 Mar 2011</date></refentryinfo>
+<refentryinfo><date>29 Oct 2016</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfedquota</refentrytitle>
@@ -15,36 +15,50 @@
 
 <refnamediv id="name">
 <refname>gfedquota</refname>
-<refpurpose>ファイルの制限を編集</refpurpose>
+<refpurpose>ファイル制限を編集</refpurpose>
 </refnamediv>
 
 <refsynopsisdiv id="synopsis">
+
 <cmdsynopsis sepchar=" ">
   <command moreinfo="none">gfedquota</command>
-    <arg choice="opt" rep="norepeat"><replaceable>オプション</replaceable></arg>
+    <arg choice="opt" rep="norepeat">オプション</arg>
+    <arg choice="plain" rep="norepeat">-u <replaceable>ユーザ名</replaceable></arg>
 </cmdsynopsis>
+
+<cmdsynopsis sepchar=" ">
+  <command moreinfo="none">gfedquota</command>
+    <arg choice="opt" rep="norepeat">オプション</arg>
+    <arg choice="plain" rep="norepeat">-g <replaceable>グループ名</replaceable></arg>
+</cmdsynopsis>
+
+<cmdsynopsis sepchar=" ">
+  <command moreinfo="none">gfedquota</command>
+    <arg choice="opt" rep="norepeat">オプション</arg>
+    <arg choice="plain" rep="norepeat">-D <replaceable>dirset名</replaceable></arg>
+</cmdsynopsis>
+
 </refsynopsisdiv>
 
 <refsect1 id="description"><title>DESCRIPTION</title>
-<para><command moreinfo="none">gfedquota</command> は、ユーザやグループに対するファイル
-制限を編集できます。
+<para><command moreinfo="none">gfedquota</command> は、
+ユーザやグループに対するファイル制限を編集できます。
 </para>
 <para>
 制限の種類には、ソフトリミットとハードリミットがあります。
 ソフトリミットには猶予期間を設定できます。
-制限する対象は、ファイル数の合計とファイルサイズの合計、レプリカを含め
-た実ファイル数の合計と実ファイルサイズの合計です。
+制限する対象は、ファイル数の合計とファイルサイズの合計、
+レプリカを含めた実ファイル数の合計と実ファイルサイズの合計です。
 制限値に 'disable' または -1  を指定すると、無制限になります。
-制限するためのオプションを指定しなければ、割り当て量 (quota) は変わりま
-せん。
+制限するためのオプションを指定しなければ、
+割り当て量 (quota) は変わりません。
 </para>
 <para>
 このコマンドは gfarmadm グループに所属する管理者だけが実行できます。
 </para>
 <para>
-<command moreinfo="none">gfedquota</command> コマンド実行後
-に <command moreinfo="none">gfquotacheck</command> コマンドを実行すると quota が有効に
-なります。
+ただし、-D オプション指定の管理者グループとしては、
+gfarmadm グループではなく、gfarmroot グループが使われます。
 </para>
 </refsect1>
 
@@ -69,6 +83,13 @@
 <term><option>-g NAME, --group=NAME</option></term>
 <listitem>
 <para>制限を編集する対象のグループ名を指定します。</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term><option>-D NAME, --dirset=NAME</option></term>
+<listitem>
+<para>制限を編集する対象の dirset名 を指定します。</para>
 </listitem>
 </varlistentry>
 
@@ -156,8 +177,14 @@
   <refentrytitle>gfquotacheck</refentrytitle><manvolnum>1</manvolnum>
   </citerefentry>,
   <citerefentry>
+  <refentrytitle>gfdirquota</refentrytitle><manvolnum>1</manvolnum>
+  </citerefentry>,
+  <citerefentry>
   <refentrytitle>gfusage</refentrytitle><manvolnum>1</manvolnum>
-  </citerefentry>
+  </citerefentry>,
+  <refentrytitle>
+  Gfarm ユーザーズマニュアル / Directory Quota 機能
+  </refentrytitle>
 </para>
 </refsect1>
 

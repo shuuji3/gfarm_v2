@@ -3,7 +3,6 @@
  */
 
 #include <pthread.h>	/* db_access.h currently needs this */
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -12,131 +11,246 @@
 
 #include <gfarm/gfarm.h>
 
-#include "gfp_xdr.h"
-#include "auth.h"
+#include "thrsubr.h"
 
+#include "auth.h"
+#include "quota_info.h"
+
+#include "uint64_map.h"
 #include "peer.h"
 #include "subr.h"
 #include "rpcsubr.h"
 #include "user.h"
 #include "group.h"
 #include "inode.h"
+#include "dir.h"
 #include "quota.h"
-#include "quota_info.h"
+#include "dirset.h"
+#include "quota_dir.h"
 #include "db_access.h"
-#include "gfm_proto.h"
-#include "relay.h"
 
 #define QUOTA_NOT_CHECK_YET -1
-#define is_checked(q) (q->space != QUOTA_NOT_CHECK_YET ? 1 : 0)
+#define is_checked(q) ((q)->space != QUOTA_NOT_CHECK_YET)
 
 static gfarm_error_t db_state = GFARM_ERR_NO_ERROR;
 
 /* private functions */
 static void
 update_softlimit(gfarm_time_t *exceedp, gfarm_time_t now, gfarm_time_t grace,
-		gfarm_int64_t val, gfarm_int64_t soft)
+	gfarm_int64_t val, gfarm_int64_t soft, int *need_db_update)
 {
 	if (!quota_limit_is_valid(grace) /* disable all softlimit */ ||
 	    !quota_limit_is_valid(soft) /* disable this softlimit */ ||
 	    val <= soft /* not exceed */
 		) {
-		*exceedp = GFARM_QUOTA_INVALID;
-		return;
+		if (*exceedp != GFARM_QUOTA_INVALID) {
+			*exceedp = GFARM_QUOTA_INVALID;
+			*need_db_update = 1;
+		}
 	} else if (*exceedp >= 0)
 		return; /* already exceeded */
-	else if (val > soft)
+	else if (val > soft) {
 		*exceedp = now; /* exceed now */
+		*need_db_update = 1;
+	}
 }
 
 static void
-quota_check_softlimit_exceed(struct quota *q)
+quota_softlimit_exceed(struct quota *q, int *need_db_update)
 {
 	struct timeval now;
 
 	if (!quota_limit_is_valid(q->grace_period)) {
-		/* disable all softlimit */
-		q->space_exceed = GFARM_QUOTA_INVALID;
-		q->num_exceed = GFARM_QUOTA_INVALID;
-		q->phy_space_exceed = GFARM_QUOTA_INVALID;
-		q->phy_num_exceed = GFARM_QUOTA_INVALID;
+		if (q->space_exceed != GFARM_QUOTA_INVALID ||
+		    q->num_exceed != GFARM_QUOTA_INVALID ||
+		    q->phy_space_exceed != GFARM_QUOTA_INVALID ||
+		    q->phy_num_exceed != GFARM_QUOTA_INVALID) {
+			/* disable all softlimit */
+			q->space_exceed = GFARM_QUOTA_INVALID;
+			q->num_exceed = GFARM_QUOTA_INVALID;
+			q->phy_space_exceed = GFARM_QUOTA_INVALID;
+			q->phy_num_exceed = GFARM_QUOTA_INVALID;
+			*need_db_update = 1;
+		}
 		return;
 	}
 
 	/* update exceeded time of softlimit */
 	gettimeofday(&now, NULL);
 	update_softlimit(&q->space_exceed, now.tv_sec, q->grace_period,
-			 q->space, q->space_soft);
+			 q->space, q->space_soft, need_db_update);
 	update_softlimit(&q->num_exceed, now.tv_sec, q->grace_period,
-			 q->num, q->num_soft);
+			 q->num, q->num_soft, need_db_update);
 	update_softlimit(&q->phy_space_exceed, now.tv_sec, q->grace_period,
-			 q->phy_space, q->phy_space_soft);
+			 q->phy_space, q->phy_space_soft, need_db_update);
 	update_softlimit(&q->phy_num_exceed, now.tv_sec, q->grace_period,
-			 q->phy_num, q->phy_num_soft);
+			 q->phy_num, q->phy_num_soft, need_db_update);
 }
 
 static void
-quota_clear_value_user(void *closure, struct user *u)
+quota_metadata_softlimit_exceed(struct quota_metadata *q, int *need_db_update)
+{
+	struct timeval now;
+
+	if (!quota_limit_is_valid(q->limit.grace_period)) {
+		if (q->exceed.space_time != GFARM_QUOTA_INVALID ||
+		    q->exceed.num_time != GFARM_QUOTA_INVALID ||
+		    q->exceed.phy_space_time != GFARM_QUOTA_INVALID ||
+		    q->exceed.phy_num_time != GFARM_QUOTA_INVALID) {
+			/* disable all softlimit */
+			q->exceed.space_time = GFARM_QUOTA_INVALID;
+			q->exceed.num_time = GFARM_QUOTA_INVALID;
+			q->exceed.phy_space_time = GFARM_QUOTA_INVALID;
+			q->exceed.phy_num_time = GFARM_QUOTA_INVALID;
+			*need_db_update = 1;
+		}
+		return;
+	}
+
+	/* update exceeded time of softlimit */
+	gettimeofday(&now, NULL);
+	update_softlimit(&q->exceed.space_time, now.tv_sec,
+	    q->limit.grace_period, q->usage.space,
+	    q->limit.soft.space, need_db_update);
+	update_softlimit(&q->exceed.num_time, now.tv_sec,
+	    q->limit.grace_period, q->usage.num,
+	    q->limit.soft.num, need_db_update);
+	update_softlimit(&q->exceed.phy_space_time, now.tv_sec,
+	    q->limit.grace_period, q->usage.phy_space,
+	    q->limit.soft.phy_space, need_db_update);
+	update_softlimit(&q->exceed.phy_num_time, now.tv_sec,
+	    q->limit.grace_period, q->usage.phy_num,
+	    q->limit.soft.phy_num, need_db_update);
+}
+
+static void
+quota_softlimit_exceed_user(struct quota *q, struct user *u)
+{
+	gfarm_error_t e;
+	int need_db_update = 0;
+
+	quota_softlimit_exceed(q, &need_db_update);
+	if (need_db_update && user_is_valid(u)) {
+		e = db_quota_user_set(q, user_name(u));
+		if (e != GFARM_ERR_NO_ERROR)
+			gflog_error(GFARM_MSG_1004505,
+			    "db_quota_user_set(%s): %s",
+			    user_name(u), gfarm_error_string(e));
+	}
+}
+
+static void
+quota_softlimit_exceed_group(struct quota *q, struct group *g)
+{
+	gfarm_error_t e;
+	int need_db_update = 0;
+
+	quota_softlimit_exceed(q, &need_db_update);
+	if (need_db_update && group_is_valid(g)) {
+		e = db_quota_group_set(q, group_name(g));
+		if (e != GFARM_ERR_NO_ERROR)
+			gflog_error(GFARM_MSG_1004506,
+			    "db_quota_group_set(%s): %s",
+			    group_name(g), gfarm_error_string(e));
+	}
+}
+
+void
+dirquota_softlimit_exceed(struct quota_metadata *q, struct dirset *ds)
+{
+	gfarm_error_t e;
+	int need_db_update = 0;
+
+	quota_metadata_softlimit_exceed(q, &need_db_update);
+	if (need_db_update && dirset_is_valid(ds)) {
+		e = db_quota_dirset_modify(
+		    dirset_get_username(ds), dirset_get_dirsetname(ds), q);
+		if (e != GFARM_ERR_NO_ERROR)
+			gflog_error(GFARM_MSG_1004634,
+			    "db_quota_dirset_modify(%s:%s): %s",
+			    dirset_get_username(ds), dirset_get_dirsetname(ds),
+			    gfarm_error_string(e));
+	}
+}
+
+static void
+quota_usage_clear(struct gfarm_quota_subject_info *usage)
+{
+	usage->space = 0;
+	usage->num = 0;
+	usage->phy_space = 0;
+	usage->phy_num = 0;
+}
+
+static void
+usage_tmp_clear_user(void *closure, struct user *u)
+{
+	quota_usage_clear(user_usage_tmp(u));
+}
+
+static void
+usage_tmp_clear_group(void *closure, struct group *g)
+{
+	quota_usage_clear(group_usage_tmp(g));
+}
+
+static void
+usage_tmp_clear(void)
+{
+	user_foreach(NULL, usage_tmp_clear_user, 0);
+	group_foreach(NULL, usage_tmp_clear_group, 0);
+}
+
+static void
+usage_to_quota(struct gfarm_quota_subject_info *src_usage, struct quota *dst)
+{
+	dst->space = src_usage->space;
+	dst->num = src_usage->num;
+	dst->phy_space = src_usage->phy_space;
+	dst->phy_num = src_usage->phy_num;
+}
+
+static void
+quota_update_usage_user(void *closure, struct user *u)
 {
 	struct quota *q = user_quota(u);
+	struct gfarm_quota_subject_info *usage_tmp = user_usage_tmp(u);
 
-	if (!q->on_db) /* disabled: not gfedquota yet */
-		return;
+	usage_to_quota(usage_tmp, q);
+	quota_softlimit_exceed_user(q, u);
 
-	q->space = 0; /* is_checked is true */
-	q->num = 0;
-	q->phy_space = 0;
-	q->phy_num = 0;
+	if (!user_is_valid(u))
+		gflog_notice(GFARM_MSG_1004294,
+		    "quota_check: removed user(%s), Usage: "
+		    "space=%lld, inodes=%lld, phys_space=%lld, phys_num=%lld",
+		    user_name_with_invalid(u),
+		    (long long)q->space, (long long)q->num,
+		    (long long)q->phy_space, (long long)q->phy_num);
 }
 
 static void
-quota_clear_value_group(void *closure, struct group *g)
+quota_update_usage_group(void *closure, struct group *g)
 {
 	struct quota *q = group_quota(g);
+	struct gfarm_quota_subject_info *usage_tmp = group_usage_tmp(g);
 
-	if (!q->on_db) /* disabled: not gfedquota yet */
-		return;
+	usage_to_quota(usage_tmp, q);
+	quota_softlimit_exceed_group(q, g);
 
-	q->space = 0; /* is_checked is true */
-	q->num = 0;
-	q->phy_space = 0;
-	q->phy_num = 0;
+	if (!group_is_valid(g))
+		gflog_notice(GFARM_MSG_1004295,
+		    "quota_check: removed group(%s), Usage: "
+		    "space=%lld, inodes=%lld, phys_space=%lld, phys_num=%lld",
+		    group_name_with_invalid(g),
+		    (long long)q->space, (long long)q->num,
+		    (long long)q->phy_space, (long long)q->phy_num);
 }
 
 static void
-quota_clear_value_all_user_and_group()
+quota_update_usage(void)
 {
-	user_all(NULL, quota_clear_value_user, 0);
-	group_all(NULL, quota_clear_value_group, 0);
-}
-
-static void
-quota_set_value_user(void *closure, struct user *u)
-{
-	struct quota *q = user_quota(u);
-
-	if (!is_checked(q))
-		return;
-
-	quota_check_softlimit_exceed(q);
-}
-
-static void
-quota_set_value_group(void *closure, struct group *g)
-{
-	struct quota *q = group_quota(g);
-
-	if (!is_checked(q))
-		return;
-
-	quota_check_softlimit_exceed(q);
-}
-
-static void
-quota_set_value_all_user_and_group()
-{
-	user_all(NULL, quota_set_value_user, 0);
-	group_all(NULL, quota_set_value_group, 0);
+	user_foreach(NULL, quota_update_usage_user, 0);
+	group_foreach(NULL, quota_update_usage_group, 0);
 }
 
 static gfarm_time_t
@@ -155,6 +269,25 @@ calculate_grace_period(gfarm_time_t exceeded_time,
 		return (0); /* expired */
 
 	return (val); /* grace period until expiration */
+}
+
+void
+quota_exceed_to_grace(gfarm_time_t grace_period,
+	const struct gfarm_quota_subject_time *exceed,
+	struct gfarm_quota_subject_time *grace)
+{
+	struct timeval now;
+
+	gettimeofday(&now, NULL);
+
+	grace->space_time = calculate_grace_period(
+	    exceed->space_time, grace_period, now.tv_sec);
+	grace->num_time = calculate_grace_period(
+	    exceed->num_time, grace_period, now.tv_sec);
+	grace->phy_space_time = calculate_grace_period(
+	    exceed->phy_space_time, grace_period, now.tv_sec);
+	grace->phy_num_time = calculate_grace_period(
+	    exceed->phy_num_time, grace_period, now.tv_sec);
 }
 
 static void
@@ -271,7 +404,7 @@ quota_group_set_one_from_db(void *closure, struct gfarm_quota_info *qi)
 }
 
 void
-quota_init()
+quota_init(void)
 {
 	gfarm_error_t e;
 
@@ -315,6 +448,110 @@ quota_data_init(struct quota *q)
 	q->phy_num_hard = GFARM_QUOTA_INVALID;
 }
 
+/* for soft and hard */
+static void
+quota_limit_subject_init(struct gfarm_quota_subject_info *limit)
+{
+	limit->space = GFARM_QUOTA_INVALID;
+	limit->num = GFARM_QUOTA_INVALID;
+	limit->phy_space = GFARM_QUOTA_INVALID;
+	limit->phy_num = GFARM_QUOTA_INVALID;
+}
+
+/* for limit */
+static void
+quota_limit_init(struct gfarm_quota_limit_info *limit)
+{
+	limit->grace_period = GFARM_QUOTA_INVALID; /* disable all softlimit */
+	quota_limit_subject_init(&limit->soft);
+	quota_limit_subject_init(&limit->hard);
+}
+
+/* for exceed, grace */
+void
+quota_subject_time_init(struct gfarm_quota_subject_time *time)
+{
+	time->space_time = GFARM_QUOTA_INVALID;
+	time->num_time = GFARM_QUOTA_INVALID;
+	time->phy_space_time = GFARM_QUOTA_INVALID;
+	time->phy_num_time = GFARM_QUOTA_INVALID;
+}
+
+void
+quota_metadata_init(struct quota_metadata *q)
+{
+	quota_limit_init(&q->limit);
+	quota_usage_clear(&q->usage);
+	quota_subject_time_init(&q->exceed);
+}
+
+static void
+quota_metadata_memory_init(struct quota_metadata_memory *qmm)
+{
+	quota_metadata_init(&qmm->q);
+	qmm->usage_is_valid = 0;
+}
+
+void
+quota_metadata_memory_convert_to_db(
+	const struct quota_metadata_memory *qmm, struct quota_metadata *q)
+{
+	*q = qmm->q;
+	if (!qmm->usage_is_valid) {
+		quota_usage_clear(&q->usage);
+		q->usage.space = QUOTA_NOT_CHECK_YET;
+	}
+}
+
+void
+quota_metadata_memory_convert_from_db(
+	struct quota_metadata_memory *qmm, const struct quota_metadata *q)
+{
+	qmm->q = *q;
+
+#if 0
+	qmm->usage_is_valid = is_checked(&q->usage);
+	if (!qmm->usage_is_valid)
+		quota_usage_clear(&qmm->q.usage);
+#else /* usage in backend DB is garbage */
+	quota_usage_clear(&qmm->q.usage);
+	qmm->usage_is_valid = 0;
+#endif
+}
+
+void
+dirquota_init(struct dirquota *dq)
+{
+	quota_metadata_memory_init(&dq->qmm);
+
+	/*
+	 * at the first place, usage is zero inodes and zero bytes.
+	 * and then, if quota_metadata_memory_convert_from_db() is called via
+	 * dirset_set_quota_metadata_in_cache(), usage_is_valid becomes 0.
+	 */
+	dq->qmm.usage_is_valid = 1;
+
+	dq->dirquota_checking = 0;
+	dq->invalidate_requested = 0;
+}
+
+/* this is protected by giant_lock */
+static int dirquota_invalidate_all_requested = 0;
+
+int
+dirquota_is_checked(const struct dirquota *dq)
+{
+	return (!dirquota_invalidate_all_requested &&
+	    dq->qmm.usage_is_valid && !dq->invalidate_requested);
+}
+
+void
+dirquota_check_retry_if_running(struct dirquota *dq)
+{
+	if (dq->dirquota_checking)
+		dq->invalidate_requested = 1;
+}
+
 static inline gfarm_int64_t
 int64_add(gfarm_int64_t orig, gfarm_int64_t diff)
 {
@@ -342,14 +579,57 @@ int64_add(gfarm_int64_t orig, gfarm_int64_t diff)
 
 #define update_file_add(q, size, ncopy)					\
 	{								\
-		q->space = int64_add(q->space, size);			\
-		q->num = int64_add(q->num, 1);				\
-		q->phy_space = int64_add(q->phy_space, size * ncopy);	\
-		q->phy_num = int64_add(q->phy_num, ncopy);		\
+		(q)->space = int64_add((q)->space, size);		\
+		(q)->num = int64_add((q)->num, 1);			\
+		(q)->phy_space = int64_add((q)->phy_space, size * ncopy); \
+		(q)->phy_num = int64_add((q)->phy_num, ncopy);		\
 	}
 
+
+static void
+usage_tmp_update(struct inode *inode)
+{
+	gfarm_off_t size;
+	gfarm_int64_t ncopy;
+	struct user *u = inode_get_user(inode);
+	struct group *g = inode_get_group(inode);
+
+	if (inode_is_file(inode)) {
+		size = inode_get_size(inode);
+		ncopy = inode_get_ncopy_with_dead_host(inode);
+	} else {
+		size = 0;
+		ncopy = 0;
+	}
+
+	if (u)
+		update_file_add(user_usage_tmp(u), size, ncopy);
+	if (g)
+		update_file_add(group_usage_tmp(g), size, ncopy);
+}
+
+static void
+dirquota_usage_tmp_update(struct dirset *ds, struct inode *inode)
+{
+	gfarm_off_t size;
+	gfarm_int64_t ncopy;
+	struct dirquota *dq = dirset_get_dirquota(ds);
+
+	if (inode_is_file(inode)) {
+		size = inode_get_size(inode);
+		ncopy = inode_get_ncopy_with_dead_host(inode);
+	} else {
+		size = 0;
+		ncopy = 0;
+	}
+
+	update_file_add(&dq->usage_tmp, size, ncopy);
+}
+
+static void quota_check_retry_if_running(void);
+
 void
-quota_update_file_add(struct inode *inode)
+quota_update_file_add(struct inode *inode, struct dirset *tdirset)
 {
 	gfarm_off_t size;
 	gfarm_int64_t ncopy;
@@ -368,15 +648,22 @@ quota_update_file_add(struct inode *inode)
 		struct quota *uq = user_quota(u);
 		if (is_checked(uq)) {
 			update_file_add(uq, size, ncopy);
-			quota_check_softlimit_exceed(uq);
+			quota_softlimit_exceed_user(uq, u);
 		}
 	}
 	if (g) {
 		struct quota *gq = group_quota(g);
 		if (is_checked(gq)) {
 			update_file_add(gq, size, ncopy);
-			quota_check_softlimit_exceed(gq);
+			quota_softlimit_exceed_group(gq, g);
 		}
+	}
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET) {
+		struct dirquota *dq = dirset_get_dirquota(tdirset);
+		update_file_add(&dq->qmm.q.usage, size, ncopy);
+		dirquota_softlimit_exceed(&dq->qmm.q, tdirset);
+		if (!dirquota_is_checked(dq))
+			dirquota_check_retry_if_running(dq);
 	}
 
 	if (debug_mode) {
@@ -394,23 +681,20 @@ quota_update_file_add(struct inode *inode)
 			    (unsigned long long)size, (unsigned long long)ncopy,
 			    username, groupname);
 	}
-}
 
-static void
-quota_update_file_add_for_quotacheck(void *closure, struct inode *inode)
-{
-	quota_update_file_add(inode);
+	quota_check_retry_if_running();
 }
 
 #define update_file_resize(q, old_size, new_size, ncopy)		\
 	{								\
 		gfarm_int64_t diff = new_size - old_size;		\
-		q->space = int64_add(q->space, diff);			\
-		q->phy_space = int64_add(q->phy_space, diff * ncopy);	\
+		(q)->space = int64_add((q)->space, diff);		\
+		(q)->phy_space = int64_add((q)->phy_space, diff * ncopy); \
 	}
 
 void
-quota_update_file_resize(struct inode *inode, gfarm_off_t new_size)
+quota_update_file_resize(struct inode *inode, struct dirset *tdirset,
+	gfarm_off_t new_size)
 {
 	gfarm_off_t old_size = inode_get_size(inode);
 	gfarm_int64_t ncopy = inode_get_ncopy_with_dead_host(inode);
@@ -423,26 +707,37 @@ quota_update_file_resize(struct inode *inode, gfarm_off_t new_size)
 		struct quota *uq = user_quota(u);
 		if (is_checked(uq)) {
 			update_file_resize(uq, old_size, new_size, ncopy);
-			quota_check_softlimit_exceed(uq);
+			quota_softlimit_exceed_user(uq, u);
 		}
 	}
 	if (g) {
 		struct quota *gq = group_quota(g);
 		if (is_checked(gq)) {
 			update_file_resize(gq, old_size, new_size, ncopy);
-			quota_check_softlimit_exceed(gq);
+			quota_softlimit_exceed_group(gq, g);
 		}
 	}
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET) {
+		struct dirquota *dq = dirset_get_dirquota(tdirset);
+		update_file_resize(&dq->qmm.q.usage,
+		    old_size, new_size, ncopy);
+		dirquota_softlimit_exceed(&dq->qmm.q, tdirset);
+		if (!dirquota_is_checked(dq))
+			dirquota_check_retry_if_running(dq);
+	}
+
+	quota_check_retry_if_running();
 }
 
 #define update_replica_num(q, size, n)					\
 	{								\
-		q->phy_space = int64_add(q->phy_space, size * n);	\
-		q->phy_num = int64_add(q->phy_num, n);			\
+		(q)->phy_space = int64_add((q)->phy_space, size * n);	\
+		(q)->phy_num = int64_add((q)->phy_num, n);		\
 	}
 
 static void
-quota_update_replica_num(struct inode *inode, gfarm_int64_t n)
+quota_update_replica_num(struct inode *inode, struct dirset *tdirset,
+	gfarm_int64_t n)
 {
 	gfarm_off_t size = inode_get_size(inode);
 	struct user *u = inode_get_user(inode);
@@ -452,40 +747,49 @@ quota_update_replica_num(struct inode *inode, gfarm_int64_t n)
 		struct quota *uq = user_quota(u);
 		if (is_checked(uq)) {
 			update_replica_num(uq, size, n);
-			quota_check_softlimit_exceed(uq);
+			quota_softlimit_exceed_user(uq, u);
 		}
 	}
 	if (g) {
 		struct quota *gq = group_quota(g);
 		if (is_checked(gq)) {
 			update_replica_num(gq, size, n);
-			quota_check_softlimit_exceed(gq);
+			quota_softlimit_exceed_group(gq, g);
 		}
 	}
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET) {
+		struct dirquota *dq = dirset_get_dirquota(tdirset);
+		update_replica_num(&dq->qmm.q.usage, size, n);
+		dirquota_softlimit_exceed(&dq->qmm.q, tdirset);
+		if (!dirquota_is_checked(dq))
+			dirquota_check_retry_if_running(dq);
+	}
+
+	quota_check_retry_if_running();
 }
 
 void
-quota_update_replica_add(struct inode *inode)
+quota_update_replica_add(struct inode *inode, struct dirset *tdirset)
 {
-	quota_update_replica_num(inode, 1);
+	quota_update_replica_num(inode, tdirset, 1);
 }
 
 void
-quota_update_replica_remove(struct inode *inode)
+quota_update_replica_remove(struct inode *inode, struct dirset *tdirset)
 {
-	quota_update_replica_num(inode, -1);
+	quota_update_replica_num(inode, tdirset, -1);
 }
 
 #define update_file_remove(q, size, ncopy)				\
 	{								\
-		q->space = int64_add(q->space, -size);			\
-		q->num = int64_add(q->num, -1);				\
-		q->phy_space = int64_add(q->phy_space, -(size * ncopy)); \
-		q->phy_num = int64_add(q->phy_num, -ncopy);		\
+		(q)->space = int64_add((q)->space, -size);		\
+		(q)->num = int64_add((q)->num, -1);			\
+		(q)->phy_space = int64_add((q)->phy_space, -(size * ncopy)); \
+		(q)->phy_num = int64_add((q)->phy_num, -ncopy);		\
 	}
 
 void
-quota_update_file_remove(struct inode *inode)
+quota_update_file_remove(struct inode *inode, struct dirset *tdirset)
 {
 	gfarm_off_t size;
 	gfarm_int64_t ncopy;
@@ -504,16 +808,75 @@ quota_update_file_remove(struct inode *inode)
 		struct quota *uq = user_quota(u);
 		if (is_checked(uq)) {
 			update_file_remove(uq, size, ncopy);
-			quota_check_softlimit_exceed(uq);
+			quota_softlimit_exceed_user(uq, u);
 		}
 	}
 	if (g) {
 		struct quota *gq = group_quota(g);
 		if (is_checked(gq)) {
 			update_file_remove(gq, size, ncopy);
-			quota_check_softlimit_exceed(gq);
+			quota_softlimit_exceed_group(gq, g);
 		}
 	}
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET) {
+		struct dirquota *dq = dirset_get_dirquota(tdirset);
+		update_file_remove(&dq->qmm.q.usage, size, ncopy);
+		dirquota_softlimit_exceed(&dq->qmm.q, tdirset);
+		if (!dirquota_is_checked(dq))
+			dirquota_check_retry_if_running(dq);
+	}
+
+	quota_check_retry_if_running();
+}
+
+void
+dirquota_update_file_add(struct inode *inode, struct dirset *tdirset)
+{
+	gfarm_off_t size;
+	gfarm_int64_t ncopy;
+
+	if (inode_is_file(inode)) {
+		size = inode_get_size(inode);
+		ncopy = inode_get_ncopy_with_dead_host(inode);
+	} else {
+		size = 0;
+		ncopy = 0;
+	}
+
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET) {
+		struct dirquota *dq = dirset_get_dirquota(tdirset);
+		update_file_add(&dq->qmm.q.usage, size, ncopy);
+		dirquota_softlimit_exceed(&dq->qmm.q, tdirset);
+		if (!dirquota_is_checked(dq))
+			dirquota_check_retry_if_running(dq);
+	}
+
+	/* quota_check_retry_if_running() is unnecessary here */
+}
+
+void
+dirquota_update_file_remove(struct inode *inode, struct dirset *tdirset)
+{
+	gfarm_off_t size;
+	gfarm_int64_t ncopy;
+
+	if (inode_is_file(inode)) {
+		size = inode_get_size(inode);
+		ncopy = inode_get_ncopy_with_dead_host(inode);
+	} else {
+		size = 0;
+		ncopy = 0;
+	}
+
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET) {
+		struct dirquota *dq = dirset_get_dirquota(tdirset);
+		update_file_remove(&dq->qmm.q.usage, size, ncopy);
+		dirquota_softlimit_exceed(&dq->qmm.q, tdirset);
+		if (!dirquota_is_checked(dq))
+			dirquota_check_retry_if_running(dq);
+	}
+
+	/* quota_check_retry_if_running() is unnecessary here */
 }
 
 enum quota_exceeded_type {
@@ -530,8 +893,10 @@ enum quota_exceeded_type {
 
 static int
 is_exceeded(struct timeval *nowp, struct quota *q,
-	    int is_file_creating, int is_replica_adding)
+	int num_file_creating, int num_replica_adding, gfarm_off_t size)
 {
+	int check_logical = 0, check_physical = 0;
+
 	if (!is_checked(q))  /* quota is disabled */
 		return (QUOTA_NOT_EXCEEDED);
 
@@ -556,39 +921,157 @@ is_exceeded(struct timeval *nowp, struct quota *q,
 	}
 
 	/* hardlimit */
-	if ((quota_limit_is_valid(q->space_hard) &&
-	     q->space > q->space_hard))
-		return (QUOTA_EXCEEDED_SPACE_HARD);
-	if (quota_limit_is_valid(q->num_hard) &&
-	    q->num + (is_file_creating ? 1 : 0) > q->num_hard)
-		return (QUOTA_EXCEEDED_NUM_HARD);
-	if (quota_limit_is_valid(q->phy_space_hard) &&
-	    q->phy_space > q->phy_space_hard)
-		return (QUOTA_EXCEEDED_PHY_SPACE_HARD);
-	if (quota_limit_is_valid(q->phy_num_hard) &&
-	    q->phy_num + (is_replica_adding ? 1 : 0) > q->phy_num_hard)
-		return (QUOTA_EXCEEDED_PHY_NUM_HARD);
+	if (num_file_creating >= 1 && num_replica_adding <= 0) {
+		check_logical = 1;
+	} else if (num_file_creating <= 0 && num_replica_adding >= 1) {
+		check_physical = 1;
+	} else {
+		check_logical = 1;
+		check_physical = 1;
+	}
+
+	if (check_logical) {
+		if ((quota_limit_is_valid(q->space_hard) &&
+		    q->space + size > q->space_hard))
+			return (QUOTA_EXCEEDED_SPACE_HARD);
+		if (quota_limit_is_valid(q->num_hard) &&
+		    q->num + num_file_creating > q->num_hard)
+			return (QUOTA_EXCEEDED_NUM_HARD);
+	}
+	if (check_physical) {
+		if (quota_limit_is_valid(q->phy_space_hard) &&
+		    q->phy_space + (size * num_replica_adding) >
+		    q->phy_space_hard)
+			return (QUOTA_EXCEEDED_PHY_SPACE_HARD);
+		if (quota_limit_is_valid(q->phy_num_hard) &&
+		    q->phy_num + num_replica_adding > q->phy_num_hard)
+			return (QUOTA_EXCEEDED_PHY_NUM_HARD);
+	}
 
 	return (QUOTA_NOT_EXCEEDED);
 }
 
+static int
+dirquota_is_exceeded(struct timeval *nowp, struct dirquota *dq,
+	int num_file_creating, int num_replica_adding, gfarm_off_t size)
+{
+	int check_logical = 0, check_physical = 0;
+	struct quota_metadata *q;
+
+#if 0 /* check dirquota, even if it is inaccurate */
+	if (!dirquota_is_checked(dq))  /* quota is disabled */
+		return (QUOTA_NOT_EXCEEDED);
+#endif
+	q = &dq->qmm.q;
+
+	/* softlimit */
+	if (quota_limit_is_valid(q->limit.grace_period)) {
+		if (quota_limit_is_valid(q->limit.soft.space) &&
+		    quota_limit_is_valid(q->exceed.space_time) &&
+		    (nowp->tv_sec - q->exceed.space_time) >
+		    q->limit.grace_period)
+			return (QUOTA_EXCEEDED_SPACE_SOFT);
+		if (quota_limit_is_valid(q->limit.soft.num) &&
+		    quota_limit_is_valid(q->exceed.num_time) &&
+		    (nowp->tv_sec - q->exceed.num_time) >
+		    q->limit.grace_period)
+			return (QUOTA_EXCEEDED_NUM_SOFT);
+		if (quota_limit_is_valid(q->limit.soft.phy_space) &&
+		    quota_limit_is_valid(q->exceed.phy_space_time) &&
+		    (nowp->tv_sec - q->exceed.phy_space_time) >
+		    q->limit.grace_period)
+			return (QUOTA_EXCEEDED_PHY_SPACE_SOFT);
+		if (quota_limit_is_valid(q->limit.soft.phy_num) &&
+		    quota_limit_is_valid(q->exceed.phy_num_time) &&
+		    (nowp->tv_sec - q->exceed.phy_num_time) >
+		    q->limit.grace_period)
+			return (QUOTA_EXCEEDED_PHY_NUM_SOFT);
+	}
+
+	/* hardlimit */
+	if (num_file_creating >= 1 && num_replica_adding <= 0) {
+		check_logical = 1;
+	} else if (num_file_creating <= 0 && num_replica_adding >= 1) {
+		check_physical = 1;
+	} else {
+		check_logical = 1;
+		check_physical = 1;
+	}
+
+	if (check_logical) {
+		if ((quota_limit_is_valid(q->limit.hard.space) &&
+		    q->usage.space + size > q->limit.hard.space))
+			return (QUOTA_EXCEEDED_SPACE_HARD);
+		if (quota_limit_is_valid(q->limit.hard.num) &&
+		    q->usage.num + num_file_creating > q->limit.hard.num)
+			return (QUOTA_EXCEEDED_NUM_HARD);
+	}
+	if (check_physical) {
+		if (quota_limit_is_valid(q->limit.hard.phy_space) &&
+		    q->usage.phy_space + (size * num_replica_adding) >
+		    q->limit.hard.phy_space)
+			return (QUOTA_EXCEEDED_PHY_SPACE_HARD);
+		if (quota_limit_is_valid(q->limit.hard.phy_num) &&
+		    q->usage.phy_num + num_replica_adding >
+		    q->limit.hard.phy_num)
+			return (QUOTA_EXCEEDED_PHY_NUM_HARD);
+	}
+
+	return (QUOTA_NOT_EXCEEDED);
+}
+
+/*
+ * num_file_creating >= 1 && num_replica_adding == 0 : check logical quota
+ * num_file_creating == 0 && num_replica_adding >= 1 : check physical quota
+ * num_file_creating == 0 && num_replica_adding == 0 : check both
+ * num_file_creating >= 1 && num_replica_adding >= 1 : check both
+ */
 gfarm_error_t
-quota_check_limits(struct user *u, struct group *g,
-		   int is_file_creating, int is_replica_adding)
+quota_limit_check(struct user *u, struct group *g, struct dirset *tdirset,
+	int num_file_creating, int num_replica_adding, gfarm_off_t size)
 {
 	struct timeval now;
 
 	gettimeofday(&now, NULL);
 	if (u && is_exceeded(&now, user_quota(u),
-			    is_file_creating, is_replica_adding)) {
+	    num_file_creating, num_replica_adding, size)) {
 		gflog_debug(GFARM_MSG_1002051,
 			 "user_quota(%s) exceeded", user_name(u));
 		return (GFARM_ERR_DISK_QUOTA_EXCEEDED);
 	}
 	if (g && is_exceeded(&now, group_quota(g),
-			     is_file_creating, is_replica_adding)) {
+	    num_file_creating, num_replica_adding, size)) {
 		gflog_debug(GFARM_MSG_1002052,
 			 "group_quota(%s) exceeded", group_name(g));
+		return (GFARM_ERR_DISK_QUOTA_EXCEEDED);
+	}
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET &&
+	    dirquota_is_exceeded(&now, dirset_get_dirquota(tdirset),
+	    num_file_creating, num_replica_adding, size)) {
+		gflog_debug(GFARM_MSG_1004635,
+		    "dirset_quota(%s:%s) exceeded",
+		    dirset_get_username(tdirset),
+		    dirset_get_dirsetname(tdirset));
+		return (GFARM_ERR_DISK_QUOTA_EXCEEDED);
+	}
+
+	return (GFARM_ERR_NO_ERROR);
+}
+
+gfarm_error_t
+dirquota_limit_check(struct dirset *tdirset,
+	int num_file_creating, int num_replica_adding, gfarm_off_t size)
+{
+	struct timeval now;
+
+	gettimeofday(&now, NULL);
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET &&
+	    dirquota_is_exceeded(&now, dirset_get_dirquota(tdirset),
+	    num_file_creating, num_replica_adding, size)) {
+		gflog_debug(GFARM_MSG_1004636,
+		    "dirset_quota(%s:%s) exceeded",
+		    dirset_get_username(tdirset),
+		    dirset_get_dirsetname(tdirset));
 		return (GFARM_ERR_DISK_QUOTA_EXCEEDED);
 	}
 
@@ -619,22 +1102,470 @@ quota_group_remove(struct group *g)
 	q->space = QUOTA_NOT_CHECK_YET;
 }
 
-void
-quota_check(void)
+/*
+ * common part of quota_check and dirquota_check
+ */
+
+struct quota_check_control {
+	void (*main_function)(struct quota_check_control *);
+
+	pthread_mutex_t mutex;
+	pthread_cond_t wakeup;
+	pthread_cond_t end;
+	int needed;
+	int running;
+
+	const char *mutex_diag;
+	const char *wakeup_diag;
+	const char *end_diag;
+};
+
+static void
+quota_check_start(struct quota_check_control *ctl)
 {
-	/* zero clear and set true in is_checked */
-	quota_clear_value_all_user_and_group();
-	/* load all inodes from memory and count usage values of files */
-	/* XXX FIXME too long giant lock */
-	inode_lookup_all(NULL, quota_update_file_add_for_quotacheck);
-	/* update memory */
-	quota_set_value_all_user_and_group();
+	static const char diag[] = "quota_check_start";
+
+	gfarm_mutex_lock(&ctl->mutex, diag, ctl->mutex_diag);
+	ctl->needed = 1;
+	gfarm_cond_signal(&ctl->wakeup, diag, ctl->wakeup_diag);
+	gfarm_mutex_unlock(&ctl->mutex, diag, ctl->mutex_diag);
 }
 
-/* server operations */
+static void
+quota_check_wait_for_end(struct quota_check_control *ctl)
+{
+	static const char diag[] = "quota_check_wait_for_end";
+
+	gfarm_mutex_lock(&ctl->mutex, diag, ctl->mutex_diag);
+	while (ctl->needed || ctl->running)
+		gfarm_cond_wait(&ctl->end, &ctl->mutex, diag, ctl->end_diag);
+	gfarm_mutex_unlock(&ctl->mutex, diag, ctl->mutex_diag);
+}
+
+static void *
+quota_check_thread(void *arg)
+{
+	struct quota_check_control *ctl = arg;
+	static const char diag[] = "quota_check_thread";
+
+	(void)gfarm_pthread_set_priority_minimum(diag);
+
+	for (;;) {
+		gfarm_mutex_lock(&ctl->mutex, diag, ctl->mutex_diag);
+		ctl->running = 0;
+		gfarm_cond_signal(&ctl->end, diag, ctl->end_diag);
+
+		while (!ctl->needed)
+			gfarm_cond_wait(&ctl->wakeup, &ctl->mutex,
+			    diag, ctl->wakeup_diag);
+
+		ctl->needed = 0;
+		ctl->running = 1;
+		gfarm_mutex_unlock(&ctl->mutex, diag, ctl->mutex_diag);
+
+		(*ctl->main_function)(ctl);
+	}
+
+	return (NULL);
+}
+
+/*
+ * quota_check
+ */
+
+static void quota_check_main_loop(struct quota_check_control *);
+
+static struct quota_check_control quota_check_ctl = {
+	quota_check_main_loop,
+	PTHREAD_MUTEX_INITIALIZER,
+	PTHREAD_COND_INITIALIZER,
+	PTHREAD_COND_INITIALIZER,
+	0,
+	0,
+	"quota_check_mutex",
+	"quota_check_wakeup",
+	"quota_check_end",
+};
+
+static int
+quota_check_needed_locked(const char *diag)
+{
+	int needed;
+
+	gfarm_mutex_lock(&quota_check_ctl.mutex,
+	    diag, quota_check_ctl.mutex_diag);
+	needed = quota_check_ctl.needed;
+	gfarm_mutex_unlock(&quota_check_ctl.mutex,
+	    diag, quota_check_ctl.mutex_diag);
+	return (needed);
+}
+
+static void
+quota_check_needed_clear(const char *diag)
+{
+	gfarm_mutex_lock(&quota_check_ctl.mutex,
+	    diag, quota_check_ctl.mutex_diag);
+	quota_check_ctl.needed = 0;
+	gfarm_mutex_unlock(&quota_check_ctl.mutex,
+	    diag, quota_check_ctl.mutex_diag);
+}
+
+static int
+quota_check_main(void)
+{
+	static const char diag[] = "quota_check_main";
+	time_t time_start, time_total;
+	gfarm_ino_t inum, inum_limit, inum_target;
+	struct inode *inode;
+#define QUOTA_CHECK_INODE_STEP 10000
+
+	time_start = time(NULL);
+
+	giant_lock();
+	usage_tmp_clear();
+	giant_unlock();
+
+	giant_lock();
+	inum = inode_root_number();
+	inum_limit = inode_table_current_size();
+	inum_target = inum + QUOTA_CHECK_INODE_STEP;
+	if (inum_target > inum_limit)
+		inum_target = inum_limit;
+	for (;; inum++) {
+		if (inum >= inum_target) {
+			giant_unlock();
+			/* make a chance for clients */
+			/* usleep(100000); */ /* for debug */
+			giant_lock();
+			if (inum >= inum_limit)
+				break;
+			inum_target = inum + QUOTA_CHECK_INODE_STEP;
+			if (inum_target > inum_limit)
+				inum_target = inum_limit;
+		}
+		if (quota_check_needed_locked(diag)) {
+			giant_unlock();
+			return (1); /* retry */
+		}
+		inode = inode_lookup(inum);
+		if (inode != NULL)
+			usage_tmp_update(inode);
+	}
+	giant_unlock();
+
+	giant_lock();
+	if (quota_check_needed_locked(diag)) {
+		giant_unlock();
+		return (1); /* retry */
+	}
+	quota_update_usage();
+	giant_unlock();
+
+	time_total = time(NULL) - time_start;
+	gflog_info(GFARM_MSG_1004296,
+	    "quota_check: finished, inodes=%lld, time=%lld",
+	    (long long)inum_limit, (long long)time_total);
+
+	return (0); /* finished */
+}
+
+static void
+quota_check_main_loop(struct quota_check_control *ctl)
+{
+	static const char diag[] = "quota_check_main_loop";
+
+	gflog_info(GFARM_MSG_1004297, "quota_check: start");
+	while (quota_check_main()) {
+		quota_check_needed_clear(diag);
+		gflog_info(GFARM_MSG_1004298, "quota_check: retry");
+	}
+}
+
+static void
+quota_check_retry_if_running(void)
+{
+	static const char diag[] = "quota_check_retry_if_running";
+
+	gfarm_mutex_lock(&quota_check_ctl.mutex,
+	    diag, quota_check_ctl.mutex_diag);
+	if (quota_check_ctl.running)
+		quota_check_ctl.needed = 1;
+	/* else: cond_wait now */
+	gfarm_mutex_unlock(&quota_check_ctl.mutex,
+	    diag, quota_check_ctl.mutex_diag);
+}
+
+
+/*
+ * dirquota_check
+ */
+
+
+/* this is protected by giant_lock */
+static struct dirquota_check_state {
+	struct uint64_to_uint64_map *hardlink_counters;
+
+	int giant_lock_limit;
+	int handled_inodes;
+	int handled_quota_dirs;
+	int handled_dirsets;
+	int retried_dirsets;
+	int skipped_dirsets;
+} dirquota_check_state;
+
+static int
+dirquota_check_needed_per_dirset(void *closure, struct dirset *ds)
+{
+	int *neededp = closure;
+
+	if (*neededp)
+		return (1); /* interrupted */
+	if (!dirquota_is_checked(dirset_get_dirquota(ds))) {
+		*neededp = 1;
+		return (1); /* interrupted */
+	}
+	return (0);
+}
+
+static int
+dirquota_check_needed(void)
+{
+	int needed = 0;
+
+	if (dirquota_invalidate_all_requested)
+		return (1);
+	dirset_foreach_interruptible(
+	    &needed, dirquota_check_needed_per_dirset);
+	return (needed);
+}
+
+static int
+dirquota_invalidate_per_dirset(void *closure, struct dirset *ds)
+{
+	struct dirquota *dq = dirset_get_dirquota(ds);
+
+	dq->invalidate_requested = 1;
+	return (0);
+}
+
+static enum inode_scan_choice
+dirquota_check_per_inode(void *closure, struct inode *inode)
+{
+	struct dirset *ds = closure;
+	struct dirquota *dq = dirset_get_dirquota(ds);
+	gfarm_uint64_t n;
+
+	if (dirquota_invalidate_all_requested || dq->invalidate_requested)
+		return (INODE_SCAN_INTERRUPT);
+
+	if (!inode_is_file(inode) || inode_get_nlink(inode) <= 1) {
+		n = 1;
+	} else {
+		if (!uint64_to_uint64_map_inc_value(
+		    dirquota_check_state.hardlink_counters,
+		    inode_get_number(inode), &n)) {
+			gflog_error(GFARM_MSG_1004637,
+			    "dirquota_check: no memory for %lld hardlinks",
+			    (long long)uint64_to_uint64_map_size(
+			    dirquota_check_state.hardlink_counters));
+			return (INODE_SCAN_INTERRUPT);
+		}
+	}
+
+	if (n == 1) { /* count hard-linked files only at once */
+		dirquota_usage_tmp_update(ds, inode);
+		++dirquota_check_state.handled_inodes;
+	}
+
+	if (++dirquota_check_state.giant_lock_limit
+	    >= QUOTA_CHECK_INODE_STEP) {
+		dirquota_check_state.giant_lock_limit = 0;
+		return (INODE_SCAN_RELEASE_GIANT_LOCK);
+	}
+	return (INODE_SCAN_CONTINUE);
+}
+
+static int
+dirquota_check_per_quota_dir(void *closure, struct quota_dir *qd)
+{
+	struct dirset *ds = closure;
+	struct inode *inode = inode_lookup(quota_dir_get_inum(qd));
+	int interrupted;
+
+	interrupted = inode_foreach_in_subtree_interruptible(
+	    inode, ds, dirquota_check_per_inode, NULL);
+	++dirquota_check_state.handled_quota_dirs;
+	return (interrupted);
+}
+
+static int
+dirquota_check_per_dirset(void *closure, struct dirset *ds)
+{
+	struct dirquota *dq = dirset_get_dirquota(ds);
+	int interrupted;
+
+	if (dirquota_invalidate_all_requested)
+		return (1); /* interrupted */
+
+	if (dq->invalidate_requested) {
+		dq->invalidate_requested = 0;
+		dq->qmm.usage_is_valid = 0;
+	}
+	if (dq->qmm.usage_is_valid) {
+		++dirquota_check_state.skipped_dirsets;
+		return (0);
+	}
+
+	dq->dirquota_checking = 1;
+	quota_usage_clear(&dq->usage_tmp);
+
+	dirquota_check_state.hardlink_counters = uint64_to_uint64_map_new();
+	if (dirquota_check_state.hardlink_counters == NULL) {
+		gflog_error(GFARM_MSG_1004638,
+		    "dirquota_check: no memory for hardlink counter");
+		interrupted = 1;
+	} else {
+		interrupted = dirset_foreach_quota_dir_interruptible(
+		    ds, ds, dirquota_check_per_quota_dir) ||
+		    dq->invalidate_requested ||
+		    dirquota_invalidate_all_requested;
+	}
+	dq->dirquota_checking = 0;
+
+	if (interrupted) {
+		++dirquota_check_state.retried_dirsets;
+	} else {
+		++dirquota_check_state.handled_dirsets;
+		dq->qmm.q.usage = dq->usage_tmp;
+		dq->qmm.usage_is_valid = 1;
+		dirquota_softlimit_exceed(&dq->qmm.q, ds);
+	}
+
+	uint64_to_uint64_map_free(dirquota_check_state.hardlink_counters);
+	dirquota_check_state.hardlink_counters = NULL;
+
+	return (interrupted);
+}
+
+static void
+dirquota_check_run(void)
+{
+	if (dirquota_invalidate_all_requested) {
+		dirset_foreach_interruptible(
+		    NULL, dirquota_invalidate_per_dirset);
+		dirquota_invalidate_all_requested = 0;
+	}
+	dirset_foreach_interruptible(NULL, dirquota_check_per_dirset);
+}
+
+static void
+dirquota_check_main(struct quota_check_control *ctl)
+{
+	time_t time_start, time_total;
+
+	gflog_info(GFARM_MSG_1004639, "dirquota_check: start");
+	time_start = time(NULL);
+
+	giant_lock();
+
+	dirquota_check_state.giant_lock_limit = 0;
+	dirquota_check_state.handled_inodes = 0;
+	dirquota_check_state.handled_quota_dirs = 0;
+	dirquota_check_state.handled_dirsets = 0;
+	dirquota_check_state.retried_dirsets = 0;
+	dirquota_check_state.skipped_dirsets = 0;
+
+	while (dirquota_check_needed())
+		dirquota_check_run();
+
+	giant_unlock();
+
+	time_total = time(NULL) - time_start;
+	gflog_info(GFARM_MSG_1004640,
+	    "dirquota_check: finished, inodes=%lld, quota_dirs=%lld, "
+	    "dirsets=%lld, dirset_retries=%lld, dirsets_ok=%lld time=%lld",
+	    (long long)dirquota_check_state.handled_inodes,
+	    (long long)dirquota_check_state.handled_quota_dirs,
+	    (long long)dirquota_check_state.handled_dirsets,
+	    (long long)dirquota_check_state.retried_dirsets,
+	    (long long)dirquota_check_state.skipped_dirsets,
+	    (long long)time_total);
+}
+
+static struct quota_check_control dirquota_check_ctl = {
+	dirquota_check_main,
+	PTHREAD_MUTEX_INITIALIZER,
+	PTHREAD_COND_INITIALIZER,
+	PTHREAD_COND_INITIALIZER,
+	0,
+	0,
+	"dirquota_check_mutex",
+	"dirquota_check_wakeup",
+	"dirquota_check_end",
+};
+
+/* PREREQUISITE: giant_lock */
+void
+dirquota_invalidate(struct dirset *tdirset)
+{
+	if (tdirset != TDIRSET_IS_UNKNOWN && tdirset != TDIRSET_IS_NOT_SET) {
+		struct dirquota *dq = dirset_get_dirquota(tdirset);
+
+		dq->invalidate_requested = 1;
+	}
+}
+
+void
+dirquota_fixup_schedule(void)
+{
+	/* DQTODO - delay before starting to reduce retries */
+
+	quota_check_start(&dirquota_check_ctl);
+}
+
+/* PREREQUISITE: giant_lock */
+void
+dirquota_check_schedule(void)
+{
+	dirquota_invalidate_all_requested = 1;
+	dirquota_fixup_schedule();
+}
+
+
+/*
+ * thread startup
+ */
+
+void
+quota_check_init(void)
+{
+	gfarm_error_t e;
+
+	if ((e = create_detached_thread(
+	    quota_check_thread, &quota_check_ctl)) != GFARM_ERR_NO_ERROR)
+		gflog_fatal(GFARM_MSG_1004299,
+		    "create_detached_thread(quota_check): %s",
+		    gfarm_error_string(e));
+
+	quota_check_start(&quota_check_ctl);
+	quota_check_wait_for_end(&quota_check_ctl);
+
+	if ((e = create_detached_thread(
+	    quota_check_thread, &dirquota_check_ctl)) != GFARM_ERR_NO_ERROR)
+		gflog_fatal(GFARM_MSG_1004641,
+		    "create_detached_thread(dirquota_check): %s",
+		    gfarm_error_string(e));
+
+	quota_check_start(&dirquota_check_ctl);
+	quota_check_wait_for_end(&dirquota_check_ctl);
+}
+
+/*
+ * server operations
+ */
+
 static gfarm_error_t
-quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int is_group)
+quota_get_common(struct peer *peer, int from_client, int skip, int is_group)
 {
 	const char *diag = is_group ?
 	    "GFM_PROTO_QUOTA_GROUP_GET" : "GFM_PROTO_QUOTA_USER_GET";
@@ -644,13 +1575,13 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	char *name;
 	struct quota *q;
 	struct gfarm_quota_get_info qi;
-	struct relayed_request *relay;
 
-	e = gfm_server_relay_get_request(peer, sizep, skip, &relay, diag,
-	    is_group ? GFM_PROTO_QUOTA_GROUP_GET : GFM_PROTO_QUOTA_USER_GET,
-	    "s", &name);
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "s", &name);
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1002053,
+			"%s request failed: %s", diag, gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(name);
 		return (GFARM_ERR_NO_ERROR);
@@ -660,93 +1591,86 @@ quota_get_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		gflog_debug(GFARM_MSG_1002054,
 			    "%s: !from_client or invalid peer_user ", diag);
 		free(name);
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-		    relay, diag, &e, ""));
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
 
 	if (db_state != GFARM_ERR_NO_ERROR) {
 		free(name);
 		gflog_debug(GFARM_MSG_1002055, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-						relay, diag, &db_state, ""));
-	}
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		giant_lock();
-		if (is_group) {
-			if (strcmp(name, "") == 0)
-				e = GFARM_ERR_NO_SUCH_GROUP;
-			else if ((group = group_lookup(name)) == NULL) {
-				if (user_is_admin(peer_user))
-					e = GFARM_ERR_NO_SUCH_GROUP;
-				else  /* hidden groupnames */
-					e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			} else if ((!user_in_group(peer_user, group)) &&
-				   !user_is_admin(peer_user))
-				e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			/* user_in_group() || user_is_admin() : permit */
-		} else {
-			if (strcmp(name, "") == 0) {
-				user = peer_user; /* permit not-admin */
-				free(name);
-				name = strdup_log(user_name(peer_user), diag);
-				if (name == NULL)
-					e = GFARM_ERR_NO_MEMORY;
-			} else if (strcmp(name, user_name(peer_user)) == 0)
-				user = peer_user; /* permit not-admin */
-			else if (!user_is_admin(peer_user))
-				e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			else if ((user = user_lookup(name)) == NULL)
-				e = GFARM_ERR_NO_SUCH_USER;
-		}
-		if (e != GFARM_ERR_NO_ERROR) {
-			giant_unlock();
-			gflog_debug(GFARM_MSG_1002056,
-			    "%s: name=%s: %s", diag, name,
-			    gfarm_error_string(e));
-			free(name);
-			return (gfm_server_relay_put_reply(peer, xid,
-			    sizep, relay, diag, &e, ""));
-		}
-		if (is_group)
-			q = group_quota(group);
-		else
-			q = user_quota(user);
-		if (!is_checked(q)) { /* quota is not enabled */
-			giant_unlock();
-			gflog_debug(GFARM_MSG_1002057,
-			    "%s: %s's quota is not enabled", diag, name);
-			free(name);
-			e = GFARM_ERR_NO_SUCH_OBJECT;
-			return (gfm_server_relay_put_reply(peer, xid,
-			    sizep, relay, diag, &e, ""));
-		}
-		quota_convert_1(q, name, &qi);
-		giant_unlock();
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
-	e = gfm_server_relay_put_reply(
-			peer, xid, sizep, relay, diag, &e,
-			"slllllllllllllllll",
-			&qi.name,
-			&qi.grace_period,
-			&qi.space,
-			&qi.space_grace,
-			&qi.space_soft,
-			&qi.space_hard,
-			&qi.num,
-			&qi.num_grace,
-			&qi.num_soft,
-			&qi.num_hard,
-			&qi.phy_space,
-			&qi.phy_space_grace,
-			&qi.phy_space_soft,
-			&qi.phy_space_hard,
-			&qi.phy_num,
-			&qi.phy_num_grace,
-			&qi.phy_num_soft,
-			&qi.phy_num_hard);
+	giant_lock();
+	if (is_group) {
+		if (strcmp(name, "") == 0)
+			e = GFARM_ERR_NO_SUCH_GROUP;
+		else if ((group = group_lookup(name)) == NULL) {
+			if (user_is_admin(peer_user))
+				e = GFARM_ERR_NO_SUCH_GROUP;
+			else  /* hidden groupnames */
+				e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		} else if ((!user_in_group(peer_user, group)) &&
+			!user_is_admin(peer_user))
+			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		/* user_in_group() || user_is_admin() : permit */
+	} else {
+		if (strcmp(name, "") == 0) {
+			user = peer_user; /* permit not-admin */
+			free(name);
+			name = strdup_log(user_name(peer_user), diag);
+			if (name == NULL)
+				e = GFARM_ERR_NO_MEMORY;
+		} else if (strcmp(name, user_name(peer_user)) == 0)
+			user = peer_user; /* permit not-admin */
+		else if (!user_is_admin(peer_user))
+			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		else if ((user = user_lookup(name)) == NULL)
+			e = GFARM_ERR_NO_SUCH_USER;
+	}
+	if (e != GFARM_ERR_NO_ERROR) {
+		giant_unlock();
+		gflog_debug(GFARM_MSG_1002056,
+			    "%s: name=%s: %s", diag, name,
+			    gfarm_error_string(e));
+		free(name);
+		return (gfm_server_put_reply(peer, diag, e, ""));
+	}
+	if (is_group)
+		q = group_quota(group);
+	else
+		q = user_quota(user);
+	if (!is_checked(q)) { /* quota is not initialized */
+		giant_unlock();
+		gflog_debug(GFARM_MSG_1002057,
+			    "%s: %s's quota is not enabled", diag, name);
+		free(name);
+		e = GFARM_ERR_NO_SUCH_OBJECT;
+		return (gfm_server_put_reply(peer, diag, e, ""));
+	}
+	quota_convert_1(q, name, &qi);
+	giant_unlock();
+
+	e = gfm_server_put_reply(
+			peer, diag, e, "slllllllllllllllll",
+			qi.name,
+			qi.grace_period,
+			qi.space,
+			qi.space_grace,
+			qi.space_soft,
+			qi.space_hard,
+			qi.num,
+			qi.num_grace,
+			qi.num_soft,
+			qi.num_hard,
+			qi.phy_space,
+			qi.phy_space_grace,
+			qi.phy_space_soft,
+			qi.phy_space_hard,
+			qi.phy_num,
+			qi.phy_num_grace,
+			qi.phy_num_soft,
+			qi.phy_num_hard);
 	free(name);
 	return (e);
 }
@@ -792,8 +1716,7 @@ quota_lookup(const char *name, int is_group, struct quota **qp,
 }
 
 static gfarm_error_t
-quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip, int is_group)
+quota_set_common(struct peer *peer, int from_client, int skip, int is_group)
 {
 	const char *diag = is_group ?
 	    "GFM_PROTO_QUOTA_GROUP_SET" : "GFM_PROTO_QUOTA_USER_SET";
@@ -801,11 +1724,9 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 	struct gfarm_quota_set_info qi;
 	struct quota *q;
 	struct user *peer_user = peer_get_user(peer);
-	struct relayed_request *relay;
+	int need_db_update = 0;
 
-	e = gfm_server_relay_get_request(peer, sizep, skip, &relay, diag,
-	    is_group ? GFM_PROTO_QUOTA_GROUP_SET : GFM_PROTO_QUOTA_USER_SET,
-				   "slllllllll",
+	e = gfm_server_get_request(peer, diag, "slllllllll",
 				   &qi.name,
 				   &qi.grace_period,
 				   &qi.space_soft,
@@ -816,8 +1737,11 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 				   &qi.phy_space_hard,
 				   &qi.phy_num_soft,
 				   &qi.phy_num_hard);
-	if (e != GFARM_ERR_NO_ERROR)
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1002058, "%s request failed: %s",
+			diag, gfarm_error_string(e));
 		return (e);
+	}
 	if (skip) {
 		free(qi.name);
 		return (GFARM_ERR_NO_ERROR);
@@ -827,122 +1751,110 @@ quota_set_common(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
 		gflog_debug(GFARM_MSG_1002059, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
 		free(qi.name);
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-						relay, diag, &db_state, ""));
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		giant_lock();
-		if (!from_client || peer_user == NULL
-				 || !user_is_admin(peer_user)) {
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			gflog_debug(GFARM_MSG_1002060,
+	giant_lock();
+	if (!from_client || peer_user == NULL || !user_is_admin(peer_user)) {
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		gflog_debug(GFARM_MSG_1002060,
 			    "%s: !from_client or invalid peer_user"
 			    " or !user_is_admin", diag);
-			goto end;
-		} else if ((e = quota_lookup(qi.name, is_group, &q, diag))
-			   != GFARM_ERR_NO_ERROR) {
-			goto end;
-		}
-
-		/* set limits */
-		set_limit(q->grace_period, qi.grace_period);
-		set_limit(q->space_soft, qi.space_soft);
-		set_limit(q->space_hard, qi.space_hard);
-		set_limit(q->num_soft, qi.num_soft);
-		set_limit(q->num_hard, qi.num_hard);
-		set_limit(q->phy_space_soft, qi.phy_space_soft);
-		set_limit(q->phy_space_hard, qi.phy_space_hard);
-		set_limit(q->phy_num_soft, qi.phy_num_soft);
-		set_limit(q->phy_num_hard, qi.phy_num_hard);
-
-		/* check softlimit and update exceeded time */
-		quota_check_softlimit_exceed(q);
-
-		if (is_group)
-			e = db_quota_group_set(q, qi.name);
-		else
-			e = db_quota_user_set(q, qi.name);
-		if (e == GFARM_ERR_NO_ERROR)
-			q->on_db = 1;
-end:
-		giant_unlock();
+		goto end;
+	} else if ((e = quota_lookup(qi.name, is_group, &q, diag))
+	    != GFARM_ERR_NO_ERROR) {
+		goto end;
 	}
+
+	/* set limits */
+	set_limit(q->grace_period, qi.grace_period);
+	set_limit(q->space_soft, qi.space_soft);
+	set_limit(q->space_hard, qi.space_hard);
+	set_limit(q->num_soft, qi.num_soft);
+	set_limit(q->num_hard, qi.num_hard);
+	set_limit(q->phy_space_soft, qi.phy_space_soft);
+	set_limit(q->phy_space_hard, qi.phy_space_hard);
+	set_limit(q->phy_num_soft, qi.phy_num_soft);
+	set_limit(q->phy_num_hard, qi.phy_num_hard);
+
+	/* check softlimit and update exceeded time */
+	quota_softlimit_exceed(q, &need_db_update);
+
+	/* update regardless of need_db_update */
+	if (is_group)
+		e = db_quota_group_set(q, qi.name);
+	else
+		e = db_quota_user_set(q, qi.name);
+	if (e == GFARM_ERR_NO_ERROR)
+		q->on_db = 1;
+end:
+	giant_unlock();
 	free(qi.name);
-	return (gfm_server_relay_put_reply(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }
 
 gfarm_error_t
-gfm_server_quota_user_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_user_get(struct peer *peer, int from_client, int skip)
 {
-	return (quota_get_common(peer, xid, sizep, from_client, skip, 0));
+	return (quota_get_common(peer, from_client, skip, 0));
 }
 
 gfarm_error_t
-gfm_server_quota_user_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_user_set(struct peer *peer, int from_client, int skip)
 {
-	return (quota_set_common(peer, xid, sizep, from_client, skip, 0));
+	return (quota_set_common(peer, from_client, skip, 0));
 }
 
 gfarm_error_t
-gfm_server_quota_group_get(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_group_get(struct peer *peer, int from_client, int skip)
 {
-	return (quota_get_common(peer, xid, sizep, from_client, skip, 1));
+	return (quota_get_common(peer, from_client, skip, 1));
 }
 
 gfarm_error_t
-gfm_server_quota_group_set(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_group_set(struct peer *peer, int from_client, int skip)
 {
-	return (quota_set_common(peer, xid, sizep, from_client, skip, 1));
+	return (quota_set_common(peer, from_client, skip, 1));
 }
 
 gfarm_error_t
-gfm_server_quota_check(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep,
-	int from_client, int skip)
+gfm_server_quota_check(struct peer *peer, int from_client, int skip)
 {
 	static const char diag[] = "GFM_PROTO_QUOTA_CHECK";
 	gfarm_error_t e;
 	struct user *peer_user = peer_get_user(peer);
-	struct relayed_request *relay;
 
-	e = gfm_server_relay_get_request(peer, sizep, skip, &relay, diag,
-	    GFM_PROTO_QUOTA_CHECK, "");
-	if (e != GFARM_ERR_NO_ERROR)
+	e = gfm_server_get_request(peer, diag, "");
+	if (e != GFARM_ERR_NO_ERROR) {
+		gflog_debug(GFARM_MSG_1002063,
+			"%s request failed: %s", diag, gfarm_error_string(e));
 		return (e);
+	}
 	if (skip)
 		return (GFARM_ERR_NO_ERROR);
 
 	if (db_state != GFARM_ERR_NO_ERROR) {
 		gflog_debug(GFARM_MSG_1002064, "db_quota is invalid: %s",
 			gfarm_error_string(db_state));
-		return (gfm_server_relay_put_reply(peer, xid, sizep,
-						relay, diag, &db_state, ""));
+		return (gfm_server_put_reply(peer, diag, db_state, ""));
 	}
 
-	if (relay == NULL) {
-		/* do not relay RPC to master gfmd */
-		giant_lock();
-		if (!from_client || peer_user == NULL
-				 || !user_is_admin(peer_user)) {
-			giant_unlock();
-			e = GFARM_ERR_OPERATION_NOT_PERMITTED;
-			gflog_debug(GFARM_MSG_1002065,
+	giant_lock();
+	if (!from_client || peer_user == NULL || !user_is_admin(peer_user)) {
+		giant_unlock();
+		e = GFARM_ERR_OPERATION_NOT_PERMITTED;
+		gflog_debug(GFARM_MSG_1002065,
 			    "%s: !from_client or invalid peer_user"
 			    " or !user_is_admin", diag);
-			return (gfm_server_relay_put_reply(peer, xid,
-			    sizep, relay, diag, &e, ""));
-		}
-		/* XXX FIXME too long giant lock */
-		quota_check();
-		giant_unlock();
+		return (gfm_server_put_reply(peer, diag, e, ""));
 	}
+	giant_unlock();
 
-	return (gfm_server_relay_put_reply(peer, xid, sizep, relay, diag,
-	    &e, ""));
+	quota_check_start(&quota_check_ctl);
+	quota_check_wait_for_end(&quota_check_ctl);
+
+	quota_check_start(&dirquota_check_ctl);
+	quota_check_wait_for_end(&dirquota_check_ctl);
+
+	return (gfm_server_put_reply(peer, diag, e, ""));
 }

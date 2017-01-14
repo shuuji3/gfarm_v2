@@ -22,14 +22,13 @@
 #include "group.h"
 #include "mdhost.h"
 #include "inode.h"
+#include "file_copy.h"
 #include "dir.h"
 #include "db_journal_test.h"
 #include "db_journal_apply.h"
 
 /* XXX FIXME - dummy definitions to link successfully without gfmd.o */
 struct thread_pool *sync_protocol_get_thrpool(void) { return NULL; }
-int protocol_service(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep)
-{ return 0; }
 void resuming_enqueue(void *entry) {}
 void gfmd_terminate(void) {}
 int gfmd_port;
@@ -749,7 +748,7 @@ t_write_blocked(void)
 	 * Note that the writer now starts writing more data.
 	 *
 	 *     |user1|user2|user3|  |
-	 *                 r     
+	 *                 r
 	 */
 	TEST_ASSERT_I("t_write_blocked_num_rec_read",
 	    2, t_write_blocked_num_rec_read);
