@@ -7,9 +7,24 @@
 #include "gfm_client.h"
 #include "context.h"
 #include "auth.h"
+#include "gfsk_ccib.h"
 
 struct gfs_connection;
 struct gfs_file_list;
+
+gfarm_error_t
+gfarm_cc_register(struct gfcc_ibaddr *ibaddr)
+{
+	gflog_debug(GFARM_MSG_UNFIXED, "Not supported yet");
+	return (GFARM_ERR_NO_ERROR);
+}
+gfarm_error_t
+gfarm_cc_find_host(struct gfcc_obj *obj, struct gfcc_ibaddr *ibaddr)
+{
+	int err;
+	err = gfsk_cc_find_host(obj, ibaddr);
+	return (gfarm_errno_to_error(-err));
+}
 
 gfarm_error_t
 gfarm_auth_server_cred_type_set_by_string(char *service_tag, char *name)
@@ -80,7 +95,7 @@ gfarm_gfs_xattr_static_init(struct gfarm_context *ctxp)
 void
 gfarm_log_backtrace_symbols(void)
 {
-	gflog_debug(GFARM_MSG_UNFIXED, "Not supported yet");
+	dump_stack();
 }
 
 
@@ -99,10 +114,55 @@ gfs_lgetxattr(const char *path, const char *name, void *value, size_t *size)
 
 char GFS_SERVICE_TAG[] = "gfarm-data";
 
+void
+gfarm_iostat_local_add(unsigned int cat, int val)
+{
+}
+
+#include <openssl/evp.h>
+int
+gfarm_msgdigest_name_verify(const char *gfarm_name)
+{
+	gflog_error(GFARM_MSG_UNFIXED, "Not supported");
+	return (0);
+}
+size_t
+gfarm_msgdigest_to_string(
+	char *md_string, unsigned char *md_value, size_t md_len)
+{
+	gflog_error(GFARM_MSG_UNFIXED, "Not supported");
+	return (0);
+}
+EVP_MD_CTX *
+gfarm_msgdigest_alloc_by_name(const char *md_type_name, int *cause_p)
+{
+	gflog_error(GFARM_MSG_UNFIXED, "Not supported");
+	if (md_type_name == NULL || md_type_name[0] == '\0') {
+		if (cause_p != NULL)
+			*cause_p = 0;
+		return (NULL);
+	}
+	if (cause_p != NULL)
+		*cause_p = EOPNOTSUPP;
+	return (NULL);
+}
+size_t
+gfarm_msgdigest_free(EVP_MD_CTX *md_ctx, unsigned char *md_value)
+{
+	gflog_error(GFARM_MSG_UNFIXED, "Not supported");
+	return (0);
+}
+size_t
+gfarm_msgdigest_to_string_and_free(EVP_MD_CTX *md_ctx, char *md_string)
+{
+	gflog_error(GFARM_MSG_UNFIXED, "Not supported");
+	return (0);
+}
+
+
 /*
 gfs_client_connect_result_multiplexed
 gfs_client_connection_alloc_and_auth
 gfs_client_connect_request_multiplexed
 gfs_pio_open_local_section
--------------------------------
 */

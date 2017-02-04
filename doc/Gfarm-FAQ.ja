@@ -3,7 +3,7 @@ Gfarm FAQ - Gfarm に関するよくある質問
 Copyright (c) 2003-2008 National Institute of Advanced Industrial
 Science and Technology (AIST).  All Rights Reserved.
 
-Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
+Copyright (c) 2006-2013 Osamu Tatebe.  All Rights Reserved.
 
 目次:
 *****
@@ -26,6 +26,7 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
   2.5 ファイルの更新時刻がおかしいようです．
   2.6 gfmd や gfsd が異常終了した際，どうすればコアファイルを回収
       できますか？
+  2.7 InfiniBand があるのにRDMAができません．
 
 3. セキュリティ
   3.1 Gfarm は firewall に守られていない環境で安全に運用できますか？
@@ -53,9 +54,14 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 
 		https://sourceforge.net/projects/gfarm/files/
 
-	なお，開発版のソースコードは以下のコマンドで入手できます．
-
+	なお，最新のソースコードは以下のコマンドで入手できます．
+	Gfarm 2.5.8系
+		$ svn co https://svn.code.sf.net/p/gfarm/code/gfarm_v2/branches/2.5 gfarm_v2
+	Gfarm 2.6系
+		$ svn co https://svn.code.sf.net/p/gfarm/code/gfarm_v2/branches/2.6 gfarm_v2
+	開発版
 		$ svn co https://svn.code.sf.net/p/gfarm/code/gfarm_v2/trunk gfarm_v2
+	Gfarm2fs
 		$ svn co https://svn.code.sf.net/p/gfarm/code/gfarm2fs/trunk gfarm2fs
 
   1.3 gfmd は，どの程度のメモリを消費しますか？
@@ -82,7 +88,6 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 		  align(24 + OH)
 		= 32
 
-
 	拡張属性の数が十分少ない場合，ファイル・ディレクトリ・シンボリック
 	リンクそれぞれに必要なバイト数は，以下の通りとなります．
 
@@ -106,7 +111,6 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 		= 176 + 64 + align(strlen(basename(パス名)) + OH)
 		  + 32 × 複製数
 		= 240 + align(strlen(basename(パス名)) + OH) + 32 × 複製数
-
 
 	さらに，仮に，パス名の最後のコンポーネント部の長さが 14文字程度，
 	ファイルの複製数が3，シンボリックリンクの指す先が55文字と仮定して，
@@ -142,7 +146,7 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 	    sysctl fs.file-max 設定の 75% 未満となるよう制限しています．
 	    このため gfmd.conf の「metadb_server_max_descriptors 131072」
 	    という設定を実際に有効にするには，ファイル /etc/sysctl.conf に
-	    「fs.file-max=180224」といった設定入れた後、リブートするか，
+	    「fs.file-max=180224」といった設定入れた後，リブートするか，
 	    あるいはコマンド「/sbin/sysctl -p」を実行します．
 	NetBSD の場合:
 	    ファイル /etc/sysctl.conf に「kern.maxfiles=180224」といった
@@ -226,6 +230,10 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 	ファイルシステムノードに対する共有鍵あるいは GSI の設定が正し
 	くなされていない可能性があります．
 
+	gfsd のコマンドラインオプションに -dv を追加して起動すると，
+	gfsd がフォアグラウンドで起動し，詳細なメッセージを出力します．
+	メッセージに従いエラーの原因を解決してください．
+
 	共有鍵認証の場合は，各ファイルシステムノードのホームディレクト
 	リに同一の共有鍵ファイル(~/.gfarm_shared_key) が置かれているか
 	確認してください．
@@ -241,7 +249,7 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 	GSI認証はサポートされていない点にもご注意ください．
 
 	それでも認証エラーが生じる場合は，Gfarm ファイルシステムの管理
-	者に連絡してください．この場合，_gfarmfs ユーザの共有鍵、GSIの
+	者に連絡してください．この場合，_gfarmfs ユーザの共有鍵，GSIの
 	設定が正しくなされていない可能性があります．
 
 	なお，GSI認証においては以下のような点に注意する必要があります．
@@ -279,7 +287,7 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 	有効期限が切れていませんか？
 
 	(6) gfarm.conf の metadb_serverhost の項で指定しているメタデータ
-	サーバのホスト名は、ホスト証明書に書かれているホスト名と一致して
+	サーバのホスト名は，ホスト証明書に書かれているホスト名と一致して
 	いますか？
 
 	(7) gfhost コマンドで登録するホストの固有識別子は，ホスト証明書
@@ -292,25 +300,41 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
   2.3 ファイルシステムノードのディスクがクラッシュしてしまいました．ど
      うすればいいでしょうか？
 
-	ファイルシステムノードが落ちている間は，そのファイルシステムノー
-	ドは利用されませんので，複製が他のノードに存在していれば問題な
-	くアクセスすることができます．
+	gfncopy コマンドでファイル複製数を2以上に設定している場合は，
+	他のファイルシステムノードに複製が存在するので問題はありません．
 
-	ただし，ファイルが失われてしまったファイルシステムノードを
-	Gfarm ファイルシステムに接続すると問題が生じます．このための管
-	理コマンドは今後提供される予定です．
+	たまたまクラッシュしたノードのファイルを読み込みアクセスしてい
+	た場合は，自動的に network_receive_timeout 秒後に他のファイル
+	システムノードの複製の読み込みに切り替わり，アプリケーションに
+	もエラーは通知されません．network_receive_timeout はデフォルト
+	では60秒です．
+
+	ただし，クラッシュしたノードのファイルを書き込みアクセスしてい
+	た場合は，そのアプリケーションに対し，書き込みエラーが返り，更
+	新は失われます．
+
+	クラッシュすると replica_check_host_down_thresh 秒後に，自動的
+	に指定した複製数の複製が作成されます．デフォルトでは3時間です．
+
+	ファイル複製数を2以上に設定していない場合は，クラッシュしたファ
+	イルシステムノードにしかない複製はアクセスできなくなります．た
+	だし，truncate は可能です．
+
+	ファイルシステムノードを復旧すると，起動時にメタデータとスプー
+	ルディレクトリの一貫性チェックが行われ，一貫していない場合は，
+	/lost+found ディレクトリに移動されます．
 
   2.4 無通信状態で止まっている gfarm クライアントや gfsd が残ることが
      あるのですが？
 
-	ネットワークインターフェースカードの問題や、ネットワーク自体の
-	トラブルで、数分間によって通信が途絶した場合、このようなことが
-	起きる可能性があります。特に広域ネットワークを通して通信して
-	いる場合はこのような可能性が増えます。そのような場合、
-	gfarm.conf に「sockopt keepalive」という設定を加えることで、
+	ネットワークインターフェースカードの問題や，ネットワーク自体の
+	トラブルで，数分間によって通信が途絶した場合，このようなことが
+	起きる可能性があります．特に広域ネットワークを通して通信して
+	いる場合はこのような可能性が増えます．そのような場合，
+	gfarm.conf に「sockopt keepalive」という設定を加えることで，
 	停止したプログラムを自動的にエラーで終了させることができるよう
-	になります。Gfarm 1.3.1 以降の config-gfarm で生成した
-	gfarm.conf は、デフォルトでこの設定を含んでいます。
+	になります．Gfarm 1.3.1 以降の config-gfarm で生成した
+	gfarm.conf は，デフォルトでこの設定を含んでいます．
 
 	あるいは，もし /etc/nsswitch.conf で「ldap」を指定している場合，
 	いくつかの Linux ディストリビューションで，このような問題が
@@ -363,10 +387,10 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 		/etc/init.d/gfsd restart
 
 	(3) gfmd や gfsd を Red Hat もしくはそれから派生した OS で動作
-	させ、RPM パッケージで導入、あるいは prefix を /usr として導入
+	させ，RPM パッケージで導入，あるいは prefix を /usr として導入
 	している場合は "prelink" という日時ジョブに関する設定を行う必要
 	があります．"/etc/prelink.conf.d/gfarm.conf" というファイルを
-	作成し、以下のような行を足して、prelink の対象外とします．
+	作成し，以下のような行を足して，prelink の対象外とします．
 
 		-b /usr/sbin/gfmd
 		-b /usr/sbin/gfsd
@@ -377,12 +401,34 @@ Copyright (c) 2006-2012 Osamu Tatebe.  All Rights Reserved.
 	/etc/prelink.conf を参照してください．また prelink については
 	man ページを参照してください．
 
+	(4) abrt が導入されている場合はコアファイルの出力に失敗するこ
+	とがあります．abrt の設定を適切に行うか，abrt の起動を停止して
+	ください．
+
+  2.7 InfiniBand があるのにRDMAができません．
+
+	・ configure 時にクライアント，gfsd ともに --with-infiniband を
+	指定してありますか．
+	例えば，以下のコマンドでライブラリが表示されますか．
+		% ldd /usr/local/lib/libgfarm.so |grep libibverbs.so
+
+	・"insufficient memlock size(...), please expand memlock size" の
+	エラーメッセージは出ていませんか．
+	出ていれば資源制限を拡張してください．
+	/etc/security/limits.conf を編集して '* hard memlock unlimited' を
+	指定してみてください．
+
+	・"ibv_.... failed, no memory" のエラーメッセージは出ていませんか．
+	出ていれば資源制限がかかっているか，実際にメモリーロックサイズが
+	大きすぎるためで，有効なRDMA利用はできません．
+	当該プロセスのメモリロックサイズを確認してみてください。
+		% grep VmLck /proc/<pid>/status
 
 3. セキュリティ
 ***************
   3.1 Gfarm は firewall に守られていない環境で安全に運用できますか？
 
-	Gfarm-2.x は，sharedsecret 認証，gsi_auth 手法，gsi 認証の
+	Gfarm は，sharedsecret 認証，gsi_auth 手法，gsi 認証の
 	3 種類の認証方法をサポートしていますが，
 	Internet 環境では，sharedsecret 認証や gsi_auth 手法では
 	安全とは言えません．gsi 認証の利用を推奨します．
