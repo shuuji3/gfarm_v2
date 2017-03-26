@@ -189,7 +189,8 @@ dir_enter(Dir dir, const char *name, int namelen, int *createdp)
 	found = RB_INSERT(rbdir, dir, entry);
 	if (found != NULL) {
 		rbdir_entry_free(entry);
-		*createdp = 0;
+		if (createdp != NULL)
+			*createdp = 0;
 		return (found);
 	}
 
@@ -286,6 +287,10 @@ dir_cursor_remove_entry(Dir dir, DirCursor *cursor)
 	return (*cursor != NULL); /* is there still any entry? */
 }
 
+/*
+ * NOTE: inode_foreach_in_subtree_interruptible() depends on the fact that
+ * `pos' is the sequence number in the directory
+ */
 int
 dir_cursor_set_pos(Dir dir, gfarm_off_t nth, DirCursor *cursor)
 {
@@ -375,4 +380,21 @@ dir_cursor_get_name_and_inode(Dir dir, DirCursor *cursorp,
 	*namep = newname;
 	*inodep  = dir_entry_get_inode(entry);
 	return (GFARM_ERR_NO_ERROR);
+}
+
+const char DOT[] = ".";
+const char DOTDOT[] = "..";
+
+int
+name_is_dot_or_dotdot(const char *name, int len)
+{
+	return ((len == DOT_LEN && name[0] == '.') ||
+		(len == DOTDOT_LEN && name[0] == '.' && name[1] == '.'));
+}
+
+int
+string_is_dot_or_dotdot(const char *s)
+{
+	return (s[0] == '.' &&
+	    (s[1] == '\0' || (s[1] == '.' && s[2] == '\0')));
 }
