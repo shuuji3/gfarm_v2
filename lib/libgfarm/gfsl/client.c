@@ -3,12 +3,12 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/types.h>
 
 #include <gssapi.h>
 #include <limits.h>
 
 #include <gfarm/error.h>
+#include <gfarm/gflog.h>
 
 #include "gfutil.h"
 
