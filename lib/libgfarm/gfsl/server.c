@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/types.h>
 
 #include <gssapi.h>
 
@@ -17,6 +16,7 @@
 
 #include <gfarm/gfarm_config.h>
 #include <gfarm/error.h>
+#include <gfarm/gflog.h>
 
 #include "gfnetdb.h"
 #include "gfutil.h"
