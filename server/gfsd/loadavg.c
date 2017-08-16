@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 #include <gfarm/gfarm.h>
 
@@ -99,7 +100,7 @@ getloadavg(double *loadavg, int n)
 
 int
 getloadavg(double *loadavg, int n)
-{	
+{
 	int i;
 	perfstat_cpu_total_t pct;
 

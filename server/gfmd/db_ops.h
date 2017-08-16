@@ -18,6 +18,8 @@
  * $Id$
  */
 
+struct gfarm_internal_host_info;
+
 struct db_host_modify_arg {
 	struct gfarm_host_info hi;
 	int modflags;
@@ -32,11 +34,13 @@ struct db_fsngroup_modify_arg {
 
 struct db_user_modify_arg {
 	struct gfarm_user_info ui;
+		/* should be first member, for db_user_dup() */
 	int modflags;
 };
 
 struct db_group_modify_arg {
 	struct gfarm_group_info gi;
+		/* should be first member, for db_group_dup() */
 	int modflags;
 	int add_count; char **add_users;
 	int del_count; char **del_users;
@@ -127,12 +131,24 @@ struct db_quota_remove_arg {
 	char *name;
 };
 
+struct gfarm_quota_info;
+
+struct db_quota_dirset_arg {
+	struct gfarm_dirset_info dirset;
+		/* should be first member, for db_dirset_dup()*/
+	struct quota_metadata q;
+};
+
+struct db_inode_dirset_arg {
+	struct gfarm_dirset_info dirset;
+		/* should be first member, for db_dirset_dup()*/
+	gfarm_ino_t inum;
+};
+
 struct db_seqnum_arg {
 	char *name;
 	gfarm_uint64_t value;
 };
-
-struct gfarm_quota_info;
 
 struct db_mdhost_modify_arg {
 	struct gfarm_metadb_server ms;
@@ -204,6 +220,8 @@ struct db_ops {
 		struct db_filecopy_arg *);
 	gfarm_error_t (*filecopy_remove)(gfarm_uint64_t,
 		struct db_filecopy_arg *);
+	gfarm_error_t (*filecopy_remove_by_host)(gfarm_uint64_t, char *);
+			/* only called at initialization, bypass journal */
 	gfarm_error_t (*filecopy_load)(void *,
 		void (*)(void *, gfarm_ino_t, char *));
 
@@ -211,6 +229,8 @@ struct db_ops {
 		struct db_deadfilecopy_arg *);
 	gfarm_error_t (*deadfilecopy_remove)(gfarm_uint64_t,
 		struct db_deadfilecopy_arg *);
+	gfarm_error_t (*deadfilecopy_remove_by_host)(gfarm_uint64_t, char *);
+			/* only called at initialization, bypass journal */
 	gfarm_error_t (*deadfilecopy_load)(void *,
 		void (*)(void *, gfarm_ino_t, gfarm_uint64_t, char *));
 
@@ -245,6 +265,23 @@ struct db_ops {
 		struct db_quota_remove_arg *);
 	gfarm_error_t (*quota_load)(void *, int,
 		void (*)(void *, struct gfarm_quota_info *));
+
+	gfarm_error_t (*quota_dirset_add)(gfarm_uint64_t,
+		struct db_quota_dirset_arg *);
+	gfarm_error_t (*quota_dirset_modify)(gfarm_uint64_t,
+		struct db_quota_dirset_arg *);
+	gfarm_error_t (*quota_dirset_remove)(gfarm_uint64_t,
+		struct gfarm_dirset_info *);
+	gfarm_error_t (*quota_dirset_load)(void *,
+		void (*)(void *,
+		    struct gfarm_dirset_info *, struct quota_metadata *));
+
+	gfarm_error_t (*quota_dir_add)(gfarm_uint64_t,
+		struct db_inode_dirset_arg *);
+	gfarm_error_t (*quota_dir_remove)(gfarm_uint64_t,
+		struct db_inode_inum_arg *);
+	gfarm_error_t (*quota_dir_load)(void *,
+	    void (*)(void *, gfarm_ino_t, struct gfarm_dirset_info *));
 
 	gfarm_error_t (*seqnum_get)(const char *, gfarm_uint64_t *);
 	gfarm_error_t (*seqnum_add)(struct db_seqnum_arg *);
