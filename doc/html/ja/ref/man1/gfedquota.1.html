@@ -2,39 +2,40 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>gfedquota</title>
-<meta name="generator" content="DocBook XSL Stylesheets V1.76.1">
+<meta name="generator" content="DocBook XSL Stylesheets V1.75.2">
 </head>
 <body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" title="gfedquota">
 <a name="gfedquota.1"></a><div class="titlepage"></div>
 <div class="refnamediv">
 <a name="name"></a><h2>Name</h2>
-<p>gfedquota — ファイルの制限を編集</p>
+<p>gfedquota — ファイル制限を編集</p>
 </div>
 <div class="refsynopsisdiv" title="Synopsis">
 <a name="synopsis"></a><h2>Synopsis</h2>
-<div class="cmdsynopsis"><p><code class="command">gfedquota</code>  [<em class="replaceable"><code>オプション</code></em>]</p></div>
+<div class="cmdsynopsis"><p><code class="command">gfedquota</code>  [オプション]  -u <em class="replaceable"><code>ユーザ名</code></em> </p></div>
+<div class="cmdsynopsis"><p><code class="command">gfedquota</code>  [オプション]  -g <em class="replaceable"><code>グループ名</code></em> </p></div>
+<div class="cmdsynopsis"><p><code class="command">gfedquota</code>  [オプション]  -D <em class="replaceable"><code>dirset名</code></em> </p></div>
 </div>
 <div class="refsect1" title="DESCRIPTION">
 <a name="description"></a><h2>DESCRIPTION</h2>
-<p><span class="command"><strong>gfedquota</strong></span> は、ユーザやグループに対するファイル
-制限を編集できます。
+<p><span class="command"><strong>gfedquota</strong></span> は、
+ユーザやグループに対するファイル制限を編集できます。
 </p>
 <p>
 制限の種類には、ソフトリミットとハードリミットがあります。
 ソフトリミットには猶予期間を設定できます。
-制限する対象は、ファイル数の合計とファイルサイズの合計、レプリカを含め
-た実ファイル数の合計と実ファイルサイズの合計です。
+制限する対象は、ファイル数の合計とファイルサイズの合計、
+レプリカを含めた実ファイル数の合計と実ファイルサイズの合計です。
 制限値に 'disable' または -1  を指定すると、無制限になります。
-制限するためのオプションを指定しなければ、割り当て量 (quota) は変わりま
-せん。
+制限するためのオプションを指定しなければ、
+割り当て量 (quota) は変わりません。
 </p>
 <p>
 このコマンドは gfarmadm グループに所属する管理者だけが実行できます。
 </p>
 <p>
-<span class="command"><strong>gfedquota</strong></span> コマンド実行後
-に <span class="command"><strong>gfquotacheck</strong></span> コマンドを実行すると quota が有効に
-なります。
+ただし、-D オプション指定の管理者グループとしては、
+gfarmadm グループではなく、gfarmroot グループが使われます。
 </p>
 </div>
 <div class="refsect1" title="OPTIONS">
@@ -46,6 +47,8 @@
 <dd><p>制限を編集する対象のユーザ名を指定します。</p></dd>
 <dt><span class="term"><code class="option">-g NAME, --group=NAME</code></span></dt>
 <dd><p>制限を編集する対象のグループ名を指定します。</p></dd>
+<dt><span class="term"><code class="option">-D NAME, --dirset=NAME</code></span></dt>
+<dd><p>制限を編集する対象の dirset名 を指定します。</p></dd>
 <dt><span class="term"><code class="option">-G SECOND, --grace=SECOND</code></span></dt>
 <dd><p>ソフトリミットの猶予時間を秒で指定します。</p></dd>
 <dt><span class="term"><code class="option">-s BYTE, --softspc=BYTE</code></span></dt>
@@ -75,7 +78,11 @@
 <p>
   <span class="citerefentry"><span class="refentrytitle">gfquota</span>(1)</span>,
   <span class="citerefentry"><span class="refentrytitle">gfquotacheck</span>(1)</span>,
-  <span class="citerefentry"><span class="refentrytitle">gfusage</span>(1)</span>
+  <span class="citerefentry"><span class="refentrytitle">gfdirquota</span>(1)</span>,
+  <span class="citerefentry"><span class="refentrytitle">gfusage</span>(1)</span>,
+  <span class="refentrytitle">
+  Gfarm ユーザーズマニュアル / Directory Quota 機能
+  </span>
 </p>
 </div>
 </div></body>

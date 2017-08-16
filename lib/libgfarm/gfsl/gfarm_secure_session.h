@@ -92,7 +92,7 @@ typedef struct gfarmSecSession {
  * GSSAPI and other transmission configuration information struct.
  */
 typedef struct {
-    unsigned int optMask;	/* Mask of which options are 
+    unsigned int optMask;	/* Mask of which options are
 				   specified. Or'd belows: */
 #define GFARM_SS_OPT_QOP_MASK	0x1
 #define GFARM_SS_OPT_MAXT_MASK	0x2
@@ -151,13 +151,10 @@ extern void	gfarmSecSessionFinalizeAcceptor(void);
 extern void	gfarmSecSessionFinalizeInitiator(void);
 extern void	gfarmSecSessionFinalizeBoth(void);
 
-extern int	gfarmSecSessionGetInitiatorInitialCredential(gss_cred_id_t *credPtr);
-extern int	gfarmSecSessionAcceptorCredIsValid(
-			OM_uint32 *majStatPtr, OM_uint32 *minStatPtr);
-
 extern gfarmSecSession *	gfarmSecSessionAccept(int fd,
 						      gss_cred_id_t cred,
 						      gfarmSecSessionOption *ssOptPtr,
+						      int *gsiErrNoPtr,
 						      OM_uint32 *majStatPtr,
 						      OM_uint32 *minStatPtr);
 extern gfarmSecSession *	gfarmSecSessionInitiate(int fd,
@@ -165,6 +162,7 @@ extern gfarmSecSession *	gfarmSecSessionInitiate(int fd,
 							gss_cred_id_t cred,
 							OM_uint32 reqFlag,
 							gfarmSecSessionOption *ssOptPtr,
+							int *gsiErrNoPtr,
 							OM_uint32 *majStatPtr,
 							OM_uint32 *minStatPtr);
 extern gfarmSecSession *	gfarmSecSessionInitiateByAddr(unsigned long rAddr,
@@ -181,6 +179,7 @@ extern gfarmSecSession *	gfarmSecSessionInitiateByName(char *hostname,
 							gss_cred_id_t cred,
 							OM_uint32 reqFlag,
 							gfarmSecSessionOption *ssOptPtr,
+							int *gsiErrNoPtr,
 							OM_uint32 *majStatPtr,
 							OM_uint32 *minStatPtr);
 extern void			gfarmSecSessionTerminate(gfarmSecSession *ssPtr);

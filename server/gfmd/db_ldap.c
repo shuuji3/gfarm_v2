@@ -19,7 +19,6 @@
 #include <pthread.h>	/* db_access.h currently needs this */
 #include <sys/time.h>
 #include <assert.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
@@ -63,8 +62,8 @@
 
 #include "gfutil.h"
 
-#include "gfp_xdr.h"
 #include "config.h"
+#include "quota_info.h"
 #include "metadb_common.h"
 #include "xattr_info.h"
 #include "metadb_server.h"
@@ -1095,7 +1094,7 @@ gfarm_ldap_generic_info_get_foreach_withattrs(
 					ldap_memfree(a);
 					continue;
 				}
-						
+
 				vals = ldap_get_values(gfarm_ldap_server, e, a);
 				if (vals == NULL) {
 					gflog_error(GFARM_MSG_1002368,
@@ -2342,6 +2341,47 @@ gfarm_ldap_filecopy_load(
 	    &gfarm_ldap_db_filecopy_ops));
 }
 
+static char ldap_hostname_dn_template[] = "hostname=%s, %s";
+
+static char *
+gfarm_ldap_hostname_make_dn(void *vkey)
+{
+	char *key = vkey;
+	char *dn;
+
+	GFARM_MALLOC_ARRAY(dn, strlen(ldap_hostname_dn_template)
+	    + strlen(key) + strlen(gfarm_ldap_base_dn) + 1);
+	if (dn == NULL) {
+		gflog_debug(GFARM_MSG_1004281,
+			"allocation of string 'dn' failed");
+		return (NULL);
+	}
+	sprintf(dn, gfarm_ldap_db_filecopy_ops.dn_template,
+	    key, gfarm_ldap_base_dn);
+	return (dn);
+}
+
+static const struct gfarm_ldap_generic_info_ops
+    gfarm_ldap_db_filecopy_remove_by_host_ops = {
+	NULL,
+	"(objectclass=GFarmFileCopy)",
+	ldap_hostname_dn_template,
+	gfarm_ldap_hostname_make_dn,
+	NULL,
+};
+
+/* only called at initialization, bypass journal */
+static gfarm_error_t
+gfarm_ldap_filecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
+{
+	gfarm_error_t e;
+
+	e = gfarm_ldap_generic_info_remove(hostname,
+	    &gfarm_ldap_db_filecopy_remove_by_host_ops);
+	free(hostname);
+	return (e);
+}
+
 /**********************************************************************/
 
 static char *gfarm_ldap_db_deadfilecopy_make_dn(void *vkey);
@@ -2474,6 +2514,27 @@ gfarm_ldap_deadfilecopy_load(
 	    LDAP_SCOPE_SUBTREE, gfarm_ldap_db_deadfilecopy_ops.query_type,
 	    &tmp_info, db_deadfilecopy_callback_trampoline, &c,
 	    &gfarm_ldap_db_deadfilecopy_ops));
+}
+
+static const struct gfarm_ldap_generic_info_ops
+    gfarm_ldap_db_deadfilecopy_remove_by_host_ops = {
+	NULL,
+	"(objectclass=GFarmDeadFileCopy)",
+	ldap_hostname_dn_template,
+	gfarm_ldap_hostname_make_dn,
+	NULL,
+};
+
+/* only called at initialization, bypass journal */
+static gfarm_error_t
+gfarm_ldap_deadfilecopy_remove_by_host(gfarm_uint64_t seqnum, char *hostname)
+{
+	gfarm_error_t e;
+
+	e = gfarm_ldap_generic_info_remove(hostname,
+	    &gfarm_ldap_db_deadfilecopy_remove_by_host_ops);
+	free(hostname);
+	return (e);
 }
 
 /**********************************************************************/
@@ -3139,6 +3200,71 @@ gfarm_ldap_quota_load(void *closure, int is_group,
 }
 
 /**********************************************************************/
+
+static gfarm_error_t
+gfarm_ldap_quota_dirset_add(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	/* XXX not implemented yet */
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_ldap_quota_dirset_modify(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	/* XXX not implemented yet */
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_ldap_quota_dirset_remove(gfarm_uint64_t seqnum,
+	struct gfarm_dirset_info *arg)
+{
+	/* XXX not implemented yet */
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_ldap_quota_dirset_load(void *closure,
+	void (*callback)(void *,
+	    struct gfarm_dirset_info *, struct quota_metadata *))
+{
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+/**********************************************************************/
+
+static gfarm_error_t
+gfarm_ldap_quota_dir_add(gfarm_uint64_t seqnum,
+		struct db_inode_dirset_arg *arg)
+{
+	/* XXX not implemented yet */
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_ldap_quota_dir_remove(gfarm_uint64_t seqnum,
+	struct db_inode_inum_arg *arg)
+{
+	/* XXX not implemented yet */
+	free(arg);
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+static gfarm_error_t
+gfarm_ldap_quota_dir_load(void *closure,
+	void (*callback)(void *, gfarm_ino_t, struct gfarm_dirset_info *))
+{
+	/* XXX not implemented yet */
+	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+}
+
+/**********************************************************************/
 const struct db_ops db_ldap_ops = {
 	gfarm_ldap_initialize,
 	gfarm_ldap_terminate,
@@ -3183,10 +3309,12 @@ const struct db_ops db_ldap_ops = {
 
 	gfarm_ldap_filecopy_add,
 	gfarm_ldap_filecopy_remove,
+	gfarm_ldap_filecopy_remove_by_host,
 	gfarm_ldap_filecopy_load,
 
 	gfarm_ldap_deadfilecopy_add,
 	gfarm_ldap_deadfilecopy_remove,
+	gfarm_ldap_deadfilecopy_remove_by_host,
 	gfarm_ldap_deadfilecopy_load,
 
 	gfarm_ldap_direntry_add,
@@ -3209,6 +3337,15 @@ const struct db_ops db_ldap_ops = {
 	gfarm_ldap_quota_modify,
 	gfarm_ldap_quota_remove,
 	gfarm_ldap_quota_load,
+
+	gfarm_ldap_quota_dirset_add,
+	gfarm_ldap_quota_dirset_modify,
+	gfarm_ldap_quota_dirset_remove,
+	gfarm_ldap_quota_dirset_load,
+
+	gfarm_ldap_quota_dir_add,
+	gfarm_ldap_quota_dir_remove,
+	gfarm_ldap_quota_dir_load,
 
 	NULL,
 	NULL,

@@ -1,5 +1,5 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT
+AC_INIT([gfarm], [2.7.4])
 AC_CONFIG_SRCDIR(RELNOTES)
 AC_CONFIG_AUX_DIR(makes)
 AC_CONFIG_HEADER(include/gfarm/gfarm_config.h)
@@ -35,6 +35,7 @@ if test x"$GCC" = x"yes"; then # CFLAGS='-g -O2'
 else # CFLAGS='-g'
   CFLAGS="-O" # don't use -g, but use -O
 fi
+AC_OPENMP
 
 # Check whether gcc accepts '-rdynamic' option
 # This check is performed for backtrace_symbols() function of glibc.
@@ -443,6 +444,61 @@ no) :;;
 *)  AC_DEFINE(HAVE_MTSAFE_NETDB, 1, [getaddrinfo(3) and getnameinfo(3) are MT-Safe]);;
 esac
 
+###
+### --with-infiniband ...
+###
+AC_MSG_CHECKING([InfiniBand])
+AC_ARG_WITH(infiniband,
+[  --with-infiniband=InfiniBand_ROOT		support InfiniBand RDMA between client and gfsd
+   			      	[[default=/usr]]],
+[ib_rdma="${withval}"
+], [ib_rdma=no])
+
+rdma_includes=
+rdma_libs=
+case ${ib_rdma} in
+yes|'')
+	rdma_libs=" -libverbs"
+	rdma_include=
+	ib_rdma=yes
+	;;
+/*)
+	rdma_libs=" -R ${ib_rdma}/lib -L ${ib_rdma}/lib  -libverbs"
+	rdma_includes=" -I ${ib_rdma}/include"
+	ib_rdma=yes
+	;;
+no)
+	ib_rdma=no
+	;;
+*)
+	AC_MSG_ERROR([invalid option \"${ib_rdma}\" options, aborted])
+	;;
+esac
+
+if test ${ib_rdma} = no; then
+	AC_MSG_RESULT([no])
+else
+	CPPFLAGS_SAVE="$CPPFLAGS"
+	CPPFLAGS="$CPPFLAGS $rdma_includes"
+
+	LIBS_SAVE="$LIBS"
+	LIBS="$LIBS $rdma_libs"
+AC_TRY_LINK([
+#include <infiniband/verbs.h>],[
+struct ibv_device **dev_list;
+dev_list = ibv_get_device_list(NULL);
+], [
+	AC_MSG_RESULT([yes])
+	AC_DEFINE(HAVE_INFINIBAND, 1, [support InfiniBand RDMA between client and gfsd])
+], [
+	LIBS="$LIBS_SAVE"
+	AC_MSG_ERROR([InfiniBand cannot be linked with \"${rdma_includes} ${rdma_libs}\" options, aborted])
+])
+fi
+
+AC_SUBST(rdma_includes)
+AC_SUBST(rdma_libs)
+
 ######
 ###### Checks for libraries.
 ######
@@ -499,7 +555,7 @@ yes)
     ])
 
   # Checks for library functions with pthread enabled
-  AC_CHECK_FUNCS(pthread_barrier_wait)
+  AC_CHECK_FUNCS(pthread_barrier_wait pthread_mutex_timedlock)
 
   CPPFLAGS="$CPPFLAGS_SAVE"
   LIBS="$LIBS_SAVE"
@@ -578,6 +634,7 @@ AC_SUBST(largefile64_cflags)
 AC_SUBST(largefile64_targets)
 
 ### sanity check whether OpenSSL is really usable or not
+### only OpenSSL-0.9.7 or later is supported since Gfarm-2.6.15
 
 AC_MSG_CHECKING([openssl])
 
@@ -588,19 +645,23 @@ CPPFLAGS="${openssl_includes} $CPPFLAGS_SAVE"
 LIBS="`echo ${openssl_libs} | sed 's/-R[[^ ]]*//g'` $LIBS_SAVE"
 
 AC_TRY_LINK([
+#include <stdio.h>
 #include <openssl/evp.h>],[
-EVP_MD_CTX md_ctx;
+EVP_MD_CTX *md_ctx = EVP_MD_CTX_create();
 EVP_MD *md_type = EVP_get_digestbyname("sha1");
 
-EVP_DigestInit(&md_ctx, md_type);
+EVP_DigestInit_ex(md_ctx, md_type, NULL);
 ], [], [
   AC_MSG_ERROR([OpenSSL cannot be linked with \"${openssl_includes} ${openssl_libs}\" options, aborted])
 ])
 
+AC_MSG_RESULT([using \"${openssl_includes} ${openssl_libs}\"])
+
+# these functions disappeared since OpenSSL-1.1.0
+AC_CHECK_FUNCS(CRYPTO_set_locking_callback CRYPTO_set_id_callback)
+
 CPPFLAGS="$CPPFLAGS_SAVE"
 LIBS="$LIBS_SAVE"
-
-AC_MSG_RESULT([using \"${openssl_includes} ${openssl_libs}\"])
 
 ###
 ### --with-openldap=OpenLDAP_ROOT
@@ -995,16 +1056,16 @@ fi
 ###### Checks for library functions.
 ######
 
-AC_CHECK_FUNCS(clock_gettime getdents fdatasync fdopendir poll pread pwrite snprintf getpassphrase mkdtemp setlogin strtoll strtoq setrlimit daemon getloadavg statvfs statfs random getifaddrs getopt_long backtrace_symbols utimensat)
+AC_CHECK_FUNCS(clock_gettime getdents fdatasync fdopendir poll pread pwrite snprintf getpassphrase mkdtemp setlogin sigtimedwait strtoll strtoq setrlimit daemon getloadavg statvfs statfs random getifaddrs getopt_long backtrace_symbols futimes futimesat utimensat)
 
 ### Check epoll_create really implemented
 
 AC_MSG_CHECKING([for epoll])
-AC_RUN_IFELSE([
+AC_RUN_IFELSE([AC_LANG_SOURCE([
 #include <sys/epoll.h>
 int main() {
 	return (epoll_create(5) == -1);
-}], [ax_cv_func_epoll=yes], [ax_cv_func_epoll=no], [ax_cv_func_epoll=no])
+}])], [ax_cv_func_epoll=yes], [ax_cv_func_epoll=no], [ax_cv_func_epoll=no])
 AC_MSG_RESULT([$ax_cv_func_epoll])
 if test "$ax_cv_func_epoll" = yes; then
   AC_DEFINE(HAVE_EPOLL, 1, [Define to 1 if epoll functions are implemented.])
@@ -1044,18 +1105,6 @@ if test "$ax_cv_have_getspnam_r" = yes; then
   AC_DEFINE(HAVE_GETSPNAM_R, 1, [5 arguments getspnam_r() exists])
 fi
 
-### Solaris no longer defines sys_nerr/sys_errlist
-
-AC_MSG_CHECKING([sys_nerr])
-AC_TRY_LINK([
-#include <stdio.h>
-#include <errno.h>],[
-int i = sys_nerr;
-], [ax_cv_have_sys_nerr=yes], [ax_cv_have_sys_nerr=no])
-AC_MSG_RESULT([$ax_cv_have_sys_nerr])
-if test "$ax_cv_have_sys_nerr" = yes; then
-  AC_DEFINE(HAVE_SYS_NERR, 1, [sys_nerr is defined])
-fi
 
 ###### Checks for system services.
 # empty for now
@@ -1082,9 +1131,6 @@ AH_BOTTOM([
 
 /* 5 arguments getspnam_r() exists */
 #undef HAVE_GETSPNAM_R
-
-/* sys_nerr is defined */
-#undef HAVE_SYS_NERR
 
 /* 3rd argument type of bind(2)/connect(2), if <sys/socket.h> doesn't define */
 #undef socklen_t
@@ -1193,16 +1239,132 @@ fi],[])
 ###  --enable-linuxkernel		support Linux kernel module utils
 ###
 
+may_ib_symvers=''
+may_ib_include=''
+
+AC_MSG_CHECKING([linuxkernel])
 AC_ARG_ENABLE(linuxkernel,
 AS_HELP_STRING([--enable-linuxkernel],[support Linux kernel module utils.[[default=no]]]),
 [if test "${enable_linuxkernel}" = "yes"; then
-	# ug_idmapd uses libevent
-	AC_CHECK_LIB(event, event_init)
-	AC_CHECK_HEADERS(event.h)
 	linuxkernel_targets='linux'
+	linuxkernel_makefile='linux/kernel/Makefile'
 fi],[linuxkernel_targets=''])
 AC_SUBST(linuxkernel_targets)
 
+if test "${linuxkernel_targets}" = "linux"; then
+	if test x"$host_os" != x"linux-gnu"; then
+		AC_MSG_RESULT([host ${host_os} is not linux.])
+		exit 1
+	fi
+	krelease=`uname -r`
+	case $krelease in
+	2.6.32*)
+		AC_MSG_RESULT([yes])
+		;;
+	*)
+		AC_MSG_RESULT([release ${krelease} is not supported.])
+		exit 1
+		;;
+	esac
+	tmp=`mktemp`
+	linux/config/findIBmodules >$tmp
+	val=$(grep -e --with-ib-symvers $tmp)
+	if test "x${val}" != "x" ; then
+		may_ib_symvers=$(echo $val|sed 's/.*=//')
+	fi
+	val=$(grep -e --with-ib-include $tmp)
+	if test "x${val}" != "x" ; then
+		may_ib_include=$(echo $val|sed 's/.*=//')
+	fi
+	rm -f $tmp
+	###
+	###  --extra-infiniband		InfiniBand synvers and include
+	###
+	ib_symvers=''
+	AC_MSG_CHECKING([use of extra InfiniBand Module.symvers])
+	AC_ARG_WITH(ib_symvers,
+	[  --with-ib-symvers=PATH	extra InfiniBand Module.symvers,
+			with --enable-linuxkernel.
+			if you are not sure, run linux/config/findIBmodules
+	],
+	[ib_symvers="${withval}"
+	],
+	[ib_symvers=""
+	])
+
+	if test "x${ib_symvers}" = "x"; then
+	  if test "x${may_ib_symvers}" = "x"; then
+	    AC_MSG_RESULT([not use.])
+	  else
+	    AC_MSG_RESULT([using ${may_ib_symvers}])
+	    ib_symvers=${may_ib_symvers}
+	  fi
+	else
+	  if test -f "${ib_symvers}"; then
+	    AC_MSG_RESULT([use ${ib_symvers}])
+	  else
+	    AC_MSG_RESULT([${ib_symvers} is not a file.])
+	    exit 1
+	  fi
+	fi
+	AC_SUBST(ib_symvers)
+
+	ib_include=''
+	AC_MSG_CHECKING([use of extra InfiniBand headers])
+	AC_ARG_WITH(ib_include,
+	[  --with-ib-include=DIR		extra InfiniBand headers,
+			with --enable-linuxkernel.
+			if you are not sure, run linux/config/findIBmodules
+	],
+	[ib_include="${withval}"
+	],
+	[ib_include=""
+	])
+
+	if test "x${ib_include}" = "x"; then
+	  if test "x${may_ib_include}" = "x"; then
+	    AC_MSG_RESULT([not use.])
+	  else
+	    AC_MSG_RESULT([using ${may_ib_include}])
+	    ib_include=${may_ib_include}
+	  fi
+	else
+	  if test -f "${ib_include}/rdma/ib_verbs.h"; then
+	    AC_MSG_RESULT([use ${ib_include}])
+	  else
+	    AC_MSG_RESULT(no ib_verbs.h in [${ib_include}.])
+	    exit 1
+	  fi
+	fi
+	AC_SUBST(ib_include)
+
+	if test "x${ib_include}" = "x"; then
+		ib_verbs="<rdma/ib_verbs.h>"
+	else
+		ib_verbs="\"$ib_include/rdma/ib_verbs.h\""
+	fi
+
+	CFLAGS_SAVE="$CFLAGS"
+	CFLAGS=""
+	CPPFLAGS_SAVE="$CPPFLAGS"
+	kbuild="/lib/modules/$krelease/build"
+	CPPFLAGS="-I$kbuild/include -I$kbuild/arch/x86/include -D__KERNEL__"
+	CPPFLAGS="$CPPFLAGS -include $kbuild/include/linux/kconfig.h"
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+	[
+	#define _DYNAMIC_DEBUG_H
+	#include $ib_verbs
+	]],
+	[(void)ib_query_gid(NULL, 0, 0, NULL, NULL);]
+	)], [ib_query_gid=5], [ib_query_gid=4])
+	AC_MSG_RESULT(ib_query_gid has [${ib_query_gid} args.])
+	AC_DEFINE_UNQUOTED(IB_QUERY_GID_ARG, ${ib_query_gid},
+		[ib_query_gid has ${ib_query_gid} args.])
+	CPPFLAGS="$CPPFLAGS_SAVE"
+	CFLAGS="$CFLAGS_SAVE"
+else
+	AC_MSG_RESULT([no])
+fi
 ###
 ### --with-private-srcdir
 ###
@@ -1264,12 +1426,11 @@ AC_SUBST(optional_targets)
 # The following is for --srcdir option.
 # AC_OUTPUT() assumes that parent directory of the Makefile exists
 test -d include || mkdir include
-test -d gfptool || mkdir gfptool
 test -d package || mkdir package
 test -d util || mkdir util
 
 AC_CONFIG_FILES(Makefile makes/config.mk makes/install-doc makes/build-script
-	${ns_makefiles}
+	${ns_makefiles} ${linuxkernel_makefile}
 	package/solaris/gfmd package/solaris/gfsd
 )
 AC_OUTPUT

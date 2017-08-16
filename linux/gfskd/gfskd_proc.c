@@ -40,7 +40,7 @@ gfskd_send_iov(struct gfskd_req_t *req, gfarm_error_t error,
 	iov[0].iov_base = &out;
 	iov[0].iov_len = sizeof(struct gfskdev_out_header);
 	out.len = iov_length((const struct iovec *)iov, count);
-	gflog_debug(GFARM_MSG_UNFIXED, "unique=%llu, gfarm_error=%d, "
+	gflog_debug(GFARM_MSG_UNFIXED, "unique=%ld, gfarm_error=%d, "
 		"out.error=%d, len=%d", out.unique, error, out.error, out.len);
 
 	error = GFARM_ERR_NO_ERROR;
@@ -181,7 +181,7 @@ gfskd_loop(int fd, int bufsize)
 		if (len < sizeof(struct gfskdev_in_header)) {
 			error = GFARM_ERR_INPUT_OUTPUT;
 			gflog_error(GFARM_MSG_UNFIXED, "len:%ld, %s", len,
-				gfarm_error_string(error));
+				 gfarm_error_string(error));
 			break;
 		}
 		gfskd_recv_req(fd, buf, len);

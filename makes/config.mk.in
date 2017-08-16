@@ -32,6 +32,7 @@ localedir = $(default_localedir)
 
 CC = @CC@
 OPTFLAGS = @CFLAGS@
+OMPCFLAGS = @OPENMP_CFLAGS@
 LEX = @LEX@
 LEXLIB = @LEXLIB@
 YACC = @YACC@
@@ -114,6 +115,9 @@ postgresql_srcs = @postgresql_srcs@
 postgresql_objs = @postgresql_objs@
 postgresql_cflags = @postgresql_cflags@
 postgresql_targets = @postgresql_targets@
+
+rdma_includes = @rdma_includes@
+rdma_libs = @rdma_libs@
 
 # build lib/gfs_hook/sysdep/$(gfs_hook_sysdep_subdir)
 gfs_hook_sysdep_subdir = @gfs_hook_sysdep_subdir@
