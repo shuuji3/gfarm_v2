@@ -1,8 +1,3 @@
-/*
- * NOTE: this header requires the following header:
- * for time_t: either <sys/types.h>, <sys/stat.h>, <sys/time.h> or <time.h>
- */
-
 /* alloc */
 size_t gfarm_size_add(int *, size_t, size_t);
 size_t gfarm_size_mul(int *, size_t, size_t);
@@ -34,6 +29,12 @@ enum gflog_fatal_actions {
 void gflog_set_fatal_action(int);
 int gflog_fatal_action_name_to_number(const char *);
 
+/* privlock */
+
+void gfarm_privilege_lock_disable(void);
+void gfarm_privilege_lock(const char *);
+void gfarm_privilege_unlock(const char *);
+
 /* random */
 
 long gfarm_random(void);
@@ -45,12 +46,13 @@ ssize_t gfarm_send_no_sigpipe(int, const void *, size_t);
 
 /* sleep */
 
-void gfarm_sleep(time_t);
+void gfarm_sleep(long);
 
 /* timeval */
 
 #define GFARM_MILLISEC_BY_MICROSEC	1000
 #define GFARM_SECOND_BY_MICROSEC	1000000
+#define GFARM_SECOND_BY_MILLISEC	1000
 
 struct timeval;
 int gfarm_timeval_cmp(const struct timeval *, const struct timeval *);
