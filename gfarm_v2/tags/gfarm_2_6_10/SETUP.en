@@ -1,0 +1,692 @@
+		Gfarm File System Setup Manual
+
+Table of contents
+=================
+
+* About this document
+  - Convention of command execution
+* Overview
+  - Firewall configuration
+  - about SELinux
+* Configuration of a Gfarm metadata server (MDS)
+* Configuration of a Gfarm file system node
+* Configuration of a Gfarm client node
+  - Configuration of a client node
+* Testing of the Gfarm file system
+  - gfls - directory listing
+  - gfhost - file system node information
+  - gfdf - storage capacity
+* User registration
+* Gfarm administrative privilege and gfarmroot privilege
+* Examples of basic functionality
+  - File copy
+  - File access
+  - mount
+* Further examples of advanced functionality
+  - File replica creation
+
+About this document
+===================
+
+This document describes how to configure the Gfarm file system.
+
+For users who would like to configure a Gfarm file system by a non
+privileged user, refer to SETUP.private.en.
+
+Please install the Gfarm software before using this manual,
+By using either INSTALL.en, for installation from the source code,
+or INSTALL.RPM.en, for installation from the RPM binary packages.
+
+If problems occur, please refer to the Trouble Shooting section
+in Gfarm-FAQ.en.
+
+o Convention of command execution
+
+In this document, command lines with the prompt '#' mean that the root
+privilege of the operating system is required for execution and
+command lines with the prompt '$' mean that they should be executed
+without the root privilege.
+
+	# useradd -c "Gfarm gfsd" -m _gfarmfs	[with the root privilege]
+	$ gfkey -f -p 31536000			[without the root privilege]
+
+Overview
+========
+
+To introduce the Gfarm file system, configure a metadata server at first,
+then configure file system nodes, and clients.
+
+After that, register Gfarm global users including not only regular
+users but also global users with administrative privilege or
+gfarmroot privilege.
+
+o Firewall configuration
+
+The following network communication has to be allowed.
+
+source           destination      proto purpose
+IP     port      IP     port
+------ --------- ------ --------- ----- -------------------------------
+gfmd   ephemeral gfmd   gfmd_port TCP   metadata replication
+gfmd   ephemeral gfsd   gfsd_port UDP   gfmd failover notification request
+gfsd   ephemeral gfmd   gfmd_port TCP   metadata access
+gfsd   ephemeral gfsd   gfsd_port TCP   data replication
+gfsd   gfsd_port gfmd   ephemeral UDP   gfmd failover notification response
+gfsd   gfsd_port client ephemeral UDP   gfsd health check response
+client ephemeral gfmd   gfmd_port TCP   metadata access
+client ephemeral gfsd   gfsd_port TCP   data access
+client ephemeral gfsd   gfsd_port UDP   gfsd health check request
+
+    gfmd_port: the port number which is specified by "config-gfarm -m"
+    gfsd_port: the port number which is specified by "config-gfsd -p"
+    ephemeral: port number range that communication initiators will use.
+	The range depends on the type of the client OS,
+	and is greater than 1023 usually.
+
+For TCP connections, this table only describes rules for communication
+from a connection initiator to a connection acceptor, and omits rules
+for the other direction.
+If you are not using a stateful inspection feature of your firewall,
+you must allow the TCP communication for the other direction as well.
+
+Also, this table doesn't describe anything about icmp packets.  But if
+you disallow packets of icmp type:3 (unreachable) code:4 (need fragment),
+the path MTU discovery feature stops working, and the communication
+performance may drop or the communication itself may stop working in
+some cases.
+For other types of icmp packets, disalllowing them may delay detection
+of a communication error, or may prevent Gfarm related programs from
+getting a reason of an error.
+
+o about SELinux
+
+Current Gfarm distribution doesn't include settings for SELinux,
+thus, you have to change SELinux setting to "Permissive" or "Disabled",
+or add custom SELinux privilege setting for Gfarm.
+
+If "Enforcing" is displayed by the following command, you have to
+change the setting.
+	# getenforce
+
+
+Configuration of a Gfarm metadata server (MDS)
+==============================================
+
+To set up a Gfarm file system, the root privilege of the operating
+system is required.
+
+To begin with, the following information is required:
+
+- a global username of an administrator	[-A]
+- a subject DN of an administrator	[-D]	(for GSI auth only)
+
+  The global username is a unique user name used in Gfarm file system
+  to share files among several administrative domains having different
+  account names.
+
+  If you log on to your operating system as a normal user and
+  get the root privilege by using the su command, and then
+  invoke the config-gfarm command, the account name of the normal user
+  will be used as the default setting of the global username of
+  a Gfarm administrator.  If you'd like to change the default setting,
+  please specify the -A option to the config-gfarm command.
+
+  In case of the shared secret authentication, the account name which
+  was used to log on to the operating system is used as the Gfarm
+  global username by default.  This mapping from the account name of
+  the operating system to the Gfarm global username can be customized
+  by a user mapfile that is specified by 'local_user_map' directive in
+  gfarm2.conf file.
+
+  In case of GSI, a user having the specified subject DN is an
+  administrator for a Gfarm file system.
+
+Run 'config-gfarm' to configure a Gfarm file system.  First, make
+sure the default setting with the -t option.  With the -t option,
+nothing is really executed except for the display of the settings for
+configuration.
+
+	# config-gfarm -t -A <global_admin_name> -a gsi_auth -D <Subject DN>
+
+The -a and -D options are only required for GSI authentication.  The
+-a option specifies the authentication method in Gfarm file system.
+The default is shared secret authentication (sharedsecret).  For
+details, refer to a manual page of gfarm2.conf(5) and Gfarm-FAQ.en.
+
+Note that the -X option is required to enable XML Path Language
+(XPath) support for querying XML extended attributes.  The -r option
+is required for master-slave metadata server configuration that
+enables failover of gfmd.  For details, see tutorial of master-slave
+metadata servers. (html/en/user/redundancy-tutorial.html)
+
+You can modify any default parameter with the option shown in [ ].
+When you have confirmed the parameter, run 'config-gfarm' by the root
+user without the -t option.
+
+	# config-gfarm -A <global_admin_name> -a gsi_auth -D <Subject DN>
+
+config-gfarm performs the following processes, in that order:
+
+  1. sets up the backend database.
+  2. generates Gfarm configuration files <sysconfdir>/gfarm2.conf and
+     <sysconfdir>/gfmd.conf.
+
+       '<sysconfdir>' represents a directory for configuration files,
+       specified by --sysconfdir option of 'configure' at the compilation
+       of Gfarm (see 'INSTALL.en' for more details).  If you have installed
+       Gfarm from the RPM binary packages, <sysconfdir> is '/etc'.
+
+       If you would like to run multiple gfmd on one host to provide
+       multiple Gfarm file systems, please specify --prefix <directory>
+       as an option of the config-gfarm command.  In this case, etc
+       directory is created under the specified directory, and it is
+       the <sysconfdir>.
+       <sysconfdir> is assumed as /etc in the following command line
+       examples.
+
+  3. creates scripts (or configuration files) to start/stop the backend
+     database and the Gfarm metadata server gfmd.
+
+       On most systems, config-gfarm puts start/stop scripts 'gfmd' and
+       'gfarm-pgsql' onto either /etc/init.d or /etc/rc.d/init.d, according
+       to the operating system.
+
+       On Linux with systemd such as Red Hat Enterprise Linux 7 or later,
+       config-gfarm puts the unit configuration files 'gfmd.service' and
+       'gfarm-pgsql.service' onto /etc/systemd/system, and then executes
+       'systemctl enable gfmd.service' and 'systemctl enable
+       gfarm-pgsql.service' respectively.
+
+  4. starts the backend database and gfmd.
+
+When you use the shared secret authentication between gfsd and gfmd,
+it is necessary to create a '_gfarmfs' user and a shared secret key.
+
+	# useradd -c "Gfarm gfsd" -m _gfarmfs
+
+  Note that --force-badname option may be required for useradd on
+  Debian.  We recommend to create a home directory in NFS if
+  available.
+
+Create a shared secret key '~/.gfarm_shared_key' for the _gfarmfs user
+in the home directory.
+
+	# su _gfarmfs
+	$ gfkey -f -p 31536000
+
+  This example sets up an expiration date of about one year (31536000
+  seconds).
+
+In case of the shared secret authentication, and if account names
+of Gfarm users on the operating system are different from
+names of Gfarm global users, the 'local_user_map' directive setting
+in gfmd.conf and gfarm2.conf file is needed.  gfmd has to be restarted
+after the change of gfmd.conf.
+
+If NFS is not used to share users' home directories, or your NFS server
+is using "no_root_squash" as an export option, you can decrease
+the CPU load of gfmd by using the following directive in gfmd.conf:
+	metadb_server_nfs_root_squash_support disable
+Do not use this option, if any home directory is shared by NFS
+which does not have the no_root_squash option.
+
+You can check whether the metadata server gfmd is running or not by
+the following command execution;
+
+  Red Hat Enterprise Linux 7 or later:
+	# systemctl status gfmd.service
+
+  Others:
+	# /etc/init.d/gfmd status
+
+For the automatic startup during the boot process, type the following
+commands;
+
+  Red Hat Enterprise Linux 7 or later:
+	# systemctl enable gfarm-pgsql.service
+	# systemctl enable gfmd.service
+
+  Red Hat Enterprise Linux 6 or earlier:
+	# chkconfig --add gfmd
+	# chkconfig --add gfarm-pgsql
+
+  Debian:
+	# update-rc.d gfmd defaults
+	# update-rc.d gfarm-pgsql defaults
+
+If you would like to remove all files generated by config-gfarm,
+please use <sysconfdir>/unconfig-gfarm.sh.
+
+	# /etc/unconfig-gfarm.sh
+
+This command asks confirmation as follows:
+
+	Do you unconfigure gfarm? [y/n]:
+
+If you answer "y", the gfmd daemon will be stopped, and generated
+configuration files will be removed.  Also, all metadata of this
+Gfarm file system will be removed.
+
+What the unconfig-gfarm.sh command does can be seen by specifying -t option
+to the unconfig-gfarm.sh command before actually removing the files.
+
+Configuration of a Gfarm file system node
+=========================================
+
+To set up a Gfarm file system node, the root privilege is required.
+
+Create a '_gfarmfs' user if not exist.  This user is a system account
+for a gfsd I/O daemon.
+
+	# useradd -c "Gfarm gfsd" -m _gfarmfs
+
+In case of the shared secret authentication, copy the shared secret
+key ".gfarm_shared_key" in the _gfarmfs's directory from the metadata
+server if the home directory is not shared by NFS.
+
+  Note that the permission of ".gfarm_shared_key" file should be '0600'
+  and the owner should be '_gfarmfs'.
+
+  The ".gfarm_shared_key" file will be void after the expiration period
+  specified by the -p option of the gfkey command.  Thus, you have to
+  redistribute the key file to all file system nodes before the period.
+
+In case of the GSI authentication, obtain a service certificate for
+the gfsd.
+
+  Copy the certificate to /etc/grid-security/gfsd/gfsdcert.pem,
+  and the private key to /etc/grid-security/gfsd/gfsdkey.pem,
+  and change the owner to '_gfarmfs'.
+  The permission of gfsdkey.pem should be 0400.
+
+  If you would like to execute two or more gfsd servers on the same host
+  using virtual IP addresses, you need to specify the hostname or
+  IP address of each gfsd by -l option of config-gfsd.  In this case,
+  the location of gfsd service certificate should be
+  /etc/grid-security/gfsd-<hostname or IP address>/gfsdcert.pem
+  and the location of gfsd private key should be
+  /etc/grid-security/gfsd-<hostname or IP address>/gfsdkey.pem
+
+Copy <sysconfdir>/gfarm2.conf from the metadata server that is created
+by 'config-gfarm'.
+
+  '<sysconfdir>' represents a directory for configuration files,
+  specified by --sysconfdir option of 'configure' at the compilation
+  of Gfarm (see 'INSTALL.en' for more details).  If you have installed
+  Gfarm from the RPM binary packages, <sysconfdir> is '/etc'.
+  If --prefix <directory> option is specified as an option of config-gfsd
+  command, <sysconfdir> will be "etc" directory under the directory.
+  <sysconfdir> is assumed as /etc in the following command line
+  examples.
+
+Run 'config-gfsd' to set up a spool directory in a local file system
+on the file system node, and register it in the metadata server.
+First, make sure of the default setting with the -t option.  With the -t
+option, nothing is really executed except for display of the settings for
+configuration.
+
+	# config-gfsd -t /var/gfarm
+
+  You can modify any default parameter by using the option shown in [ ].
+
+  The last argument of config-gfsd is a spool directory, which stores
+  physical files in Gfarm file system.  Note that the spool directory
+  should be a non-shared area among file system nodes.
+
+When you have confirmed the parameter, run 'config-gfsd' by the root
+user without the -t option.
+
+	# config-gfsd /var/gfarm
+
+'config-gfsd' creates the configuration file <sysconfdir>/gfsd.conf
+and puts the startup script in <sysconfdir>/init.d/gfsd
+(or <sysconfdir>/rc.d/gfsd, according to operating system).
+
+Finally, 'config-gfsd' displays a command line of 'gfhost' that would
+be executed by an administrator in Gfarm file system.
+
+Ask the administrator to execute the displayed text.
+
+  The administrator should execute the gfhost command as a global user
+  specified by config-gfarm command on the metadata server host.  In
+  case of the shared secret authentication, it is a local account of
+  the same name or mapped by a user mapfile.  In case of GSI, use a
+  user certificate specified by the -D option of config-gfarm.
+
+	$ /usr/bin/gfhost -c -a i386-fedora5-linux -p 600 -n 2 node1.example.org
+
+  In case of GSI, add a service certificate of the gfsd in
+  /etc/grid-security/grid-mapfile of a metadata server in the
+  following format.  '@host@' is a fixed string.  It cannot be
+  changed.
+  Please note that the "CN=" part of the distinguished name
+  must be "gfsd/<HOSTNAME_OF_THE_FILESYSTEM_NODE>" format.  For example,
+  it must be "CN=gfsd/linux-1.example.com" for a file system node
+  "linux-1.example.com".
+
+	"Subject DN of gfsd server cert" @host@ FQDN
+
+  In case of the shared secret authentication, and if account names
+  of Gfarm users on the operating system are different from
+  names of Gfarm global users, the 'local_user_map' directive setting
+  in gfarm2.conf file is needed.
+
+Start gfsd by the root user.
+
+  Red Hat Enterprise Linux 7 or later:
+	# systemctl start gfsd.service
+
+  Others:
+	# /etc/init.d/gfsd start
+
+You can check whether the gfsd is running or not by the following
+command execution;
+
+  Red Hat Enterprise Linux 7 or later:
+	# systemctl status gfsd.service
+
+  Others:
+	# /etc/init.d/gfsd status
+
+For the automatic startup during the boot process, type the following
+command.
+
+  Red Hat Enterprise Linux 7 or later:
+	# systemctl enable gfsd.service
+
+  Red Hat Enterprise Linux 6 or earlier:
+	# chkconfig --add gfsd
+
+  Debian:
+	# update-rc.d gfsd defaults
+
+If you would like to remove all files generated by config-gfsd,
+please use <sysconfdir>/unconfig-gfsd.sh.
+
+	# /etc/unconfig-gfsd.sh
+
+This command asks confirmation as follows:
+
+	Do you run unconfiguration? [y/n]:
+
+If you answer "y", the gfsd daemon will be stopped, and generated
+configuration files will be removed.  Also, all Gfarm file system data
+on this file system node will be removed.
+
+Finally, 'unconfig-gfsd.sh' displays a command line of 'gfhost'
+that would be executed by an administrator in Gfarm file system.
+Execute the displayed text by the user who executed the "gfhost -c"
+command above.  An example of the commmand is the following:
+
+	$ /usr/bin/gfhost -d node1.example.org
+
+What the unconfig-gfsd.sh command does can be seen by specifying -t option
+to the unconfig-gfsd.sh command before actually removing the files.
+
+Configuration of a Gfarm client node
+====================================
+
+Copy /etc/gfarm2.conf from the metadata server to the client node.
+
+  This setting can be substituted for copying to ~/.gfarm2rc.
+
+In case of the shared secret authentication:
+
+   if users' home directories are shared among metadata servers
+   and file system nodes:
+      there is nothing to do.
+
+   If not:
+      run the "gfkey -f -p <expiration_time_by_second>" command by
+      the each user's privilege which correspond to Gfarm global
+      users.  The command creates ".gfarm_shared_key" file in
+      each user's home directory.  Then copy the file to each user's
+      home directory on all metadata servers, all file system nodes,
+      and all client nodes.
+      Make sure that the mode of the ".gfarm_shared_key" file is '0600',
+      and the owner of the file is each user.
+      Because the key will be void after the <expiration_time_by_second>
+      have passed, you must redo the key generation and the copy before
+      the expiration.
+
+   If account names of Gfarm users on the operating system are different
+   from names of Gfarm global users, the 'local_user_map' directive setting
+   in gfarm2.conf file is needed.
+
+In case of GSI:
+   obtain the user certificate, and ask to add your entry
+   into grid-mapfile of all file system nodes and all metadata servers.
+
+Testing of the Gfarm file system
+================================
+
+You can check whether the Gfarm file system works or not using any client,
+since it can be accessed (or shared) by every client node.
+
+o gfls - directory listing
+
+'gfls' lists the contents of a directory.
+
+	$ gfls -la
+	drwxrwxr-x gfarmadm gfarmadm          4 Aug 23 06:33 .
+	drwxrwxr-x gfarmadm gfarmadm          4 Aug 23 06:33 ..
+	drwxr-xr-x tatebe   gfarmadm          0 Aug 22 16:08 tmp
+
+o gfhost - file system node information
+
+'gfhost -M' displays the information for file system nodes registered
+with the metadata server.
+
+	$ gfhost -M
+	i386-fedora3-linux 2 linux-1.example.com 600 0
+	i386-fedora3-linux 2 linux-2.example.com 600 0
+	i386-fedora3-linux 2 linux-3.example.com 600 0
+	i386-redhat8.0-linux 1 linux-4.example.com 600 0
+	sparc-sun-solaris8 1 solaris-1.example.com 600 0
+	sparc-sun-solaris8 1 solaris-2.example.com 600 0
+	...
+
+'gfhost -l' displays the status of the file system nodes.
+
+	$ gfhost -l
+	0.01/0.03/0.03 s i386-fedora3-linux 2 linux-1.example.com 600 0(10.0.0.1)
+	0.00/0.00/0.00 s i386-fedora3-linux 2 linux-2.example.com 600 0(10.0.0.2)
+	-.--/-.--/-.-- - i386-fedora3-linux 2 linux-3.example.com 600 0(10.0.0.3)
+	0.00/0.02/0.00 x i386-redhat8.0-linux 1 linux-4.example.com 600 0(10.0.0.4)
+	0.10/0.00/0.00 G sparc-sun-solaris8 1 solaris-1.example.com 600 0(10.0.1.1)
+	x.xx/x.xx/x.xx - sparc-sun-solaris8 1 solaris-2.example.com 600 0(10.0.1.2)
+	...
+
+The second field shows the status of authentication with the file system
+node.  's', 'g', and 'G' show successful authentication, while 'x'
+shows an authentication failure.
+
+'-.--/-.--/-.--' in the first field shows that gfsd has not executed
+correctly, and 'x.xx/x.xx/x.xx' shows the file system node is probably
+down.
+
+o gfdf - storage capacity
+
+'gfdf' displays capacity of each file system node and the total
+capacity.
+
+	$ gfdf
+	   1K-blocks        Used       Avail Use% Host
+	  1824815008      213068  1824601940   0% linux-1.example.com
+	  6835798016    71836400  6763961616   1% linux-2.example.com
+	  1669232308    44224088  1625008220   3% solaris-1.example.com
+	-----------------------------------------
+	 10329845332   116273556 10213571776   1%
+
+For details of the above Gfarm commands, refer to the respective man page.
+
+User registration
+=================
+
+Every user needs to be registered to access Gfarm file system as
+a Gfarm global user.
+
+  The Gfarm global users include normal users, users with Gfarm
+  administrative privilege, and users with gfarmroot privilege.
+
+  The Gfarm administrative privilege is the privilege to create/modify/
+  delete Gfarm global users, groups, metadata servers, and file system nodes.
+  The members of the "gfarmadm" group which is stored in the metadata server
+  have this privilege.
+
+  The gfarmroot privilege is the privilege to access all directories
+  and all data in a Gfarm file system.
+  The members of the "gfarmroot" group which is stored in the metadata server
+  have this privilege.
+
+  A Gfarm administrator specified by the -A option of the config-gfarm
+  command is automatically registered as a Gfarm global user which has
+  the Gfarm administrative privilege.
+  Thus, it not necessary to register the user by the gfuser command.
+
+For user registration, execute gfuser command.
+This requires the Gfarm administrative privilege;
+
+	$ gfuser -c global_username realname homedir gsi_dn
+
+'global_username' is a global user name in Gfarm file system.
+'realname' is a name to identify the user.  'homedir' is a home
+directory in Gfarm.  'gsi_dn' is a subject DN of a user certificate
+used in GSI authentication.
+
+  'homedir' is not used for now.
+
+When 'realname' includes a space, it is necessary to quote.  The
+following example registers a global user 'foo';
+
+	$ gfuser -c foo "foo bar" /home/foo ""
+
+Next, it is necessary to create a home directory for the user.
+This should be done by a user which have the gfarmroot privilege.
+Because there is no user which has the gfarmroot privilege by default,
+it's necessary to add the privilege by the gfgroup command
+described in the next section, before invoking the following commands.
+
+In the case of the above "gfuser -c" example, run the following commands.
+
+	$ gfmkdir -p /home/foo
+	$ gfchown foo /home/foo
+
+In case of the shared secret authentication, create a user account on
+all metadata servers and all file system nodes and all client nodes.
+Don't forget to create the account of the administrator which is
+specified by the -A option of the config-gfarm command.
+Also, you have to create a shared secret key for all global users
+including users with administrative privilege and gfarmroot privilege,
+and copy the key to the home directory on all metadata servers,
+all file system nodes and all client nodes.
+Please read "Configuration of a Gfarm client node" section above
+about the detail of the key creation and distribution.
+
+In case of GSI, register user's distinguished name to the grid-mapfile
+that maps to nobody user on all metadata servers and all file system
+nodes.
+
+Gfarm administrative privilege and gfarmroot privilege
+======================================================
+
+This section describes how to grant the Gfarm administrative privilege
+and the gfarmroot privilege to Gfarm global users.
+This operation requires the Gfarm administrative privilege.
+
+When the Gfarm file system is freshly set up, the Gfarm administrative
+privilege is granted to the administrator specified by the -A option
+of the config-gfarm command.
+
+The members of the "gfarmadm" group have the Gfarm administrative privilege.
+The following displays the members.
+
+	$ gfgroup -l gfarmadm
+
+To add the members, use 'gfgroup -ma' command.
+
+	$ gfgroup -ma gfarmadm user1 user2 ...
+
+The member of the "gfarmroot" group have the gfarmroot privilege.
+
+	$ gfgroup -ma gfarmroot user1 user2 ...
+
+The gfarmroot privilege is not granted to any user by default.
+
+Examples of basic functionality
+===============================
+
+o File copy
+
+Files can be copied into the Gfarm file system by the 'gfreg' command.
+
+	$ gfreg .gfarmrc foo
+
+This example shows that a local file .gfarmrc is copied to foo, more
+exactly /foo, in the Gfarm file system.
+
+o File access
+
+Files in the Gfarm file system can be accessed by the 'gfexport'
+command.
+
+	$ gfexport foo
+
+This example displays the content of foo in the Gfarm file system to
+the standard output.
+
+o mount
+
+By installing the 'gfarm2fs' command, it is possible to mount the
+Gfarm file system.
+
+	$ mkdir /tmp/foo
+	$ gfarm2fs /tmp/foo
+
+After mounting the Gfarm file system, any file system access can be
+available by usual commands.  To unmount it, use the 'fusermount' with
+the -u option.
+
+	$ fusermonut -u /tmp/foo
+
+For details, refer to documents in the gfarm2fs package.
+
+Further examples of advanced functionality
+==========================================
+
+o File replica creation
+
+Each file in the Gfarm file system can have several file copies that
+can be stored on two and more file system nodes.
+
+Multiple file copies of a file enable access to the file even when one
+of the file system nodes is down.  Moreover, it prevents access
+performance deterioration by accessing different file copies.
+
+The 'gfwhere' command displays the location of file copies, or a replica
+catalog, of the specified files.
+
+	$ gfwhere .bashrc
+	linux-1.example.com
+
+The 'gfrep' command creates file copies.
+
+	$ gfrep -N 2 .bashrc
+	$ gfwhere .bashrc
+	linux-1.example.com linux-2.example.com
+
+In this case, '.bashrc' has two copies; one is stored on
+linux-1.example.com and the other is stored on linux-2.example.com.
+
+o Automatic file replica creation
+
+If you would like to create two file replicas for all files, specify
+the number at the root directory by the gfncopy command.
+
+	$ gfncopy -s 2 /
+
+File replicas will be created after the close operation when the file
+is created, or updated.  When a file system node is down, required
+number of file repilcas are automatically created after an interval
+specified by replica_check_host_down_tresh.  Default interval is 3
+hours.
