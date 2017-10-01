@@ -1,0 +1,47 @@
+.\" ** You probably do not want to edit this file directly **
+.\" It was generated using the DocBook XSL Stylesheets (version 1.69.1).
+.\" Instead of manually editing it, you probably should edit the DocBook XML
+.\" source for it and then use the DocBook XSL Stylesheets to regenerate it.
+.TH "GFRM" "1" "25 Dec 2014" "Gfarm" "Gfarm"
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.SH "NAME"
+gfrm \- Gfarm ファイル，ディレクトリ，ファイル複製を削除する．
+.SH "SYNOPSIS"
+.HP 5
+\fBgfrm\fR [\-frn] [\-h\ \fIファイルシステムノード\fR] [\-D\ \fIドメイン名\fR] \fIgfarm\-URL\fR...
+.SH "DESCRIPTION"
+.PP
+Gfarm\-URL に指定されたファイルを削除します． デフォルトではディレクトリの削除は行いませんが，
+\fB\-r\fR
+オプションが指定された場合， 指定されたディレクトリ以下のファイルおよびディレクトリが再帰的に消去されます． なお，. あるいは .. が指定された場合はエラーになります．
+.PP
+\fB\-h\fR
+あるいは
+\fB\-D\fR
+オプションでファイルシステムノードを指定することにより， 指定されたノードに格納されているファイル複製を削除することができます． ただし，gfarm.ncopy あるいは gfarm.replicainfo 拡張属性で指定された数以下になってしまう場合，ファイル複製の削除はできません．
+.SH "OPTIONS"
+.TP
+\fB\-f\fR
+ファイルが存在しない場合もエラーとしません．
+.TP
+\fB\-n\fR
+消去されるファイルを表示します． 実際には何も実行されません．
+.TP
+\fB\-r\fR
+引数がディレクトリだった場合，そのディレクトリ以下を 全て，再帰的に削除します．
+.TP
+\fB\-h\fR \fIファイルシステムノード\fR
+複製を削除するファイルシステムノード名を指定します．
+.TP
+\fB\-D\fR \fIドメイン名\fR
+複製を削除するファイルシステムノードのドメイン名を指定します．
+.TP
+\fB\-?\fR
+引数オプションを表示します．
+.SH "SEE ALSO"
+.PP
+\fBgfncopy\fR(1),
+\fBgfarm_attr\fR(5)
