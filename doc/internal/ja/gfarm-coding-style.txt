@@ -5,8 +5,6 @@
 NetBSD KNF:
 http://cvsweb.netbsd.org/bsdweb.cgi/src/share/misc/style?rev=1.20&content-type=text/x-cvsweb-markup
 
-この規約には明記されていませんが、継続行のインデント幅は空白4つ分です。
-
 ただし、以下のような、NetBSD 固有の習慣には従っていません。
 ・#ifndef _lint
 ・__COPYRIGHT
@@ -37,6 +35,25 @@ http://cvsweb.netbsd.org/bsdweb.cgi/src/share/misc/style?rev=1.20&content-type=t
 	ライブラリ中の公開されているシンボルは、必ず gfarm_ のような
 	プリフィックスをつけ、ユーザー・アプリケーションのシンボルと
 	重ならないようにします。
+
+	accessor (getter) / mutator (setter) として用いる関数は、それぞれ
+	"オブジェクト型_get_メンバー名()" および
+	"オブジェクト型_set_メンバー名()" という名称とします。
+	例:
+	gfarm_metadb_server_get_clustername()
+	gfarm_metadb_server_set_clustername()
+
+	ただし、mutator を提供せず accessor のみを提供する場合には
+	"オブジェクト型_メンバー名()" という関数名も許します。
+	例:
+	gfp_cached_connection_hostname()
+
+■ 関数引数について
+
+	引数は (入力引数, &入出力引数, &出力引数) の順序とします。
+	ただし構築済のオブジェクト型を対象とするメソッドについては、
+	第一引数に対象オブジェクトを渡し、
+	第二引数以降をこの順序とします。
 
 ■ エラーコードについて
 
@@ -93,12 +110,6 @@ http://cvsweb.netbsd.org/bsdweb.cgi/src/share/misc/style?rev=1.20&content-type=t
 	gfmd や gfsd, gftool については、汎用ライブラリでは
 	ありませんから、このような制約はありません。
 
-	gfsd のうち listen しているプロセスおよび back channel プロセス、
-	および gfmd は、fatal 関数を呼んで自殺してはいけません。
-	例えば malloc() に失敗した場合もクライアントに対してメモリ不足
-	エラーを返す必要があります。ただし、プロセス起動時だけは例外で、
-	起動中であれば、自殺して構いません。
-
 	https://sourceforge.net/apps/trac/gfarm/changeset/4418
 	で、ほぼ全てのエラー・ケースについて、gflog_debug() で
 	デバッグ・ログを出力するになりました。
@@ -111,6 +122,12 @@ http://cvsweb.netbsd.org/bsdweb.cgi/src/share/misc/style?rev=1.20&content-type=t
 	変更していしまっています…)。もちろん、呼ばれた側のエラーログには
 	含まれていない情報を、呼び出し側でつけ加える場合には、冗長では
 	ありませんので出力しても問題ありません。
+
+	gfsd のうち listen しているプロセスおよび back channel プロセス、
+	および gfmd は、malloc() に失敗しても fatal 関数を呼んで自殺して
+	はいけません。クライアントに対してメモリ不足を返す必要があります。
+	ただし、プロセス起動時の初期化プロセスだけは例外で、起動中の
+	メモリ不足であれば、自殺して構いません。
 
 ■ 定数定義について
 
@@ -182,6 +199,8 @@ http://cvsweb.netbsd.org/bsdweb.cgi/src/share/misc/style?rev=1.20&content-type=t
 	・具体的には下記の通り。
 	  /* gfutil */
 		#include "hash.h"
+		#include "nanosec.h"
+		#include "thrsubr.h"
 		#include "gfevent.h"
 		#include "gfutil.h"
 	  /* gfsl public */
@@ -193,6 +212,9 @@ http://cvsweb.netbsd.org/bsdweb.cgi/src/share/misc/style?rev=1.20&content-type=t
 		#include "tcputil.h"
 		#include "misc.h"
 	  /* gfarm */
+		// basic data structure
+		#include "quota_info.h"
+
 		#include "iobuffer.h"
 		#include "gfp_xdr.h"
 		#include "io_fd.h"
