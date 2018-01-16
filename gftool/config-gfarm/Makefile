@@ -19,13 +19,16 @@ BUILT_SCRIPTS = config-gfarm config-gfarm-update config-gfsd \
 DATA =	$(srcdir)/config-gfarm.common \
 	$(srcdir)/config-gfarm.postgresql \
 	$(srcdir)/config-gfarm.ldap \
+	$(srcdir)/config-gfarm.none \
 	$(srcdir)/config-gfarm.iostat \
 	$(srcdir)/config-gfarm-update.postgresql \
 	$(srcdir)/config-gfarm-update.ldap \
+	$(srcdir)/config-gfarm-update.none \
 	$(srcdir)/unconfig-gfarm.sh.in \
 	$(srcdir)/unconfig-gfsd.sh.in \
 	$(srcdir)/gfarm.conf-postgresql.in \
 	$(srcdir)/gfarm.conf-ldap.in \
+	$(srcdir)/gfarm.conf-none.in \
 	$(srcdir)/gfarm.conf.in \
 	$(srcdir)/slapd.conf-2.0.in \
 	$(srcdir)/slapd.conf-2.1.in \
