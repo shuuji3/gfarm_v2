@@ -1,0 +1,59 @@
+MOUNTPOINT=/mnt/gfarm
+TESTUSER=gfarm
+TESTGROUP=gfarmadm
+TESTUID=500
+TESTGID=501
+TESTUSER2=gfarm2
+GFARMCONF=/usr/local/etc/gfarm2.conf
+TMPFILE=/tmp/gfarmtest.tmp
+export TIMEFORMAT='	real:%3lR	user:%3lU	sys:%3lS'
+
+# assume owner/group of Gfarm root directory is gfarmadm/gfarmadm
+ADMUSER=gfarmadm
+ADMGROUP=gfarmadm
+
+
+# fs/gfs.h
+# 	#define	GFS_MAXNAMLEN	255
+# serfer/gfmd/inode.c
+#	if (len > GFS_MAXNAMLEN)
+#		return (GFARM_ERR_FILE_NAME_TOO_LONG);
+LONGNAME255="123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345"
+LONGNAME256="1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456"
+
+DIR1=dir1
+DIR2=dir2
+
+TESTBINDIR=linux/kernel/src
+start_mount()
+{
+	echo "*** start Linux kernel module ***"
+	if [ $# -gt 1 ]; then
+		mp=$1
+	else
+		mp=${MOUNTPOINT}
+	fi
+
+	/etc/init.d/gfsk restart
+	if [ $? != 0 ]; then
+		exit $exit_fail
+	fi
+
+	mkdir -p ${mp}
+	mount -t gfarm -o conf_path=${GFARMCONF},luser=${TESTUSER} \
+			/dev/gfarm ${mp}
+	if [ $? != 0 ]; then
+		exit $exit_fail
+	fi
+	sleep 3
+}
+stop_mount()
+{
+	if [ $# -gt 1 ]; then
+		mp=$1
+	else
+		mp=${MOUNTPOINT}
+	fi
+	umount ${mp}
+	/etc/init.d/gfsk stop
+}
