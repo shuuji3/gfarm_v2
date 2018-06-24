@@ -16,7 +16,7 @@ error() {
 
 setup() {
     gfmkdir $gftmp || error "gfmkdir"
-    gfncopy -r $gftmp > /dev/null 2>&1 # ignore
+    gfncopy -s 1 $gftmp > /dev/null 2>&1 # ignore
 
     FILE=$gftmp/file
 
@@ -51,7 +51,7 @@ get_quota_group() {
 }
 
 get_quota_val() {
-    echo "$1" | egrep "^$2\s+:" | awk '{print $3}'
+    echo "$1" | egrep "^$2[[:space:]]+:" | awk '{print $3}'
 }
 
 get_usage_user() {

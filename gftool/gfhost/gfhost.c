@@ -1076,7 +1076,7 @@ list_all(const char *architecture, const char *domainname,
 
 	if (nhosts == 0 || ndisplayed == 0) {
 		fprintf(stderr, "%s: %s\n",  program_name,
-		    gfarm_error_string(GFARM_ERRMSG_NO_FILESYSTEM_NODE));
+		    gfarm_error_string(GFARM_ERR_NO_FILESYSTEM_NODE));
 		return (GFARM_ERR_UNKNOWN_HOST);
 	}
 
@@ -1195,7 +1195,7 @@ paraccess_list(int opt_concurrency, int opt_udp_only,
 void
 usage(void)
 {
-	fprintf(stderr, "Usage:" 
+	fprintf(stderr, "Usage:"
 	    "\t%s %s\n" "\t%s %s\n" "\t%s %s\n" "\t%s %s\n" "\t%s %s\n",
 	    program_name,
 	    "[-lMH] [-P <path>] [-a <architecture>] [-D <domainname>] [-j <concurrency>] [-iruv]",
