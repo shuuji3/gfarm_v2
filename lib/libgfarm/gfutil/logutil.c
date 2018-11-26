@@ -32,8 +32,9 @@ static const char *catalog_file = "gfarm.cat";
 
 static int log_message_verbose;
 #define LOG_VERBOSE_COMPACT	0
-#define LOG_VERBOSE_LINENO	1
-#define LOG_VERBOSE_LINENO_FUNC	2
+#define LOG_VERBOSE_LINENO	(1<<0)
+#define LOG_VERBOSE_FUNC	(1<<1)
+#define LOG_VERBOSE_LINENO_FUNC	(LOG_VERBOSE_LINENO|LOG_VERBOSE_FUNC)
 
 static int fatal_action = 0;
 
@@ -56,9 +57,8 @@ static void
 gflog_catopen(const char *file)
 {
 	if (file == NULL)
-		catd = catopen(catalog_file, 0);
-	else
-		catd = catopen(file, 0);
+		file = catalog_file;
+	catd = catopen(file, 0);
 }
 
 static void
@@ -118,8 +118,8 @@ gflog_init_priority_string(void)
 static void
 gflog_out(int priority, const char *str1, const char *str2)
 {
-#ifndef __KERNEL__	/* gflog_out :: printk */
 	pthread_once(&gflog_priority_string_once, gflog_init_priority_string);
+#ifndef __KERNEL__	/* gflog_out :: printk */
 	if (log_use_syslog)
 		syslog(priority, "<%s> %s%s",
 		    gflog_priority_string[priority], str1, str2);
@@ -166,10 +166,15 @@ gflog_vmessage_out(int verbose, int msg_no, int priority,
 
 	do { /* use do {...} while(0) to use break statement to discontinue */
 		GFLOG_SNPRINTF(buf, bp, endp, "[%06d] ", msg_no);
-		if (verbose >= LOG_VERBOSE_LINENO) {
-			GFLOG_SNPRINTF(buf, bp, endp, "(%s:%d", file, line_no);
-			if (verbose >= LOG_VERBOSE_LINENO_FUNC)
-				GFLOG_SNPRINTF(buf, bp, endp, " %s()", func);
+		if (verbose) {
+			GFLOG_SNPRINTF(buf, bp, endp, "(");
+			if (verbose & LOG_VERBOSE_LINENO)
+				GFLOG_SNPRINTF(buf, bp, endp, "%s:%d",
+					file, line_no);
+			if (verbose & LOG_VERBOSE_FUNC)
+				GFLOG_SNPRINTF(buf, bp, endp, "%s%s()",
+				(verbose & LOG_VERBOSE_LINENO) ?
+				" " : "", func);
 			GFLOG_SNPRINTF(buf, bp, endp, ") ");
 		}
 		if (log_auxiliary_info != NULL)
@@ -237,7 +242,7 @@ gflog_message(int msg_no, int priority, const char *file, int line_no,
 }
 
 /*
- * fatal action 
+ * fatal action
  */
 void
 gflog_set_fatal_action(int action)
@@ -248,7 +253,7 @@ gflog_set_fatal_action(int action)
 static int
 gflog_get_fatal_action(void)
 {
-	return(fatal_action);
+	return (fatal_action);
 }
 
 static struct {
@@ -273,9 +278,12 @@ gflog_fatal_action_name_to_number(const char *name)
 	return (GFLOG_ERROR_INVALID_FATAL_ACTION_NAME); /* not found */
 }
 
-void
-gfarm_log_fatal_action(void)
+static void
+gfarm_log_fatal_action(int msg_no)
 {
+	gflog_error(GFARM_MSG_UNFIXED,
+	    "now aborting due to the message [%06d]", msg_no);
+
 	switch (gflog_get_fatal_action()) {
 	case GFLOG_FATAL_ACTION_EXIT_BACKTRACE:
 		gfarm_log_backtrace_symbols();
@@ -302,7 +310,7 @@ gflog_fatal_message(int msg_no, int priority, const char *file, int line_no,
 	gflog_vmessage(msg_no, priority, file, line_no, func, format, ap);
 	va_end(ap);
 
-	gfarm_log_fatal_action();
+	gfarm_log_fatal_action(msg_no);
 }
 
 void
@@ -360,7 +368,7 @@ gflog_fatal_message_errno(int msg_no, int priority, const char *file,
 	gflog_vmessage_errno(msg_no, priority, file, line_no, func, format, ap);
 	va_end(ap);
 
-	gfarm_log_fatal_action();
+	gfarm_log_fatal_action(msg_no);
 }
 
 void
@@ -374,13 +382,18 @@ gflog_assert_message(int msg_no, const char *file, int line_no,
 	    msg_no, LOG_ERR, file, line_no, func, format, ap);
 	va_end(ap);
 
-	gfarm_log_fatal_action();
+	gfarm_log_fatal_action(msg_no);
 }
 
 void
 gflog_set_priority_level(int priority)
 {
 	log_level = priority;
+}
+int
+gflog_get_priority_level(void)
+{
+	return (log_level);
 }
 
 void
