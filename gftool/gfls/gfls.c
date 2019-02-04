@@ -19,7 +19,16 @@
 #include "timespec.h" /* XXX should export this interface */
 #include "gfarm_path.h"
 
+#include "gfm_proto.h" /* GFARM_LOGIN_NAME_MAX, GFARM_DIRSET_NAME_MAX */
+
 char *program_name = "gfls";
+
+#define DIRECTORY_QUOTA_SIZE		(GFARM_LOGIN_NAME_MAX  + 1 + \
+					 GFARM_DIRSET_NAME_MAX + 1)
+
+#define DIRECTORY_QUOTA_LEN		18
+#define DIRECTORY_QUOTA_PRINT(u, ds)	printf("%8s:%-8s ", (u), (ds))
+#define DIRECTORY_QUOTA_PRINT_SPACE()	printf("%17s ", "")
 
 #define INUM_LEN	11
 #define INUM_PRINT(ino)	printf("%10lu ", (long)(ino))
@@ -41,12 +50,15 @@ enum option_all_kind {
 } option_all = OA_NONE;			/* -a/-A */
 #define is_option_all		(option_all == OA_ALL)
 #define is_option_almost_all	(option_all == OA_ALMOST_ALL)
-int option_type_suffix = 0;		/* -F */
-int option_recursive = 0;		/* -R */
-int option_complete_time = 0;		/* -T */
-int option_directory_itself = 0;	/* -d */
-int option_inumber = 0;			/* -i */
-int option_reverse_sort = 0;		/* -r */
+static int option_directory_quota = 0;		/* -D */
+static int option_type_suffix = 0;		/* -F */
+static int option_recursive = 0;		/* -R */
+static int option_complete_time = 0;		/* -T */
+static int option_directory_itself = 0;		/* -d */
+static int option_inumber = 0;			/* -i */
+static int option_reverse_sort = 0;		/* -r */
+static int option_format_flags = 0;
+static int option_humanize_number = 0;		/* -h */
 
 #define CACHE_EXPIRATION_NOT_SPECIFIED	-1.0
 double option_cache_expiration = CACHE_EXPIRATION_NOT_SPECIFIED; /* -E */
@@ -58,7 +70,7 @@ int screen_width = 80; /* default */
  */
 
 struct ls_entry {
-	char *path, *symlink;
+	char *path, *symlink, *dirset_user, *dirset_name;
 	struct gfs_stat *st;
 };
 
@@ -162,7 +174,7 @@ do_stats(char *prefix, int *np, char **files, struct gfs_stat *stats,
 		}
 		e = gfs_lstat_cached(buffer, &stats[i]);
 		if (e != GFARM_ERR_NO_ERROR) {
-			fprintf(stderr, "%s: %s\n", buffer,
+			fprintf(stderr, "%s: gfs_lstat: %s\n", buffer,
 			    gfarm_error_string(e));
 			if (e_save != GFARM_ERR_NO_ERROR)
 				e_save = e;
@@ -173,10 +185,34 @@ do_stats(char *prefix, int *np, char **files, struct gfs_stat *stats,
 		}
 		ls[m].path = files[i];
 		ls[m].st = &stats[i];
+		ls[m].symlink = NULL;
+		ls[m].dirset_user = NULL;
+		ls[m].dirset_name = NULL;
 		if (!GFARM_S_ISLNK(ls[m].st->st_mode) ||
 		    gfs_readlink(buffer, &ls[m].symlink) != GFARM_ERR_NO_ERROR)
 			ls[m].symlink = NULL;
-			
+		if (option_directory_quota) {
+			char value[DIRECTORY_QUOTA_SIZE];
+			size_t size = sizeof(value);
+
+			e = gfs_getxattr_cached(buffer,
+			    GFARM_EA_DIRECTORY_QUOTA, value, &size);
+			if (e == GFARM_ERR_NO_ERROR) {
+				ls[m].dirset_user = strdup(value);
+				ls[m].dirset_name =
+				    strdup(value + strlen(value) + 1);
+				if (ls[m].dirset_user == NULL ||
+				    ls[m].dirset_name == NULL)
+					fprintf(stderr,
+					    "%s: no memory for %s:%s\n",
+					    buffer, value,
+					    value + strlen(value) + 1);
+			} else if (e != GFARM_ERR_NO_SUCH_OBJECT) {
+				fprintf(stderr, "%s: gfs_getxattr: %s\n",
+				    buffer, gfarm_error_string(e));
+			}
+		}
+
 		m++;
 	}
 	*np = m;
@@ -251,6 +287,15 @@ put_time(struct gfarm_timespec *ts)
 	fputs(buffer, stdout);
 }
 
+static char *
+humanize(long long num)
+{
+	static char buf[GFARM_INT64STRLEN];
+
+	gfarm_humanize_number(buf, sizeof buf, num, option_format_flags);
+	return (buf);
+}
+
 void
 put_stat(struct gfs_stat *st)
 {
@@ -264,7 +309,10 @@ put_stat(struct gfs_stat *st)
 	put_perm(st->st_mode >> 3, GFARM_S_ISGID >> 3, 's');
 	put_perm(st->st_mode, GFARM_S_ISTXT, 't');
 	printf(" %d %-8s %-8s ", (int)st->st_nlink, st->st_user, st->st_group);
-	printf("%10" GFARM_PRId64 " ", st->st_size);
+	if (option_humanize_number)
+		printf("%6s ", humanize(st->st_size));
+	else
+		printf("%10" GFARM_PRId64 " ", st->st_size);
 	put_time(&st->st_mtimespec);
 	putchar(' ');
 }
@@ -282,7 +330,7 @@ list_files(char *prefix, int n, char **files, int *need_newline)
 		return (GFARM_ERR_NO_MEMORY);
 	if (option_output_format == OF_LONG ||
 	    option_sort_order != SO_NAME ||
-	    option_type_suffix || option_inumber) {
+	    option_type_suffix || option_directory_quota || option_inumber) {
 		GFARM_MALLOC_ARRAY(stats, n);
 		if (stats == NULL) {
 			free(ls);
@@ -294,21 +342,26 @@ list_files(char *prefix, int n, char **files, int *need_newline)
 			ls[i].path = files[i];
 			ls[i].st = NULL;
 			ls[i].symlink = NULL;
+			ls[i].dirset_user = NULL;
+			ls[i].dirset_name = NULL;
 		}
 	}
 	ls_sort(n, ls);
 
 	if (option_output_format == OF_MULTI_COLUMN) {
 		int j, k, columns, lines, column_width, max_width = 0;
+		int option_width;
 
 		for (i = 0; i < n; i++) {
 			j = strlen(ls[i].path);
 			if (max_width < j)
 				max_width = j;
 		}
-		column_width = max_width +
-		    (option_type_suffix ? 1 : 0) +
+		option_width =
+		    (option_directory_quota ? DIRECTORY_QUOTA_LEN : 0) +
 		    (option_inumber ? INUM_LEN : 0);
+		column_width = max_width +
+		    (option_type_suffix ? 1 : 0) + option_width;
 		columns = screen_width / (column_width + 1);
 		if (columns <= 0) /* a pathname is wider than screen_width */
 			columns = 1;
@@ -319,6 +372,15 @@ list_files(char *prefix, int n, char **files, int *need_newline)
 				k = i + j * lines;
 				if (k >= n)
 					break;
+				if (option_directory_quota) {
+					if (ls[k].dirset_user == NULL ||
+					    ls[k].dirset_name == NULL)
+						DIRECTORY_QUOTA_PRINT_SPACE();
+					else
+						DIRECTORY_QUOTA_PRINT(
+						    ls[k].dirset_user,
+						    ls[k].dirset_name);
+				}
 				if (option_inumber)
 					INUM_PRINT(ls[k].st->st_ino);
 				fputs(ls[k].path, stdout);
@@ -327,14 +389,23 @@ list_files(char *prefix, int n, char **files, int *need_newline)
 				if (i + (j + 1) * lines < n)
 					printf("%*s",
 					    (int)(column_width
-					    - (option_inumber ? INUM_LEN : 0)
+					    - option_width
 					    - strlen(ls[k].path))
 					    - len_suffix + 1, "");
 			}
 			putchar('\n');
-		}				
+		}
 	} else {
 		for (i = 0; i < n; i++) {
+			if (option_directory_quota) {
+				if (ls[i].dirset_user == NULL ||
+				    ls[i].dirset_name == NULL)
+					DIRECTORY_QUOTA_PRINT_SPACE();
+				else
+					DIRECTORY_QUOTA_PRINT(
+					    ls[i].dirset_user,
+					    ls[i].dirset_name);
+			}
 			if (option_inumber)
 				INUM_PRINT(ls[i].st->st_ino);
 			if (option_output_format == OF_LONG)
@@ -556,7 +627,7 @@ list(gfarm_stringlist *paths, gfs_glob_t *types, int *need_newline)
 void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-1ACFRSTadilrt] [-E <sec>] <path>...\n",
+	fprintf(stderr, "Usage: %s [-1ACDFRSTVadhilrt] [-E <sec>] <path>...\n",
 		program_name);
 	exit(EXIT_FAILURE);
 }
@@ -598,11 +669,23 @@ main(int argc, char **argv)
 	} else {
 		option_output_format = OF_ONE_PER_LINE;
 	}
-	while ((c = getopt(argc, argv, "1ACE:FRSTadilrt?")) != -1) {
+	while ((c = getopt(argc, argv, "1ACDE:FRSTVadhilrt?")) != -1) {
 		switch (c) {
 		case '1': option_output_format = OF_ONE_PER_LINE; break;
 		case 'A': option_all = OA_ALMOST_ALL; break;
 		case 'C': option_output_format = OF_MULTI_COLUMN; break;
+		case 'D':
+			option_directory_quota = 1;
+			e = gfarm_xattr_caching_pattern_add(
+			    GFARM_EA_DIRECTORY_QUOTA);
+			if (e != GFARM_ERR_NO_ERROR) {
+				fprintf(stderr, "%s: -D: failed to cache "
+				    GFARM_EA_PREFIX GFARM_EA_DIRECTORY_QUOTA
+				    ": %s", program_name,
+				    gfarm_error_string(e));
+				exit(EXIT_FAILURE);
+			}
+			break;
 		case 'E':
 			errno = 0;
 			option_cache_expiration = strtod(optarg, &ep);
@@ -620,8 +703,12 @@ main(int argc, char **argv)
 		case 'R': option_recursive = 1; break;
 		case 'S': option_sort_order = SO_SIZE; break;
 		case 'T': option_complete_time = 1; break;
+		case 'V':
+			fprintf(stderr, "Gfarm version %s\n", gfarm_version());
+			exit(0);
 		case 'a': option_all = OA_ALL; break;
 		case 'd': option_directory_itself = 1; break;
+		case 'h': option_humanize_number = 1; break;
 		case 'i': option_inumber = 1; break;
 		case 'l': option_output_format = OF_LONG; break;
 		case 'r': option_reverse_sort = 1; break;

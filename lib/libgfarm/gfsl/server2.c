@@ -14,8 +14,9 @@
 #include <netdb.h>
 #include <limits.h>
 
-#include <gfarm/error.h>
 #include <gfarm/gfarm_config.h>
+#include <gfarm/error.h>
+#include <gfarm/gflog.h>
 
 #include "gfutil.h"
 
@@ -43,7 +44,7 @@ ParseArgs(int argc, char **argv)
 	fprintf(stderr, "unknown extra argument %s\n", argv[optind]);
 	return -1;
     }
-    
+
     return 0;
 }
 
@@ -52,17 +53,18 @@ int
 main(int argc, char **argv)
 {
     int ret = 1;
-    int bindFd = -1;
-    struct sockaddr_in remote;
-    socklen_t remLen = sizeof(struct sockaddr_in);
+    int numBindFds, *bindFds;
+    struct sockaddr_storage remote;
+    socklen_t remLen;
     int fd0 = -1;
     int fd1 = -1;
+    int gsiErrNo;
     OM_uint32 majStat, minStat;
     gss_cred_id_t myCred;
     gfarmSecSession *ss0 = NULL;
     gfarmSecSession *ss1 = NULL;
     int sel;
-    char *buf;
+    char *buf, *addr;
     int n;
     int i;
 
@@ -105,37 +107,54 @@ main(int argc, char **argv)
     /*
      * Create a channel.
      */
-    bindFd = gfarmTCPBindPort(port);
-    if (bindFd < 0) {
+    if (gfarmTCPBindPort(port, &numBindFds, &bindFds) < 0) {
 	fprintf(stderr, "Failed to bind port (%d)", port);
 	goto Done;
     }
-    (void)gfarmGetNameOfSocket(bindFd, &port);
-    fprintf(stderr, "Accepting port: %d\n", port);
+    for (i = 0; i < numBindFds; i++) {
+	(void)gfarmGetNameOfSocket(bindFds[i], &port, &addr);
+	fprintf(stderr, "Accepting port: [%s]:%d\n",
+		addr, port);
+	free(addr);
+    }
 
-    fd0 = accept(bindFd, (struct sockaddr *)&remote, &remLen);  
+    remLen = sizeof(remote);
+    fd0 = gfarmAcceptFds(numBindFds, bindFds,
+			 (struct sockaddr *)&remote, &remLen);
     if (fd0 < 0) {
 	perror("accept");
 	goto Done;
     }
-    ss0 = gfarmSecSessionAccept(fd0, myCred, NULL, &majStat, &minStat);
+    ss0 = gfarmSecSessionAccept(fd0, myCred, NULL,
+				&gsiErrNo, &majStat, &minStat);
     if (ss0 == NULL) {
 	fprintf(stderr, "Can't create acceptor session because of:\n");
-	gfarmGssPrintMajorStatus(majStat);
-	gfarmGssPrintMinorStatus(minStat);
+	if (gsiErrNo != 0) {
+	    fprintf(stderr, "%s\n", strerror(gsiErrNo));
+	} else {
+	    gfarmGssPrintMajorStatus(majStat);
+	    gfarmGssPrintMinorStatus(minStat);
+	}
 	goto Done;
     }
 
-    fd1 = accept(bindFd, (struct sockaddr *)&remote, &remLen);  
+    remLen = sizeof(remote);
+    fd1 = gfarmAcceptFds(numBindFds, bindFds,
+			 (struct sockaddr *)&remote, &remLen);
     if (fd1 < 0) {
 	perror("accept");
 	goto Done;
     }
-    ss1 = gfarmSecSessionAccept(fd1, myCred, NULL, &majStat, &minStat);
+    ss1 = gfarmSecSessionAccept(fd1, myCred, NULL,
+				&gsiErrNo, &majStat, &minStat);
     if (ss1 == NULL) {
 	fprintf(stderr, "Can't create acceptor session because of:\n");
-	gfarmGssPrintMajorStatus(majStat);
-	gfarmGssPrintMinorStatus(minStat);
+	if (gsiErrNo != 0) {
+	    fprintf(stderr, "%s\n", strerror(gsiErrNo));
+	} else {
+	    gfarmGssPrintMajorStatus(majStat);
+	    gfarmGssPrintMinorStatus(minStat);
+	}
 	goto Done;
     }
 
@@ -159,8 +178,8 @@ main(int argc, char **argv)
 	    continue;
 	} else if (sel > 0) {
 	    if (gfarmSecSessionCheckPollReadable(ss0)) {
-		    i = gfarmSecSessionReceiveInt8(ss0, &buf, &n, 
-						   GFARM_GSS_TIMEOUT_INFINITE);
+		i = gfarmSecSessionReceiveInt8(ss0, &buf, &n,
+					       GFARM_GSS_TIMEOUT_INFINITE);
 		if (i == 0) {
 		    break;
 		} else if (i < 0) {
@@ -197,7 +216,7 @@ main(int argc, char **argv)
     ret = 0;
 
     Done:
-    (void)close(bindFd);
+    gfarmCloseFds(numBindFds, bindFds);
     if (ss0 != NULL) {
 	(void)close(fd0);
 	gfarmSecSessionTerminate(ss0);

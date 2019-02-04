@@ -180,16 +180,13 @@ gfarm_group_info_free(struct gfarm_group_info *info)
 {
 	int i;
 
-	free(info->groupname);
-	info->groupname = NULL;
-
+	if (info->groupname != NULL)
+		free(info->groupname);
 	if (info->usernames != NULL) {
 		for (i = 0; i < info->nusers; i++)
 			free(info->usernames[i]);
 		free(info->usernames);
-		info->usernames = NULL;
 	}
-	info->nusers = 0;
 }
 
 static void
@@ -380,6 +377,15 @@ gfarm_quota_info_free_all(
 {
 	gfarm_base_generic_info_free_all(n, infos,
 	    &gfarm_base_quota_info_ops);
+}
+
+/**********************************************************************/
+
+void
+gfarm_dirset_info_free(struct gfarm_dirset_info *info)
+{
+	free(info->username);
+	free(info->dirsetname);
 }
 
 /**********************************************************************/

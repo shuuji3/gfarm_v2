@@ -2,27 +2,27 @@
  * $Id$
  */
 
-#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
 
 #include <gfarm/gfarm.h>
 
-#include "internal_host_info.h"
-
-#include "gfp_xdr.h"
 #include "config.h"
+#include "quota_info.h"
 #include "metadb_server.h"
 
+#include "quota.h"
+#include "db_ops.h"
 #include "host.h"
 #include "user.h"
 #include "group.h"
 #include "inode.h"
 #include "dir.h"
-#include "quota.h"
+#include "dirset.h"
+#include "quota_dir.h"
 #include "mdhost.h"
 #include "journal_file.h"	/* for enum journal_operation */
-#include "db_ops.h"
 #include "db_journal.h"
 
 /**********************************************************/
@@ -112,7 +112,7 @@ db_journal_apply_fsngroup_modify(gfarm_uint64_t seqnum,
 
 	if ((h = host_lookup_including_invalid(arg->hostname)) == NULL) {
 		e = GFARM_ERR_NO_SUCH_OBJECT;
-		gflog_error(GFARM_MSG_UNFIXED,
+		gflog_error(GFARM_MSG_1004049,
 			"seqnum=%llu hostname=%s : %s",
 			(unsigned long long)seqnum,
 			arg->hostname, gfarm_error_string(e));
@@ -458,24 +458,37 @@ static gfarm_error_t
 db_journal_apply_inode_cksum_add(gfarm_uint64_t seqnum,
 	struct db_inode_cksum_arg *arg)
 {
-	/* XXX - NOT IMPLEMENTED */
-	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
-}
+	gfarm_error_t e;
+	struct inode *n;
 
-static gfarm_error_t
-db_journal_apply_inode_cksum_modify(gfarm_uint64_t seqnum,
-	struct db_inode_cksum_arg *arg)
-{
-	/* XXX - NOT IMPLEMENTED */
-	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+	if ((e = db_journal_inode_lookup(arg->inum, &n,
+	    "db_journal_apply_inode_cksum_add")) != GFARM_ERR_NO_ERROR)
+		gflog_error(GFARM_MSG_1003766,
+		    "inum=%llu : %s",
+		    (unsigned long long)arg->inum, gfarm_error_string(e));
+	else if ((e = inode_cksum_set_in_cache(n,
+	    arg->type, arg->len, arg->sum)) != GFARM_ERR_NO_ERROR)
+		gflog_error(GFARM_MSG_1003767,
+		    "seqnum=%llu inum=%llu : %s", (unsigned long long)seqnum,
+		    (unsigned long long)arg->inum, gfarm_error_string(e));
+	return (e);
 }
 
 static gfarm_error_t
 db_journal_apply_inode_cksum_remove(gfarm_uint64_t seqnum,
 	struct db_inode_inum_arg *arg)
 {
-	/* XXX - NOT IMPLEMENTED */
-	return (GFARM_ERR_FUNCTION_NOT_IMPLEMENTED);
+	gfarm_error_t e;
+	struct inode *n;
+
+	if ((e = db_journal_inode_lookup(arg->inum, &n,
+	    "db_journal_apply_inode_cksum_remove")) != GFARM_ERR_NO_ERROR)
+		gflog_error(GFARM_MSG_1003768,
+		    "inum=%llu : %s",
+		    (unsigned long long)arg->inum, gfarm_error_string(e));
+	else
+		inode_cksum_remove_in_cache(n);
+	return (e);
 }
 
 /**********************************************************/
@@ -500,6 +513,16 @@ db_journal_apply_filecopy_add(gfarm_uint64_t seqnum,
 		    gfarm_error_string(e));
 	} else if ((e = inode_add_file_copy_in_cache(n,
 	    host)) != GFARM_ERR_NO_ERROR) {
+#if 1 /* XXX FIXME: workaround for SourceForge #434 (#431) */
+		if (e == GFARM_ERR_ALREADY_EXISTS) {
+			gflog_error(GFARM_MSG_1003546,
+			    "db_journal_apply_filecopy_add: "
+			    "inum=%llu hostname=%s: ignoring - %s",
+			    (unsigned long long)arg->inum, arg->hostname,
+			    gfarm_error_string(e));
+			return (GFARM_ERR_NO_ERROR); /* ignore this error */
+		}
+#endif
 		gflog_error(GFARM_MSG_1003229,
 		    "inum=%llu hostname=%s : %s",
 		    (unsigned long long)arg->inum, arg->hostname,
@@ -521,17 +544,34 @@ db_journal_apply_filecopy_remove(gfarm_uint64_t seqnum,
 		/* nothing to do */
 	} else if ((host = host_lookup_including_invalid(arg->hostname))
 	    == NULL) {
-		e = GFARM_ERR_NO_SUCH_OBJECT;
-		gflog_error(GFARM_MSG_1003230,
+		/*
+		 * We don't treat this as an error, because master gfmd before
+		 * SF.net #860 may send stale GFM_JOURNAL_FILECOPY_REMOVE
+		 */
+		e = GFARM_ERR_NO_ERROR;
+		gflog_notice(GFARM_MSG_1004259,
 		    "inum=%llu hostname=%s : %s",
 		    (unsigned long long)arg->inum, arg->hostname,
-		    gfarm_error_string(e));
+		    "stale host");
 	} else if ((e = inode_remove_replica_in_cache(n,
 	    host)) != GFARM_ERR_NO_ERROR) {
-		gflog_error(GFARM_MSG_1003231,
-		    "inum=%llu hostname=%s : %s",
-		    (unsigned long long)arg->inum, arg->hostname,
-		    gfarm_error_string(e));
+		if (e == GFARM_ERR_NO_SUCH_OBJECT) {
+			/*
+			 * We don't treat this as an error, because
+			 * master gfmd before SF.net #860 may send
+			 * stale GFM_JOURNAL_FILECOPY_REMOVE
+			 */
+			e = GFARM_ERR_NO_ERROR;
+			gflog_notice(GFARM_MSG_1004260,
+			    "inum=%llu hostname=%s : %s",
+			    (unsigned long long)arg->inum, arg->hostname,
+			    "stale filecopy");
+		} else {
+			gflog_error(GFARM_MSG_1003231,
+			    "inum=%llu hostname=%s : %s",
+			    (unsigned long long)arg->inum, arg->hostname,
+			    gfarm_error_string(e));
+		}
 	}
 	return (e);
 }
@@ -759,6 +799,89 @@ db_journal_apply_quota_remove(gfarm_uint64_t seqnum,
 }
 
 /**********************************************************/
+/* quota_dirset */
+
+static gfarm_error_t
+db_journal_apply_quota_dirset_add(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	gfarm_error_t e;
+	struct user *u;
+	struct dirset *ds;
+
+	u = user_lookup(arg->dirset.username);
+	if (u == NULL)
+		return (GFARM_ERR_NO_SUCH_USER);
+
+	e = user_enter_dirset(u, arg->dirset.dirsetname, 0, &ds);
+	if (e != GFARM_ERR_NO_ERROR)
+		return (e);
+
+	dirset_set_quota_metadata_in_cache(ds, &arg->q);
+	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+db_journal_apply_quota_dirset_modify(gfarm_uint64_t seqnum,
+	struct db_quota_dirset_arg *arg)
+{
+	struct user *u;
+	struct dirset *ds;
+
+	u = user_lookup(arg->dirset.username);
+	if (u == NULL)
+		return (GFARM_ERR_NO_SUCH_USER);
+
+	ds = user_lookup_dirset(u, arg->dirset.dirsetname);
+	if (ds == NULL)
+		return (GFARM_ERR_NO_SUCH_OBJECT);
+
+	dirset_set_quota_metadata_in_cache(ds, &arg->q);
+	return (GFARM_ERR_NO_ERROR);
+}
+
+static gfarm_error_t
+db_journal_apply_quota_dirset_remove(gfarm_uint64_t seqnum,
+	struct gfarm_dirset_info *arg)
+{
+	struct user *u;
+
+	u = user_lookup(arg->username);
+	if (u == NULL)
+		return (GFARM_ERR_NO_SUCH_USER);
+
+	return (user_remove_dirset(u, arg->dirsetname));
+}
+
+/**********************************************************/
+/* quota_dir */
+
+static gfarm_error_t
+db_journal_apply_quota_dir_add(gfarm_uint64_t seqnum,
+		struct db_inode_dirset_arg *arg)
+{
+	struct user *u;
+	struct dirset *ds;
+
+	u = user_lookup(arg->dirset.username);
+	if (u == NULL)
+		return (GFARM_ERR_NO_SUCH_USER);
+
+	ds = user_lookup_dirset(u, arg->dirset.dirsetname);
+	if (ds == NULL)
+		return (GFARM_ERR_NO_SUCH_OBJECT);
+
+	return (quota_dir_enter(arg->inum, ds, NULL));
+}
+
+static gfarm_error_t
+db_journal_apply_quota_dir_remove(gfarm_uint64_t seqnum,
+	struct db_inode_inum_arg *arg)
+{
+	return (quota_dir_remove_in_cache(arg->inum));
+}
+
+/**********************************************************/
 /* mdhost */
 
 static gfarm_error_t
@@ -860,16 +983,18 @@ const struct db_ops db_journal_apply_ops = {
 	NULL,
 
 	db_journal_apply_inode_cksum_add,
-	db_journal_apply_inode_cksum_modify,
+	db_journal_apply_inode_cksum_add, /* *_add() can be used for modify */
 	db_journal_apply_inode_cksum_remove,
 	NULL,
 
 	db_journal_apply_filecopy_add,
 	db_journal_apply_filecopy_remove,
+	NULL,		/* only called at initialization, bypass journal */
 	NULL,
 
 	db_journal_apply_deadfilecopy_add,
 	db_journal_apply_deadfilecopy_remove,
+	NULL,		/* only called at initialization, bypass journal */
 	NULL,
 
 	db_journal_apply_direntry_add,
@@ -891,6 +1016,15 @@ const struct db_ops db_journal_apply_ops = {
 	db_journal_apply_quota_add,
 	db_journal_apply_quota_modify,
 	db_journal_apply_quota_remove,
+	NULL,
+
+	db_journal_apply_quota_dirset_add,
+	db_journal_apply_quota_dirset_modify,
+	db_journal_apply_quota_dirset_remove,
+	NULL,
+
+	db_journal_apply_quota_dir_add,
+	db_journal_apply_quota_dir_remove,
 	NULL,
 
 	NULL,

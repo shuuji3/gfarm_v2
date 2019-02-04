@@ -16,8 +16,11 @@
 
 #include <gfarm/gfarm.h>
 
+#include "hash.h"
+
 #include "gfarm_foreach.h"
 #include "gfarm_path.h"
+#include "fsngroup_info.h"
 #include "gfm_client.h"
 #include "lookup.h"
 #include "metadb_server.h"
@@ -171,7 +174,7 @@ gfarm2fs_realurl(const char *path, char **url_p, char **root_url_p)
 
 	metadb_len = strlen(metadb);
 	port_len = port_size(port);
-	/* gfarm://host:port/*/
+	/* gfarm://host:port/ */
 	root_url_len = 8 + metadb_len + 1 + port_len + 1;
 	GFARM_MALLOC_ARRAY(root_url, root_url_len);
 	if (root_url == NULL) {
@@ -249,9 +252,6 @@ get_xattr(const char *url, char *key, char **value_p)
 	return (e);
 }
 
-#define XATTR_NCOPY	"gfarm.ncopy"
-#define XATTR_REPATTR	GFARM_REPATTR_NAME
-
 static gfarm_error_t
 get_replica_spec(
 	const char *url, const char *root_url, int *ncopy_p, char **repattr_p)
@@ -270,7 +270,7 @@ get_replica_spec(
 		else
 			e_repattr = GFARM_ERR_NO_SUCH_OBJECT;
 	} else {
-		e_repattr = get_xattr(root_url, XATTR_REPATTR, &repattr);
+		e_repattr = get_xattr(root_url, GFARM_EA_REPATTR, &repattr);
 		if (e_repattr == GFARM_ERR_NO_ERROR ||
 		    e_repattr == GFARM_ERR_NO_SUCH_OBJECT) {
 			support_repattr = 1;
@@ -302,7 +302,7 @@ get_replica_spec(
 
 		if (strcmp(tmpurl, root_url) == 0)
 			is_root = 1;
-		e_ncopy = get_xattr(tmpurl, XATTR_NCOPY, &ncopy_str);
+		e_ncopy = get_xattr(tmpurl, GFARM_EA_NCOPY, &ncopy_str);
 		if (e_ncopy == GFARM_ERR_NO_ERROR) {
 			ncopy = atoi(ncopy_str);
 			free(ncopy_str);
@@ -313,7 +313,8 @@ get_replica_spec(
 			return (e_ncopy);
 		}
 		if (support_repattr) {
-			e_repattr = get_xattr(tmpurl, XATTR_REPATTR, &repattr);
+			e_repattr =
+			    get_xattr(tmpurl, GFARM_EA_REPATTR, &repattr);
 			if (e_repattr == GFARM_ERR_NO_ERROR) {
 				found = 1;
 			} else if (e_repattr != GFARM_ERR_NO_SUCH_OBJECT) {
@@ -455,13 +456,13 @@ print_replica_spec_main(int ncopy, const char *repattr)
 {
 	if (ncopy >= 0) {
 		if (opt_verb)
-			printf("%s=", XATTR_NCOPY);
+			printf("%s=", GFARM_EA_NCOPY);
 		printf("%d\n", ncopy);
 	}
 
 	if (repattr != NULL) {
 		if (opt_verb)
-			printf("%s=", XATTR_REPATTR);
+			printf("%s=", GFARM_EA_REPATTR);
 		printf("%s\n", repattr);
 	}
 }
@@ -682,14 +683,84 @@ set_ncopy(
 		return (GFARM_ERR_INVALID_ARGUMENT);
 	}
 
-	e = gfncopy_setxattr(url, XATTR_NCOPY, str, strlen(str), set_flags);
+	e = gfncopy_setxattr(url, GFARM_EA_NCOPY, str, strlen(str), set_flags);
 	if (e != GFARM_ERR_NO_ERROR) {
 		if (opt_verb)
 			ERR("%s: setxattr(%s): %s",
-			    url, XATTR_NCOPY, gfarm_error_string(e));
+			    url, GFARM_EA_NCOPY, gfarm_error_string(e));
 		else
 			fprintf(stderr, "%s\n", gfarm_error_string(e));
 	}
+	return (e);
+}
+
+static gfarm_error_t
+check_node_group(const char *url, size_t nreps, gfarm_repattr_t *reps)
+{
+	struct gfarm_fsngroup_info *nginfos = NULL;
+#define NGROUP_HASH_SIZE 47
+	struct gfarm_hash_table *ngroup;
+	struct gfm_connection *gfm_server;
+	size_t n = 0, i;
+	const char *g = NULL;
+	gfarm_error_t e;
+
+	ngroup = gfarm_hash_table_alloc(NGROUP_HASH_SIZE,
+	    gfarm_hash_default, gfarm_hash_key_equal_default);
+	if (ngroup == NULL)
+		return (GFARM_ERR_NO_MEMORY);
+	if ((e = gfm_client_connection_and_process_acquire_by_path(
+		     url, &gfm_server)) != GFARM_ERR_NO_ERROR)
+		goto error;
+	e = gfm_client_fsngroup_get_all(gfm_server, &n, &nginfos);
+	gfm_client_connection_free(gfm_server);
+	if (e != GFARM_ERR_NO_ERROR)
+		goto error;
+	for (i = 0; i < n; ++i) {
+		g = nginfos[i].fsngroupname;
+		if (g == NULL || g[0] == '\0')
+			continue;
+		if (gfarm_hash_enter(ngroup, g, strlen(g), 0, NULL) == NULL) {
+			e = GFARM_ERR_NO_MEMORY;
+			goto error;
+		}
+	}
+	for (i = 0; i < nreps; ++i) {
+		g = gfarm_repattr_group(reps[i]);
+		if (g == NULL || g[0] == '\0')
+			continue;
+		if (gfarm_hash_lookup(ngroup, g, strlen(g)) == NULL) {
+			e = GFARM_ERR_NO_SUCH_GROUP;
+			goto error;
+		}
+	}
+error:
+	if (e != GFARM_ERR_NO_ERROR)
+		fprintf(stderr, "%s: %s\n", g != NULL ? g : url,
+		    gfarm_error_string(e));
+	gfarm_hash_table_free(ngroup);
+	if (nginfos != NULL) {
+		for (i = 0; i < n; ++i) {
+			free(nginfos[i].hostname);
+			free(nginfos[i].fsngroupname);
+		}
+		free(nginfos);
+	}
+	return (e);
+}
+
+static gfarm_error_t
+check_repattr(const char *url, const char *repattr)
+{
+	gfarm_repattr_t *reps;
+	size_t nreps;
+	gfarm_error_t e;
+
+	e = gfarm_repattr_reduce(repattr, &reps, &nreps);
+	if (e != GFARM_ERR_NO_ERROR)
+		return (e);
+	e = check_node_group(url, nreps, reps);
+	gfarm_repattr_free_all(nreps, reps);
 	return (e);
 }
 
@@ -709,13 +780,16 @@ set_repattr(
 		ERR("%s: not a file or directory", url);
 		return (GFARM_ERR_INVALID_ARGUMENT);
 	}
+	e = check_repattr(url, repattr);
+	if (e != GFARM_ERR_NO_ERROR)
+		return (e);
 
-	e = gfncopy_setxattr(url, XATTR_REPATTR, repattr,
+	e = gfncopy_setxattr(url, GFARM_EA_REPATTR, repattr,
 	    strlen(repattr) + 1, set_flags);
 	if (e != GFARM_ERR_NO_ERROR) {
 		if (opt_verb)
 			ERR("%s: setxattr(%s): %s",
-			    url, XATTR_REPATTR, gfarm_error_string(e));
+			    url, GFARM_EA_REPATTR, gfarm_error_string(e));
 		else
 			fprintf(stderr, "%s\n", gfarm_error_string(e));
 	}
@@ -738,23 +812,23 @@ remove_replica_spec(
 		return (GFARM_ERR_INVALID_ARGUMENT);
 	}
 
-	e = gfncopy_removexattr(url, XATTR_NCOPY);
+	e = gfncopy_removexattr(url, GFARM_EA_NCOPY);
 	if (e == GFARM_ERR_NO_SUCH_OBJECT) {
 		VERB("%s: removexattr %s: %s",
-		    url, XATTR_NCOPY, gfarm_error_string(e));
+		    url, GFARM_EA_NCOPY, gfarm_error_string(e));
 		e = GFARM_ERR_NO_ERROR;
 	} else if (e != GFARM_ERR_NO_ERROR)
 		ERR("%s: removexattr(%s): %s",
-		    url, XATTR_NCOPY, gfarm_error_string(e));
+		    url, GFARM_EA_NCOPY, gfarm_error_string(e));
 
-	e2 = gfncopy_removexattr(url, XATTR_REPATTR);
+	e2 = gfncopy_removexattr(url, GFARM_EA_REPATTR);
 	if (e2 == GFARM_ERR_NO_SUCH_OBJECT) {
 		VERB("%s: removexattr %s: %s",
-		    url, XATTR_REPATTR, gfarm_error_string(e2));
+		    url, GFARM_EA_REPATTR, gfarm_error_string(e2));
 		e2 = GFARM_ERR_NO_ERROR;
 	} else if (e2 != GFARM_ERR_NO_ERROR)
 		ERR("%s: removexattr(%s): %s",
-		    url, XATTR_REPATTR, gfarm_error_string(e2));
+		    url, GFARM_EA_REPATTR, gfarm_error_string(e2));
 
 	return (e == GFARM_ERR_NO_ERROR ? e2 : e);
 }
@@ -834,10 +908,9 @@ handle_arg1(
 	gfncopy_func func,
 	int argc, char **argv, int enable_recursive, int file_only, void *val)
 {
-	if (argc != 1) {
+	if (argc != 1)
 		usage();
-		return (1);
-	}
+
 	return (do_func(func, argv[0], enable_recursive, file_only, val));
 }
 
@@ -848,10 +921,8 @@ handle_args(
 {
 	gfarm_int64_t n_error = 0;
 
-	if (argc <= 0) {
+	if (argc <= 0)
 		usage();
-		return (1);
-	}
 
 	while (argc > 0) {
 		n_error += do_func(
@@ -901,16 +972,14 @@ main(int argc, char **argv)
 			repattr = optarg;
 			break;
 		case 'C':
-			if (set_flags == 0)
-				set_flags = GFS_XATTR_CREATE;
-			else
+			if (set_flags != 0)
 				usage();
+			set_flags = GFS_XATTR_CREATE;
 			break;
 		case 'M':
-			if (set_flags == 0)
-				set_flags = GFS_XATTR_REPLACE;
-			else
+			if (set_flags != 0)
 				usage();
+			set_flags = GFS_XATTR_REPLACE;
 			break;
 		case 'r':
 			if (opt_mode != MODE_NONE)
@@ -948,8 +1017,8 @@ main(int argc, char **argv)
 		opt_mode = MODE_GET;
 
 	gfs_stat_cache_enable(1);
-	gfarm_xattr_caching_pattern_add(XATTR_NCOPY);
-	gfarm_xattr_caching_pattern_add(XATTR_REPATTR);
+	gfarm_xattr_caching_pattern_add(GFARM_EA_NCOPY);
+	gfarm_xattr_caching_pattern_add(GFARM_EA_REPATTR);
 
 	if (opt_nofollow || opt_mode == MODE_WAIT) {
 		gfncopy_stat = gfs_lstat_cached;
@@ -988,7 +1057,6 @@ main(int argc, char **argv)
 		break;
 	default:
 		usage();
-		exit(1);
 	}
 
 	e = gfarm_terminate();

@@ -80,7 +80,7 @@ struct gfarm_event {
 #ifndef HAVE_EPOLL
 static int gfarm_eventqueue_alloc_fd_set(struct gfarm_eventqueue *q,
 	int fd, fd_set **fd_setpp);
-#endif
+#endif /* HAVE_EPOLL */
 
 struct gfarm_event *
 gfarm_fd_event_alloc(int filter, int fd,
@@ -179,10 +179,25 @@ struct gfarm_eventqueue {
 	/* doubly linked circular list with a header */
 	struct gfarm_event header;
 
+	/*
+	 * for interaction between gfarm_eventqueue_turn() and
+	 * gfarm_eventqueue_delete_event()
+	 */
+	struct gfarm_event *next_event;
+
 #ifdef HAVE_EPOLL
 	int size_epoll_events, n_epoll_events;
 	struct epoll_event *epoll_events;
 	int epoll_fd;
+
+	/*
+	 * for interaction between gfarm_eventqueue_turn() and
+	 * gfarm_eventqueue_delete_event()
+	 */
+	int index;
+	int nfound;
+#	define NFOUND_NOT_USED	-1
+
 #else
 	int fd_set_size, fd_set_bytes;
 	fd_set *read_fd_set, *write_fd_set, *exception_fd_set;
@@ -192,7 +207,6 @@ struct gfarm_eventqueue {
 	int evfd;
 #endif /* __KERNEL__ */
 };
-
 int
 gfarm_eventqueue_alloc(int ndesc_hint, struct gfarm_eventqueue **qp)
 {
@@ -208,6 +222,8 @@ gfarm_eventqueue_alloc(int ndesc_hint, struct gfarm_eventqueue **qp)
 	/* make the queue empty */
 	q->header.next = q->header.prev = &q->header;
 
+	q->next_event = &q->header;
+
 #ifdef HAVE_EPOLL
 	q->size_epoll_events = q->n_epoll_events = 0;
 	q->epoll_events = NULL;
@@ -216,6 +232,8 @@ gfarm_eventqueue_alloc(int ndesc_hint, struct gfarm_eventqueue **qp)
 		free(q);
 		return (errno);
 	}
+	q->index = 0;
+	q->nfound = NFOUND_NOT_USED;
 #else
 	q->fd_set_size = q->fd_set_bytes = 0;
 	q->read_fd_set = q->write_fd_set =
@@ -230,7 +248,7 @@ gfarm_eventqueue_alloc(int ndesc_hint, struct gfarm_eventqueue **qp)
 		return (errno);
 	}
 	if (!gfarm_eventqueue_alloc_fd_set(q, q->evfd, &q->read_fd_set)) {
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003844,
 			"allocation of 'q->read_fd_set' failed");
 		close(q->evfd);
 		free(q);
@@ -336,7 +354,7 @@ gfarm_eventqueue_alloc_fd_set(struct gfarm_eventqueue *q, int fd,
 			return (0); /* failure */
 		}
 		if (!gfarm_eventqueue_realloc_fd_set(q->fd_set_bytes, fds_bytes,
-		    &q->read_fd_set)) {
+			&q->read_fd_set)) {
 			gflog_debug(GFARM_MSG_1000771,
 				"re-allocation of 'q->read_fd_set' failed");
 			return (0); /* failure */
@@ -521,6 +539,29 @@ gfarm_eventqueue_delete_event(struct gfarm_eventqueue *q,
 #endif /* __KERNEL__ */
 	}
 
+	/*
+	 * remove all reference to this event in gfarm_eventqueue_turn()
+	 */
+	if (q->next_event == ev)
+		q->next_event = ev->next;
+#ifdef HAVE_EPOLL
+	if (q->nfound != NFOUND_NOT_USED) {
+		int i;
+		struct gfarm_event *tmp_ev;
+
+		for (i = q->index; i < q->nfound; i++) {
+			tmp_ev = q->epoll_events[i].data.ptr;
+			if (tmp_ev != ev)
+				continue;
+			--q->nfound;
+			if (i < q->nfound) {
+				q->epoll_events[i] =
+				    q->epoll_events[q->nfound];
+			}
+		}
+	}
+#endif
+
 	/* dequeue */
 	ev->next->prev = ev->prev;
 	ev->prev->next = ev->next;
@@ -545,7 +586,7 @@ gfarm_eventqueue_turn(struct gfarm_eventqueue *q,
 	const struct timeval *timeo)
 {
 	int nfound;
-	struct gfarm_event *ev, *n;
+	struct gfarm_event *ev;
 	struct timeval start_time, end_time, timeout_value, *timeout = NULL;
 	int events;
 #ifndef HAVE_EPOLL
@@ -582,7 +623,8 @@ gfarm_eventqueue_turn(struct gfarm_eventqueue *q,
 			if (timeout == NULL) {
 				timeout = &timeout_value;
 				timeout_value = ev->timeout;
-			} else if (gfarm_timeval_cmp(&ev->timeout,timeout) <0){
+			} else if (gfarm_timeval_cmp(&ev->timeout, timeout)
+				< 0) {
 				timeout_value = ev->timeout;
 			}
 		}
@@ -678,28 +720,35 @@ gfarm_eventqueue_turn(struct gfarm_eventqueue *q,
 	 */
 #ifdef HAVE_EPOLL
 	if (nfound > 0) {
-		int i;
+		struct epoll_event *ep_ev;
 
-		for (i = 0; i < nfound; i++) {
-			ev = q->epoll_events[i].data.ptr;
+		/*
+		 * if you change this code, you should make
+		 * gfarm_eventqueue_delete_event() match with this too.
+		 */
+		q->nfound = nfound;
+		for (q->index = 0; q->index < q->nfound; ) {
+			ep_ev = &q->epoll_events[q->index++];
+			ev = ep_ev->data.ptr;
 			events = 0;
-			if ((q->epoll_events[i].events & EPOLLIN) != 0)
+			if ((ep_ev->events & EPOLLIN) != 0)
 				events |= GFARM_EVENT_READ;
-			if ((q->epoll_events[i].events & EPOLLOUT) != 0)
+			if ((ep_ev->events & EPOLLOUT) != 0)
 				events |= GFARM_EVENT_WRITE;
-			if ((q->epoll_events[i].events & EPOLLPRI) != 0)
+			if ((ep_ev->events & EPOLLPRI) != 0)
 				events |= GFARM_EVENT_EXCEPTION;
-			if ((q->epoll_events[i].events & (EPOLLHUP|EPOLLERR))
-			    != 0)
+			if ((ep_ev->events & (EPOLLHUP|EPOLLERR)) != 0)
 				events |= ev->filter & (GFARM_EVENT_READ|
 				    GFARM_EVENT_WRITE|GFARM_EVENT_EXCEPTION);
 			gfarm_eventqueue_delete_event(q, ev);
 			(*ev->u.fd.callback)(events, ev->u.fd.fd, ev->closure,
 			    &end_time);
 		}
+		q->nfound = NFOUND_NOT_USED;
 	} else {
-		for (ev = q->header.next; ev != &q->header; ev = n) {
-			n = ev->next;
+		for (ev = q->header.next; ev != &q->header;
+		     ev = q->next_event) {
+			q->next_event = ev->next;
 
 			switch (ev->type) {
 			case GFARM_FD_EVENT:
@@ -720,19 +769,19 @@ gfarm_eventqueue_turn(struct gfarm_eventqueue *q,
 					    ev->closure, &end_time);
 				}
 				break;
-			default :
+			default:
 				break;
 			}
 		}
 	}
 #else /* !HAVE_EPOLL */
-	for (ev = q->header.next; ev != &q->header; ev = n) {
+	for (ev = q->header.next; ev != &q->header; ev = q->next_event) {
 		/*
 		 * We shouldn't use "ev = ev->next" in the 3rd clause
 		 * of above "for(;;)" statement, because ev may be
 		 * deleted in this loop.
 		 */
-		n = ev->next;
+		q->next_event = ev->next;
 
 		switch (ev->type) {
 		case GFARM_FD_EVENT:
@@ -946,7 +995,6 @@ proto1_request_multiplexed(struct gfarm_eventqueue *q, int peer_socket,
 	}
 	free(state);
 	return (rv);
-	
 }
 
 int

@@ -43,8 +43,8 @@ gfarm_iobuffer_blocking_read_timeout_fd_op(struct gfarm_iobuffer *b,
 	ssize_t rv;
 	int save_errno, avail, timeout = gfarm_ctxp->network_receive_timeout;
 	char hostbuf[NI_MAXHOST], *hostaddr_prefix, *hostaddr;
-	struct sockaddr_in sin;
-	socklen_t slen = sizeof(sin);
+	struct sockaddr_storage sa;
+	socklen_t sa_len = sizeof(sa);
 
 	for (;;) {
 #ifdef HAVE_POLL
@@ -66,12 +66,12 @@ gfarm_iobuffer_blocking_read_timeout_fd_op(struct gfarm_iobuffer *b,
 		if (avail == 0) {
 			gfarm_iobuffer_set_error(b,
 			    GFARM_ERR_OPERATION_TIMED_OUT);
-			if (getpeername(fd, (struct sockaddr *)&sin, &slen)
+			if (getpeername(fd, (struct sockaddr *)&sa, &sa_len)
 			    == -1) {
 				hostaddr = strerror(errno);
 				hostaddr_prefix = "cannot get peer address: ";
 			} else if ((save_errno = gfarm_getnameinfo(
-			    (struct sockaddr *)&sin, slen,
+			    (struct sockaddr *)&sa, sa_len,
 			    hostbuf, sizeof(hostbuf), NULL, 0,
 			    NI_NUMERICHOST | NI_NUMERICSERV) != 0)) {
 				hostaddr = strerror(save_errno);
@@ -79,7 +79,7 @@ gfarm_iobuffer_blocking_read_timeout_fd_op(struct gfarm_iobuffer *b,
 				    "cannot convert peer address to string: ";
 			} else {
 				hostaddr = hostbuf;
-				hostaddr_prefix= "";
+				hostaddr_prefix = "";
 			}
 			gflog_error(GFARM_MSG_1003449,
 			    "closing network connection due to "
@@ -242,13 +242,6 @@ gfarm_error_t
 gfp_xdr_new_socket(int fd, struct gfp_xdr **connp)
 {
 	return (gfp_xdr_new(&gfp_xdr_socket_iobuffer_ops, NULL, fd,
-	    GFP_XDR_NEW_RECV|GFP_XDR_NEW_SEND, connp));
-}
-
-gfarm_error_t
-gfp_xdr_new_client_socket(int fd, struct gfp_xdr **connp)
-{
-	return (gfp_xdr_client_new(&gfp_xdr_socket_iobuffer_ops, NULL, fd,
 	    GFP_XDR_NEW_RECV|GFP_XDR_NEW_SEND, connp));
 }
 

@@ -41,18 +41,23 @@ doServer(int fd, char *hostname, int port, gss_cred_id_t myCred,
     int n = -1;
     int rSz = -1;
     int dCheck = 0;
+    int gsiErrNo;
     gfarm_int32_t *tmpBuf;
     gfarmAuthEntry *aePtr = NULL;
     char *name;
 
     gfarmSecSession *initialSession =
-    	gfarmSecSessionAccept(fd, myCred, NULL, &majStat, &minStat);
+    	gfarmSecSessionAccept(fd, myCred, NULL, &gsiErrNo, &majStat, &minStat);
     int x;
 
     if (initialSession == NULL) {
 	fprintf(stderr, "Can't create acceptor session because of:\n");
-	gfarmGssPrintMajorStatus(majStat);
-	gfarmGssPrintMinorStatus(minStat);
+	if (gsiErrNo != 0) {
+	    fprintf(stderr, "%s\n", strerror(gsiErrNo));
+	} else {
+	    gfarmGssPrintMajorStatus(majStat);
+	    gfarmGssPrintMinorStatus(minStat);
+	}
 	goto Done;
     }
     name = newStringOfCredential(initialSession->cred);
@@ -60,16 +65,12 @@ doServer(int fd, char *hostname, int port, gss_cred_id_t myCred,
     free(name);
     aePtr = gfarmSecSessionGetInitiatorInfo(initialSession);
     fprintf(stderr, "Accept => Initiator: '%s' -> '%s'\n",
-	    aePtr->distName,
-	    (aePtr->authType == GFARM_AUTH_USER) ?
-	    aePtr->authData.userAuth.localName :
-	    aePtr->authData.hostAuth.FQDN);
+	    gfarmAuthGetDistName(aePtr),
+	    gfarmAuthGetPrintableName(aePtr));
 
     if (gfarmSecSessionDedicate(initialSession) < 0) {
 	fprintf(stderr, "Can't dedicate to '%s'.\n",
-		(aePtr->authType == GFARM_AUTH_USER) ?
-		aePtr->authData.userAuth.localName :
-		aePtr->authData.hostAuth.FQDN);
+		gfarmAuthGetPrintableName(aePtr));
 	goto Done;
     }
 
@@ -77,7 +78,7 @@ doServer(int fd, char *hostname, int port, gss_cred_id_t myCred,
      * Now, we can communicate securely.
      */
 
-    x = gfarmSecSessionReceiveInt32(initialSession, &tmpBuf, &n, 
+    x = gfarmSecSessionReceiveInt32(initialSession, &tmpBuf, &n,
 				    GFARM_GSS_TIMEOUT_INFINITE);
     if (x != 1) {
 	fprintf(stderr, "can't receive test buffer size because of:\n");
@@ -88,7 +89,7 @@ doServer(int fd, char *hostname, int port, gss_cred_id_t myCred,
     (void)free(tmpBuf);
     fprintf(stderr, "Receive buffer size: %d\n", tBufSz);
 
-    if (gfarmSecSessionReceiveInt8(initialSession, &rBuf, &rSz, 
+    if (gfarmSecSessionReceiveInt8(initialSession, &rBuf, &rSz,
 				   GFARM_GSS_TIMEOUT_INFINITE) <= 0) {
 	fprintf(stderr, "test buffer receive failed because of:\n");
 	gfarmSecSessionPrintStatus(initialSession);
@@ -111,7 +112,7 @@ doServer(int fd, char *hostname, int port, gss_cred_id_t myCred,
     }
     (void)free(rBuf);
 
-    if (gfarmSecSessionReceiveInt32(initialSession, &tmpBuf, &n, 
+    if (gfarmSecSessionReceiveInt32(initialSession, &tmpBuf, &n,
 				    GFARM_GSS_TIMEOUT_INFINITE) != 1) {
 	fprintf(stderr, "can't receive delegation check flag because of:\n");
 	gfarmSecSessionPrintStatus(initialSession);
@@ -157,17 +158,22 @@ doClient(char *hostname, int port, gss_name_t acceptorName,
     char *rBuf = NULL;
     char *name;
     int rSz = -1;
+    int gsiErrNo;
     OM_uint32 majStat;
     OM_uint32 minStat;
     gfarmSecSession *ss =
     	gfarmSecSessionInitiateByName(hostname, port, acceptorName, deleCred,
 				      GFARM_GSS_DEFAULT_SECURITY_SETUP_FLAG,
-				      NULL, &majStat, &minStat);
+				      NULL, &gsiErrNo, &majStat, &minStat);
 
     if (ss == NULL) {
 	fprintf(stderr, "Can't create initiator session because of:\n");
-	gfarmGssPrintMajorStatus(majStat);
-	gfarmGssPrintMinorStatus(minStat);
+	if (gsiErrNo != 0) {
+	    fprintf(stderr, "%s", strerror(gsiErrNo));
+	} else {
+	    gfarmGssPrintMajorStatus(majStat);
+	    gfarmGssPrintMinorStatus(minStat);
+	}
 	return;
     }
 

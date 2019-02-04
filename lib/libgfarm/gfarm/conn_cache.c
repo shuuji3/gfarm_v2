@@ -159,7 +159,7 @@ gfp_connection_unlock(struct gfp_cached_connection *connection)
 	int err;
 	err = GFSP_CONN_UNLOCK(connection);
 	if (err != 0) {
-		gflog_fatal(GFARM_MSG_UNFIXED, "owner=%d count=%d",
+		gflog_fatal(GFARM_MSG_1003871, "owner=%d count=%d",
 			connection->conn_lock.r_owner,
 			connection->conn_lock.r_locked);
 	}
@@ -374,6 +374,29 @@ gfp_connection_cache_change(struct gfp_conn_cache *cache, int cnt)
 }
 
 gfarm_error_t
+gfp_cached_connection_lookup(struct gfp_conn_cache *cache,
+	const char *canonical_hostname, int port, const char *user,
+	struct gfp_cached_connection **connectionp)
+{
+	gfarm_error_t e;
+	struct gfarm_hash_entry *entry;
+	struct gfp_cached_connection *connection;
+	static const char diag[] = "gfp_cached_connection_lookup";
+
+	gfarm_mutex_lock(&cache->mutex, diag, diag_what);
+	e = gfp_conn_hash_lookup(&cache->hashtab, cache->table_size,
+	    canonical_hostname, port, user, &entry);
+	gfarm_mutex_unlock(&cache->mutex, diag, diag_what);
+	if (e != GFARM_ERR_NO_ERROR)
+		return (e);
+	connection =
+	    *(struct gfp_cached_connection **)gfarm_hash_entry_data(entry);
+	gfarm_lru_cache_addref_entry(&cache->lru_list, &connection->lru_entry);
+	*connectionp = connection;
+	return (GFARM_ERR_NO_ERROR);
+}
+
+gfarm_error_t
 gfp_cached_connection_acquire(struct gfp_conn_cache *cache,
 	const char *canonical_hostname, int port, const char *user,
 	struct gfp_cached_connection **connectionp, int *createdp)
@@ -468,6 +491,18 @@ gfp_cached_or_uncached_connection_free(struct gfp_conn_cache *cache,
 		(*cache->dispose_connection)(connection->connection_data);
 	else
 		gfp_cached_connection_gc_internal(cache, *cache->num_cachep);
+}
+
+void
+gfp_cached_connection_addref(struct gfp_conn_cache *cache,
+	struct gfp_cached_connection *connection)
+{
+	static const char diag[] = "gfp_cached_connection_addref";
+
+	gfarm_mutex_lock(&cache->mutex, diag, diag_what);
+	gfarm_lru_cache_addref_entry(&cache->lru_list,
+	    &connection->lru_entry);
+	gfarm_mutex_unlock(&cache->mutex, diag, diag_what);
 }
 
 /*

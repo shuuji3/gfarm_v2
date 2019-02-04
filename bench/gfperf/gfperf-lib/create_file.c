@@ -4,6 +4,7 @@
 
 
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,12 +14,8 @@
 
 #include "gfperf-lib.h"
 
-/* XXX FIXME: INTERNAL FUNCTION SHOULD NOT BE USED */
-#include <openssl/evp.h>
-#include "queue.h"
-#include "gfs_pio.h"
 #include "host.h"
-
+#include "gfs_pio.h"
 
 gfarm_error_t
 gfperf_create_file_on_gfarm(const char *url, char *hostname,

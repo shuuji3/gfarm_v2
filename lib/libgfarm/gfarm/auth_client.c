@@ -60,8 +60,8 @@ static const struct gfarm_auth_client_method {
 		const char *, struct passwd *);
 	gfarm_error_t (*request_multiplexed)(struct gfarm_eventqueue *,
 		struct gfp_xdr *, const char *, const char *,
-		enum gfarm_auth_id_type, const char *,
-		void (*)(void *), void *, void **, struct passwd *);
+		enum gfarm_auth_id_type, const char *, struct passwd *,
+		void (*)(void *), void *, void **);
 	gfarm_error_t (*result_multiplexed)(void *);
 } gfarm_auth_trial_table[] = {
 	/*
@@ -171,8 +171,18 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 			    gfarm_error_string(GFARM_ERR_UNEXPECTED_EOF));
 			return (GFARM_ERR_UNEXPECTED_EOF);
 		}
-		gfarm_auth_sharedsecret_response_data(shared_key, challenge,
-		    response);
+		e = gfarm_auth_sharedsecret_response_data(
+		    shared_key, challenge, response);
+		if (e != GFARM_ERR_NO_ERROR) {
+			gflog_debug(GFARM_MSG_1004515,
+			    "calculating challenge-response: %s",
+			    gfarm_error_string(e));
+			/*
+			 * this response must fail, we just want to prevent
+			 * uninitialized memory access here.
+			 */
+			memset(response, 0, sizeof response);
+		}
 		e = gfp_xdr_send(conn, "ib",
 		    expire, sizeof(response), response);
 		if (e == GFARM_ERR_NO_ERROR)
@@ -242,7 +252,7 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 			"Authentication token expired");
 		return (GFARM_ERR_EXPIRED);
 	case GFARM_AUTH_ERROR_TEMPORARY_FAILURE:
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003719,
 		    "gfarm_auth_request_sharedsecre: temporary failure");
 		/*
 		 * an error which satisfies IS_CONNECTION_ERROR(),
@@ -250,7 +260,7 @@ gfarm_auth_request_sharedsecret(struct gfp_xdr *conn,
 		 */
 		return (GFARM_ERR_CONNECTION_ABORTED);
 	default:
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003720,
 		    "Authentication failed: %d", (int)error);
 		return (GFARM_ERR_AUTHENTICATION);
 	}
@@ -260,7 +270,7 @@ gfarm_error_t
 gfarm_auth_request(struct gfp_xdr *conn,
 	const char *service_tag, const char *name, struct sockaddr *addr,
 	enum gfarm_auth_id_type self_type, const char *user,
-	enum gfarm_auth_method *auth_methodp, struct passwd *pwd)
+	struct passwd *pwd, enum gfarm_auth_method *auth_methodp)
 {
 	gfarm_error_t e, e_save = GFARM_ERR_NO_ERROR;
 	int i, eof;
@@ -460,13 +470,13 @@ gfarm_auth_request_sharedsecret_receive_fin(int events, int fd,
 			 * to make the caller retry
 			 */
 			state->error = GFARM_ERR_CONNECTION_ABORTED;
-			gflog_debug(GFARM_MSG_UNFIXED,
+			gflog_debug(GFARM_MSG_1003721,
 			    "gfarm_auth_request_sharedsecret_multiplexed: "
 			    "temporary failure");
 			break;
 		default:
 			state->error = GFARM_ERR_AUTHENTICATION;
-			gflog_error(GFARM_MSG_UNFIXED,
+			gflog_debug(GFARM_MSG_1003722,
 			    "Authentication failed: %d",
 			    (int)state->proto_error);
 			break;
@@ -551,6 +561,7 @@ static void
 gfarm_auth_request_sharedsecret_receive_challenge(int events, int fd,
 	void *closure, const struct timeval *t)
 {
+	gfarm_error_t e;
 	struct gfarm_auth_request_sharedsecret_state *state = closure;
 	int rv, eof;
 	char challenge[GFARM_AUTH_CHALLENGE_LEN];
@@ -575,8 +586,18 @@ gfarm_auth_request_sharedsecret_receive_challenge(int events, int fd,
 		state->error = GFARM_ERR_UNEXPECTED_EOF;
 	if (state->error == GFARM_ERR_NO_ERROR) {
 		/* XXX It's better to check writable event here */
-		gfarm_auth_sharedsecret_response_data(
+		e = gfarm_auth_sharedsecret_response_data(
 		    state->shared_key, challenge, response);
+		if (e != GFARM_ERR_NO_ERROR) {
+			gflog_debug(GFARM_MSG_1004516,
+			    "calculating challenge-response: %s",
+			    gfarm_error_string(e));
+			/*
+			 * this response must fail, we just want to prevent
+			 * uninitialized memory access here.
+			 */
+			memset(response, 0, sizeof response);
+		}
 		state->error = gfp_xdr_send(state->conn, "ib",
 		    state->expire, sizeof(response), response);
 		if (state->error == GFARM_ERR_NO_ERROR &&
@@ -698,8 +719,9 @@ gfarm_auth_request_sharedsecret_multiplexed(struct gfarm_eventqueue *q,
 	struct gfp_xdr *conn,
 	const char *service_tag, const char *hostname,
 	enum gfarm_auth_id_type self_type, const char *user,
+	struct passwd *pwd,
 	void (*continuation)(void *), void *closure,
-	void **statepp, struct passwd *pwd)
+	void **statepp)
 {
 	gfarm_error_t e;
 	char *home;
@@ -890,8 +912,9 @@ gfarm_auth_request_dispatch_method(int events, int fd, void *closure,
 			    (*gfarm_auth_trial_table[state->auth_method_index].
 			    request_multiplexed)(state->q, state->conn,
 			    state->service_tag, state->name, state->self_type,
-			    state->user, gfarm_auth_request_dispatch_result,
-			    state, &state->method_state, state->pwd);
+			    state->user, state->pwd,
+			    gfarm_auth_request_dispatch_result, state,
+			    &state->method_state);
 			if (state->last_error == GFARM_ERR_NO_ERROR) {
 				/*
 				 * call gfarm_auth_request_$method, then
@@ -1000,8 +1023,9 @@ gfarm_auth_request_multiplexed(struct gfarm_eventqueue *q,
 	struct gfp_xdr *conn,
 	const char *service_tag, const char *name, struct sockaddr *addr,
 	enum gfarm_auth_id_type self_type, const char *user,
+	struct passwd *pwd,
 	void (*continuation)(void *), void *closure,
-	struct gfarm_auth_request_state **statepp, struct passwd *pwd)
+	struct gfarm_auth_request_state **statepp)
 {
 	gfarm_error_t e;
 	int rv, sock = gfp_xdr_fd(conn);
