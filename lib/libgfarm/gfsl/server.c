@@ -17,6 +17,7 @@
 
 #include <gfarm/gfarm_config.h>
 #include <gfarm/error.h>
+#include <gfarm/gflog.h>
 
 #include "gfnetdb.h"
 #include "gfutil.h"
@@ -54,7 +55,7 @@ ParseArgs(int argc, char **argv)
 	fprintf(stderr, "unknown extra argument %s\n", argv[optind]);
 	return -1;
     }
-    
+
     return 0;
 }
 
