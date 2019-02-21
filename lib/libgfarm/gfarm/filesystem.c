@@ -119,7 +119,7 @@ gfarm_filesystem_hash_equal(const void *key1, int key1len,
 	    id1->port == id2->port);
 }
 
-static gfarm_error_t
+gfarm_error_t
 gfarm_filesystem_new(struct gfarm_filesystem **fsp)
 {
 	gfarm_error_t e;
@@ -137,7 +137,7 @@ gfarm_filesystem_new(struct gfarm_filesystem **fsp)
 	if (gfl == NULL) {
 		free(fs);
 		e = GFARM_ERR_NO_MEMORY;
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003872,
 		    "alloc gfs_file_list: %s",
 		    gfarm_error_string(e));
 		return (e);
@@ -178,12 +178,6 @@ gfarm_filesystem_free(struct gfarm_filesystem *fs)
 	}
 }
 
-int
-gfarm_filesystem_is_initialized(void)
-{
-	return (staticp->filesystems.next != &staticp->filesystems);
-}
-
 static gfarm_error_t
 gfarm_filesystem_ms2fs_hash_alloc(void)
 {
@@ -198,20 +192,6 @@ gfarm_filesystem_ms2fs_hash_alloc(void)
 	return (GFARM_ERR_NO_ERROR);
 }
 
-gfarm_error_t
-gfarm_filesystem_init(void)
-{
-	gfarm_error_t e;
-	struct gfarm_filesystem *fs;
-
-	if (gfarm_filesystem_is_initialized())
-		return (GFARM_ERR_NO_ERROR);
-	if ((e = gfarm_filesystem_new(&fs)) != GFARM_ERR_NO_ERROR)
-		return (e);
-	fs->flags |= GFARM_FILESYSTEM_FLAG_IS_DEFAULT;
-	return (GFARM_ERR_NO_ERROR);
-}
-
 static gfarm_error_t
 gfarm_filesystem_hash_enter(struct gfarm_filesystem *fs,
 	struct gfarm_metadb_server *ms)
@@ -220,6 +200,7 @@ gfarm_filesystem_hash_enter(struct gfarm_filesystem *fs,
 	struct gfarm_hash_entry *entry;
 	struct gfarm_filesystem **fsp;
 	struct gfarm_filesystem_hash_id id;
+	static const char diag[] = "gfarm_filesystem_hash_enter";
 
 	id.hostname = gfarm_metadb_server_get_name(ms);
 	id.port = gfarm_metadb_server_get_port(ms);
@@ -230,7 +211,11 @@ gfarm_filesystem_hash_enter(struct gfarm_filesystem *fs,
 		    "%s", gfarm_error_string(GFARM_ERR_NO_MEMORY));
 		return (GFARM_ERR_NO_MEMORY);
 	}
-	assert(created);
+	if (!created) {
+		gflog_debug(GFARM_MSG_1004729,
+		    "%s: duplicate host: %s", diag, id.hostname);
+		return (GFARM_ERR_INVALID_ARGUMENT);
+	}
 	/* memory owner of hostname is gfarm_metadb_server */
 	fsp = gfarm_hash_entry_data(entry);
 	*fsp = fs;
@@ -251,19 +236,28 @@ gfarm_filesystem_hash_purge(struct gfarm_filesystem *fs,
 	(void)r;
 }
 
-int
+void
+gfarm_filesystem_set_default(struct gfarm_filesystem *fs)
+{
+	fs->flags |= GFARM_FILESYSTEM_FLAG_IS_DEFAULT;
+}
+
+static int
 gfarm_filesystem_is_default(struct gfarm_filesystem *fs)
 {
 	return ((fs->flags & GFARM_FILESYSTEM_FLAG_IS_DEFAULT) != 0);
 }
 
-struct gfarm_filesystem*
+struct gfarm_filesystem *
 gfarm_filesystem_get_default(void)
 {
 	struct gfarm_filesystem *fs = staticp->filesystems.next;
 
-	assert(gfarm_filesystem_is_default(fs));
-	return (fs);
+	for (; fs != &staticp->filesystems; fs = fs->next) {
+		if (gfarm_filesystem_is_default(fs))
+			return (fs);
+	}
+	return (NULL);
 }
 
 struct gfarm_filesystem*
@@ -318,8 +312,7 @@ gfarm_filesystem_set_metadb_server_list(struct gfarm_filesystem *fs,
 		ms = fs->servers[i];
 		if (gfarm_metadb_server_is_removed(ms)) {
 			gfarm_metadb_server_free(ms);
-			if (gfarm_metadb_server_is_memory_owned_by_fs(ms))
-				free(ms);
+			free(ms);
 		}
 	}
 	free(fs->servers);
@@ -354,18 +347,18 @@ gfarm_filesystem_add(const char *hostname, int port,
 	host = strdup(hostname);
 	if (host == NULL) {
 		e = GFARM_ERR_NO_MEMORY;
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003873,
 		    "%s", gfarm_error_string(e));
 		return (e);
 	}
 	if ((e = gfarm_metadb_server_new(&ms, host, port))
 	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003874,
 		    "%s", gfarm_error_string(e));
 		goto error;
 	}
 	if ((e = gfarm_filesystem_new(&fs)) != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003875,
 		    "%s", gfarm_error_string(e));
 		goto error;
 	}
@@ -373,7 +366,7 @@ gfarm_filesystem_add(const char *hostname, int port,
 	mss[0] = ms;
 	if ((e = gfarm_filesystem_set_metadb_server_list(fs, mss, 1))
 	    != GFARM_ERR_NO_ERROR) {
-		gflog_debug(GFARM_MSG_UNFIXED,
+		gflog_debug(GFARM_MSG_1003876,
 		    "%s", gfarm_error_string(e));
 		goto error;
 	}
