@@ -5,7 +5,7 @@
 
 <refentry id="gfdf.1">
 
-<refentryinfo><date>30 Dec 2010</date></refentryinfo>
+<refentryinfo><date>14 Mar 2019</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfdf</refentrytitle>
@@ -97,12 +97,34 @@
 </varlistentry>
 
 <varlistentry>
+<term><option>-R</option></term>
+<listitem>
+<para>
+読込専用のファイルシステムノードも実際の空き容量を表示します。
+本書 NOTES も参照してください。
+</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
 <term><option>-?</option></term>
 <listitem>
 <para>引数オプションを表示します。</para>
 </listitem>
 </varlistentry>
 </variablelist>
+</refsect1>
+
+<refsect1 id="notes"><title>NOTES</title>
+<para>
+<command moreinfo="none">gfhost</command> により、
+読込専用と指定されれると、
+Gfarmファイルシステム内部ではそれらのノードはディスクフルと扱われ、
+空き容量が 0 で表示されます。
+-R オプションを用いることにより、実際の空き容量を表示することができます。
+また、-a オプションによるファイルシステム全体の空き容量は、
+-R オプションをつけたときと同様に実際の空き容量が表示されます。
+</para>
 </refsect1>
 
 <refsect1 id="see-also"><title>SEE ALSO</title>

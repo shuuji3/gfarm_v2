@@ -3,14 +3,15 @@
 # XXX FIXME: runnig this script simultaneously is not safe
 
 . ./regress.conf
+GFNCOPY_TIMEOUT=60
 
 #####################################################################
 
-dir=/tmp/autoreplica-test.$$
+dir=$gftmp/autoreplica-test.$$
 file=${dir}/file.$$
 gfs_pio_test=`dirname $testbin`/gfs_pio_test/gfs_pio_test
-tmpfile=/tmp/.autoreplica-test.junk.$$
-hostgroupfile=/tmp/.hostgroup.$$
+tmpfile=$localtop/.autoreplica-test.junk.$$
+hostgroupfile=$localtop/.hostgroup.$$
 
 mod="over written"
 
@@ -43,7 +44,7 @@ cleanup() {
     gfncopy -r ${file} > /dev/null 2>&1
     gfrm -f ${file} > /dev/null 2>&1
     gfncopy -r ${dir} > /dev/null 2>&1
-    gfrmdir ${dir} > /dev/null 2>&1
+    gfrm -r ${gftmp} > /dev/null 2>&1
     for __i in ${hosts}; do
 	gfhostgroup -r ${__i} > /dev/null 2>&1
     done
@@ -69,7 +70,7 @@ onexit() {
 }
 
 setup() {
-    gfmkdir ${dir}
+    gfmkdir -p ${dir}
     ret=$?
     if [ ${ret} -ne 0 ]; then
 	return ${ret}
@@ -82,6 +83,13 @@ setup() {
     fi
 
     gfreg /etc/group ${file}
+    ret=$?
+    if [ ${ret} -ne 0 ]; then
+	return ${ret}
+    fi
+
+    # the mode of /etc/group may be 444
+    gfchmod 644 ${file}
     ret=$?
     if [ ${ret} -ne 0 ]; then
 	return ${ret}

@@ -61,6 +61,12 @@ gfarm_error_t gfarm_set_global_user_for_this_local_account(void);
 gfarm_error_t gfarm_initialize(int *, char ***);
 gfarm_error_t gfarm_terminate(void);
 gfarm_error_t gfarm_config_read(void);
+gfarm_error_t gfarm_auth_method_gsi_available(void);
+
+const char *gfarm_version(void);
+int gfarm_version_major(void);
+int gfarm_version_minor(void);
+int gfarm_version_teeny(void);
 
 /*
  * GFarm URL and pathname handling
@@ -156,7 +162,7 @@ size_t gfarm_humanize_signed_number(char *, size_t, long long, int);
 
 #ifndef GFARM_CONFIG_H
 /* HAVE_BYTESWAP_H, WORDS_BIGENDIAN, etc need <gfarm/gfarm_config.h> */
-#error missing <gfarm/gfarm_config.h>, to use <gfarm/gfarm_misc.h>, 
+#error missing <gfarm/gfarm_config.h>, to use <gfarm/gfarm_misc.h>,
 #endif
 
 #ifdef HAVE_BYTESWAP_H
@@ -216,3 +222,6 @@ size_t gfarm_humanize_signed_number(char *, size_t, long long, int);
 #define gfarm_stat_atime_nsec(st) ((st)->st_atime_nsec)
 #define gfarm_stat_ctime_nsec(st) ((st)->st_ctime_nsec)
 #endif /* __KERNEL__ */
+
+/* profile */
+gfarm_error_t gfarm_config_profile_value(const char *, char *, size_t *);

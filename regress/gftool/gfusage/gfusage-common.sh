@@ -2,6 +2,8 @@
 
 # XXX FIXME: runnig this script simultaneously is not safe
 
+GFPREP=$regress/bin/gfprep_for_test
+
 cleanup() {
     gfrm -rf $gftmp
 }
@@ -16,9 +18,10 @@ error() {
 
 setup() {
     gfmkdir $gftmp || error "gfmkdir"
-    gfncopy -r $gftmp > /dev/null 2>&1 # ignore
+    gfncopy -s 1 $gftmp > /dev/null 2>&1 # ignore
 
     FILE=$gftmp/file
+    GF_URL=gfarm://${FILE}
 
     gfreg $data/1byte $FILE || error "gfreg"
 
@@ -51,7 +54,7 @@ get_quota_group() {
 }
 
 get_quota_val() {
-    echo "$1" | egrep "^$2\s+:" | awk '{print $3}'
+    echo "$1" | egrep "^$2[[:space:]]+:" | awk '{print $3}'
 }
 
 get_usage_user() {

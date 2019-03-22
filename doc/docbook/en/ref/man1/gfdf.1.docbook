@@ -5,7 +5,7 @@
 
 <refentry id="gfdf.1">
 
-<refentryinfo><date>30 Dec 2010</date></refentryinfo>
+<refentryinfo><date>14 Mar 2019</date></refentryinfo>
 
 <refmeta>
 <refentrytitle>gfdf</refentrytitle>
@@ -102,12 +102,35 @@ of disk free space.
 </varlistentry>
 
 <varlistentry>
+<term><option>-R</option></term>
+<listitem>
+<para>
+Displays real disk spaces even if some Gfarm file system nodes are readonly.
+Please see also the following NOTES.
+</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
 <term><option>-?</option></term>
 <listitem>
 <para>Displays a list of command options.</para>
 </listitem>
 </varlistentry>
 </variablelist>
+</refsect1>
+
+<refsect1 id="notes"><title>NOTES</title>
+<para>
+Filesystem nodes may be changed to a read-only mode by the
+<command moreinfo="none">gfhost</command> command.  The read-only
+filesystem nodes are internally treated as disk full not to create a
+new file.  That is why <command moreinfo="none">gfdf</command> shows
+these read-only filesystem nodes have no available capacity.  With the
+-R option, <command moreinfo="none">gfdf</command> shows the real disk
+usage.  The -a option is not affected by this behavior, which shows
+the real disk usage always.
+</para>
 </refsect1>
 
 <refsect1 id="see-also"><title>SEE ALSO</title>

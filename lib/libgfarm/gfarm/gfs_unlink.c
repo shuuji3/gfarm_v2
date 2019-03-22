@@ -19,6 +19,7 @@
 
 struct gfarm_gfs_unlink_static {
 	double unlink_time;
+	unsigned long long unlink_count;
 };
 
 gfarm_error_t
@@ -31,6 +32,7 @@ gfarm_gfs_unlink_static_init(struct gfarm_context *ctxp)
 		return (GFARM_ERR_NO_MEMORY);
 
 	s->unlink_time = 0;
+	s->unlink_count = 0;
 
 	ctxp->gfs_unlink_static = s;
 	return (GFARM_ERR_NO_ERROR);
@@ -76,13 +78,31 @@ gfs_unlink(const char *path)
 
 	gfs_profile(gfarm_gettimerval(&t2));
 	gfs_profile(staticp->unlink_time += gfarm_timerval_sub(&t2, &t1));
+	gfs_profile(staticp->unlink_count++);
 
 	return (gfs_remove(path));
 }
 
+struct gfs_profile_list unlink_profile_items[] = {
+	{ "unlink_time", "gfs_unlink time  : %g sec", "%g", 'd',
+	  offsetof(struct gfarm_gfs_unlink_static, unlink_time) },
+	{ "unlink_count", "gfs_unlink count : %llu", "%llu", 'l',
+	  offsetof(struct gfarm_gfs_unlink_static, unlink_count) },
+};
+
 void
 gfs_unlink_display_timers(void)
 {
-	gflog_info(GFARM_MSG_1000157,
-	    "gfs_unlink      : %g sec", staticp->unlink_time);
+	int n = GFARM_ARRAY_LENGTH(unlink_profile_items);
+
+	gfs_profile_display_timers(n, unlink_profile_items, staticp);
+}
+
+gfarm_error_t
+gfs_unlink_profile_value(const char *name, char *value, size_t *sizep)
+{
+	int n = GFARM_ARRAY_LENGTH(unlink_profile_items);
+
+	return (gfs_profile_value(name, n, unlink_profile_items,
+		    staticp, value, sizep));
 }

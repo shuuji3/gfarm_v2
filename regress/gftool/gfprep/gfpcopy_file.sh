@@ -29,14 +29,14 @@ test_copy() {
     clean_test
     exit $exit_fail
   fi
-  if gfpcopy $OPT file:$lfile gfarm:$gf_dir1; then
+  if $GFPCOPY $OPT file:$lfile gfarm:$gf_dir1; then
     :
   else
     echo gfpcopy failed [local to gfarm]
     clean_test
     exit $exit_fail
   fi
-  if gfpcopy $OPT gfarm:$gfile file:$local_dir2; then
+  if $GFPCOPY $OPT gfarm:$gfile file:$local_dir2; then
     :
   else
     echo gfpcopy failed [gfarm to local]

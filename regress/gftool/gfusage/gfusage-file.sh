@@ -15,7 +15,7 @@ test_file() {
     echo "***** gfreg *****"
     gfreg $data/1byte $FILE || error "gfreg"
     echo "***** gfrep -N $ncopy *****"
-    gfrep -N $ncopy $FILE > /dev/null || error "gfrep -N $ncopy"
+    $GFPREP -N $ncopy $GF_URL > /dev/null || error "gfrep -N $ncopy"
 
 #    gfls -l $FILE
 #    gfwhere -la $FILE
@@ -41,7 +41,7 @@ test_file() {
 setup
 test_file 1
 
-n=`gfsched | wc -l`
+n=`gfsched -w | wc -l`
 [ $n -le 0 ] && error "no filesystem node"
 test_file $n
 

@@ -414,7 +414,7 @@ remove_replicas(struct file_info *fi, int ncopy, int nhost, char **host)
 				else if (e == GFARM_ERR_INSUFFICIENT_NUMBER_OF_FILE_REPLICAS) {
 					e_save = e;
 					break;
-				} else {
+				}else {
 					/* error is always overwritten */
 					e_save = e;
 					fprintf(stderr, "%s: %s\n",
@@ -502,8 +502,6 @@ pfor(struct action *act, int nfinfo, struct file_info **finfo,
 		return ("no destination node");
 	if (nsrc <= 0)
 		return ("no source node");
-	if (ndst < opt_nrep)
-		return ("not enough number of destination nodes");
 	if (nfinfo <= 0)
 		return (NULL); /* no file */
 	/* sort 'sinfo' in descending order wrt file size */

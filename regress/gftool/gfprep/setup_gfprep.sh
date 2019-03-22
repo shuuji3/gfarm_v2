@@ -5,6 +5,9 @@ local_dir2=$localtmp/dir2
 local_tmpfile1=$localtmp/tmpfile1
 local_tmpfile2=$localtmp/tmpfile2
 
+GFPREP=$regress/bin/gfprep_for_test
+GFPCOPY=$regress/bin/gfpcopy_for_test
+
 clean_test() {
   rm -rf $localtmp
   gfrm -rf $gftmp
@@ -25,7 +28,6 @@ set_ncopy() {
 setup_test() {
   if mkdir $localtmp &&
     gfmkdir $gftmp &&
-    set_ncopy 1 $gftmp &&  ### disable automatic replication
     gfmkdir $gf_dir1 &&
     gfmkdir $gf_dir1/dir &&
     gfreg $data/0byte $gf_dir1/dir/0byte &&
@@ -51,7 +53,8 @@ check_N() {
   if [ `awk '/Ncopy/{print $NF}' $local_tmpfile2` -eq $N ]; then
     :
   else
-    echo unexpected the number of replicas
+    echo "unexpected the number of replicas (not $N)"
+    gfwhere -al $P
     cat $local_tmpfile2
     clean_test
     exit $exit_fail
