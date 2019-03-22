@@ -1,0 +1,51 @@
+.\" ** You probably do not want to edit this file directly **
+.\" It was generated using the DocBook XSL Stylesheets (version 1.69.1).
+.\" Instead of manually editing it, you probably should edit the DocBook XML
+.\" source for it and then use the DocBook XSL Stylesheets to regenerate it.
+.TH "GFRM" "1" "25 Dec 2014" "Gfarm" "Gfarm"
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.SH "NAME"
+gfrm \- remove Gfarm files, directories, or file replicas
+.SH "SYNOPSIS"
+.HP 5
+\fBgfrm\fR [\-frn] [\-h\ \fIfilesystem\-node\fR] [\-D\ \fIdomain\-name\fR] \fIgfarm\-URL\fR...
+.SH "DESCRIPTION"
+.PP
+\fBgfrm\fR
+removes each specified file. It does not remove directories unless the
+\fB\-r\fR
+option is specified.
+.PP
+With the
+\fB\-h\fR
+or
+\fB\-D\fR
+option,
+\fBgfrm\fR
+removes file replicas on the specified filesystem node(s). A file replica cannot be removed when the number of replicas is less than gfarm.ncopy or gfarm.replicainfo extended attribute.
+.SH "OPTIONS"
+.TP
+\fB\-f\fR
+Ignores no such file or directory error.
+.TP
+\fB\-n\fR
+Prints file names to be deleted, but does not delete them.
+.TP
+\fB\-r\fR
+Removes all entries under the directories specified by the command\-line argument recursively.
+.TP
+\fB\-h\fR \fIfilesystem\-node\fR
+Specifies a filesystem node from which file replicas will be removed.
+.TP
+\fB\-D\fR \fIdomain\-name\fR
+Specifies a domain name of filesystem nodes on which file replicas will be removed.
+.TP
+\fB\-?\fR
+Displays a list of command options.
+.SH "SEE ALSO"
+.PP
+\fBgfncopy\fR(1),
+\fBgfarm_attr\fR(5)

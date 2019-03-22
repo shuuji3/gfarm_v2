@@ -1,0 +1,69 @@
+'\" t
+.\"     Title: gfstat
+.\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
+.\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
+.\"      Date: 12 Nov 2015
+.\"    Manual: Gfarm
+.\"    Source: Gfarm
+.\"  Language: English
+.\"
+.TH "GFSTAT" "1" "12 Nov 2015" "Gfarm" "Gfarm"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+gfstat \- display file or directory status
+.SH "SYNOPSIS"
+.HP \w'\fBgfstat\fR\ 'u
+\fBgfstat\fR [\fIoptions\fR] \fIpath\fR...
+.SH "DESCRIPTION"
+.PP
+\fBgfstat\fR
+displays information about the specified files or directories in the Gfarm filesystem\&.
+.SH "OPTIONS"
+.PP
+\fB\-M\fR
+.RS 4
+displays metadata server information as well\&.
+.RE
+.PP
+\fB\-c\fR
+.RS 4
+displays only the number of file replicas\&.
+.RE
+.PP
+\fB\-l\fR
+.RS 4
+does not follow symbolic links, but show the link information itself\&.
+.RE
+.PP
+\fB\-r\fR
+.RS 4
+shows file size and time of the file data instead of the metadata\&. This option is useful to know the file size during the file creation\&.
+.RE
+.PP
+\fB\-h\fR \fIhost\fR
+.RS 4
+specifies the location of the file replica\&. This option is only effective with the \-r option\&.
+.RE
+.PP
+\fB\-?\fR
+.RS 4
+displays a list of command options\&.
+.RE

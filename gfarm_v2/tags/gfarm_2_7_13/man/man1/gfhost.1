@@ -1,0 +1,220 @@
+'\" t
+.\"     Title: gfhost
+.\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 14 Mar 2019
+.\"    Manual: Gfarm
+.\"    Source: Gfarm
+.\"  Language: English
+.\"
+.TH "GFHOST" "1" "14 Mar 2019" "Gfarm" "Gfarm"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+gfhost \- Gfarm filesystem node management command
+.SH "SYNOPSIS"
+.HP \w'\fBgfhost\fR\ 'u
+\fBgfhost\fR [\-H | \-l | \-M] [\-iLprUv] [\-P\ \fIpath\fR] [\-a\ \fIarchitecture\fR] [\-D\ \fIdomain\-name\fR] [\-j\ \fIconcurrency\fR] [\fIhostname\fR...]
+.HP \w'\fBgfhost\fR\ 'u
+\fBgfhost\fR \-c [\-P\ \fIpath\fR] \-a\ \fIarchitecture\fR \-p\ \fIport\-number\fR [\-n\ \fInumber\-of\-CPUs\fR] [\-f\ \fIflags\fR] \fIhostname\fR
+.HP \w'\fBgfhost\fR\ 'u
+\fBgfhost\fR \-m [\-P\ \fIpath\fR] [\-a\ \fIarchitecture\fR] [\-p\ \fIport\-number\fR] [\-n\ \fInumber\-of\-CPUs\fR] [\-f\ \fIflags\fR] \fIhostname\fR
+.HP \w'\fBgfhost\fR\ 'u
+\fBgfhost\fR \-d [\-P\ \fIpath\fR] \fIhostname\fR...
+.HP \w'\fBgfhost\fR\ 'u
+\fBgfhost\fR \-R [\-P\ \fIpath\fR]
+.SH "DESCRIPTION"
+.PP
+\fBgfhost\fR
+displays the information of filesystem nodes\&. It also registers a new filesystem node, and modifies and deletes the registered information\&.
+.PP
+The function of
+\fBgfhost\fR
+is determined by the option, \-c, \-m, \-d, \-H, \-l, \-M, and \-R\&. These functions are mutually exclusive, and only one option among them can be specified\&. If none of them is specified, filesystem nodes will be listed, which is the default function of
+\fBgfhost\fR\&.
+.SH "FUNCTIONS"
+.PP
+The Gfarm filesystem manages filesystem nodes at the gfmd metadata server\&. The \-c option registers a new filesystem node\&. The \-m option modifies the registered information\&. The \-d option removes an entry of the filesystem node and related file metadata\&. The \-R option restores the dumped information of filesystem nodes, which is obtained by the \-M option\&. These operations require gfarmadm privilege\&.
+.PP
+The \-H, \-l, \-M, or no functional option is specified,
+\fBgfhost\fR
+displays filesystem node information\&. The \-M lists the registered information of filesystem nodes at the gfmd metadata server\&. Other options access
+\fBgfsd\fR
+filesystem daemon to obtain more information and also to check the accessibility to a filesystem node\&. The \-i, \-j, \-U and \-v options are available\&.
+.PP
+When hostnames of filesystem nodes are not specified, all registered hosts will be displayed, but you can limit the type of hosts displayed by the \-a and/or \-D option\&. By default, hosts are displayed in alphabetical order, but you can change this by the \-L, \-p, or \-r option, although the \-L option is effective with \-H or \-l option\&.
+.PP
+The following is a list of the functions of the
+\fBgfhost\fR
+command\&. You shouldn\*(Aqt specify more than one function at a time\&.
+.PP
+<none>
+.RS 4
+When no function is specified,
+\fBgfhost\fR
+accesses to
+\fBgfsd\fR, and displays the host names which are currently available\&. They are displayed in alphabetical order, by default\&.
+.RE
+.PP
+\fB\-c\fR
+.RS 4
+Creates a host entry of a filesystem node that is specified by the argument\&. The \-a option is mandatory, which specifies the architecture of the filesystem node\&. The \-p option is mandatory, which specifies the port number of
+\fBgfsd\fR
+on the filesystem node\&. The \-n option is optional, which specifies the number of CPUs of the filesystem node\&. When it is omitted, 1 CPU is assumed\&. The \-f option is optional, which specifies the flag of the file system node\&. When it is omitted, 0 is assumed\&.
+.RE
+.PP
+\fB\-d\fR
+.RS 4
+Deletes a host entry\&. All file metadata is also asynchronously updated to delete invalid replica entries for the removed filesystem node, and to create file replicas if required, automatically\&.
+.RE
+.PP
+\fB\-l\fR
+.RS 4
+Displays in a long format, which consists of the CPU load average, authentication method, architecture, the number of CPUs, hostname, port number, flags, and the IP address\&.
+.sp
+If the host cannot be accessed due to a machine down or a network problem, etc\&., x\&.xx/x\&.xx/x\&.xx will be displayed in the CPU load average field\&. If the host is up, but
+\fBgfsd\fR
+on the host cannot be accessed, \-\&.\-\-/\-\&.\-\-/\-\&.\-\- will be displayed\&.
+.sp
+In the field of the authentication method, `G\*(Aq means the GSI authentication and the encryption, `g\*(Aq means only authentication is performed by GSI and actual communication is unprotected plain data (gsi_auth), `s\*(Aq means the gfarm sharedsecret authentication, `x\*(Aq means that the authentication fails, and `\-\*(Aq means that the authentication wasn\*(Aqt actually tried\&. With the \-U option, there is no authentication method field\&.
+.sp
+In the field of the flags, refer to the \-f option\&.
+.sp
+Hostnames are displayed in alphabetical order, by default\&.
+.RE
+.PP
+\fB\-H\fR
+.RS 4
+Displays filesystem nodes with the CPU load average and the authentication method\&. This function also displays the IP address used to access to
+\fBgfsd\fR
+in parentheses just after the hostname\&.
+.sp
+For the field of the CPU load average and the authentication method, refer to the \-l option\&.
+.sp
+Hostnames are displayed in alphabetical order, by default\&.
+.RE
+.PP
+\fB\-M\fR
+.RS 4
+Dumps the metadata information of the registered filesystem nodes\&. Hostnames are displayed in alphabetical order, by default\&.
+.RE
+.PP
+\fB\-m\fR
+.RS 4
+Modifies the registered metadata information of the filesystem node\&. The \-a, \-p, \-n, and/or \-f option modify the current value of each option\&.
+.RE
+.PP
+\fB\-R\fR
+.RS 4
+Restores the metadata information read from standard input\&. The format of the metadata is same as the format that the \-M function displays\&.
+.RE
+.PP
+\fB\-?\fR
+.RS 4
+Prints usage\&.
+.RE
+.SH "OPTIONS"
+.PP
+\fB\-a\fR \fIarchitecture\fR
+.RS 4
+This option specifies the CPU architecture using a format like sparc\-sun\-solaris8 or i386\-redhat8\&.0\-linux, etc\&. If this option is used with the \-c or \-m function, this means the architecture used to add/modify the metadata information\&. If this option is used with \-H, \-l, \-M function or default function, this limits hosts to the specified architecture\&.
+.RE
+.PP
+\fB\-D\fR \fIdomain\-name\fR
+.RS 4
+This option is used with the \-H, \-l, \-M function or the default function to limit hosts to the specified domain\&.
+.RE
+.PP
+\fB\-i\fR
+.RS 4
+There is an "address_use" directive in %%SYSCONFDIR%%/gfarm2\&.conf and $HOME/\&.gfarm2rc to give priorities of network addresses for gfarm access\&. This directive works with the
+\fBgfhost\fR
+command, but will be ignored, if you specified the \-i option with
+\fBgfhost\fR\&.
+.RE
+.PP
+\fB\-j\fR \fIconcurrency\fR
+.RS 4
+This option specifies the concurrency used for access to
+\fBgfsd\fR\&. The default value is 10\&.
+.RE
+.PP
+\fB\-L\fR
+.RS 4
+Sorts by load average order\&. This option is effective only with the \-H and \-l functions
+\&.
+.RE
+.PP
+\fB\-n\fR \fInumber\-of\-CPUs\fR
+.RS 4
+This option is used with the \-c or \-m function, and specifies the number of CPUs of the host\&.
+.RE
+.PP
+\fB\-p\fR \fIport\-number\fR
+.RS 4
+This option is used with \-c or \-m function, and specifies the port number of
+\fBgfsd\fR
+on the host\&.
+.RE
+.PP
+\fB\-f\fR \fIflags\fR
+.RS 4
+This option is used with \-c or \-m function, and specifies the flags of
+\fBgfsd\fR
+on the host\&. Values of flags are constructed by a bitwise\-or of the following list\&.
+.PP
+\fB1\fR
+.RS 4
+readonly
+.RE
+.RE
+.PP
+\fB\-P\fR \fIpath\fR
+.RS 4
+This option specifies a pathname or a Gfarm URL to identify a metadata server which will be accessed by this command\&. If not specified, "/" is used as the default value\&.
+.RE
+.PP
+\fB\-r\fR
+.RS 4
+Reverses the order of sort\&.
+.RE
+.PP
+\fB\-u\fR
+.RS 4
+Plain order\&. This option stops sorting on the \-H, \-l, \-M function or the default function\&. With the \-M function, command argument order (if any), or the order that the metadata server answers is used for display\&. With the \-H, \-l function or the default function, the result is displayed in the order that each
+\fBgfsd\fR
+answers\&.
+.RE
+.PP
+\fB\-U\fR
+.RS 4
+Suppresses authentication attempts by TCP, and only queries load average by UDP\&. This option only makes sense if you specified the \-H or \-l function, or if you didn\*(Aqt specify any function\&. This option makes the gfhost command run faster\&. If the \-H or \-l function is specified, this option makes the authentication method field disappear\&.
+.RE
+.PP
+\fB\-v\fR
+.RS 4
+The \-H, \-l function and the default function don\*(Aqt produce error reports on
+\fBgfsd\fR
+accesses; these error reports will be produced by this option\&.
+.RE
+.SH "SEE ALSO"
+.PP
+\fBgfarm2.conf\fR(5),
+\fBgfsd\fR(8)

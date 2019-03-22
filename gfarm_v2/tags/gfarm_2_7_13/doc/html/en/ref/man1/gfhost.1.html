@@ -1,0 +1,271 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>gfhost</title>
+<meta name="generator" content="DocBook XSL Stylesheets V1.78.1">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry">
+<a name="gfhost.1"></a><div class="titlepage"></div>
+<div class="refnamediv">
+<a name="name"></a><h2>Name</h2>
+<p>gfhost — Gfarm filesystem node management command</p>
+</div>
+<div class="refsynopsisdiv">
+<a name="synopsis"></a><h2>Synopsis</h2>
+<div class="cmdsynopsis"><p><code class="command">gfhost</code>  [ -H  |   -l  |   -M ] [-iLprUv] [-P <em class="replaceable"><code>path</code></em>] [-a <em class="replaceable"><code>architecture</code></em>] [-D <em class="replaceable"><code>domain-name</code></em>] [-j <em class="replaceable"><code>concurrency</code></em>] [<em class="replaceable"><code>hostname</code></em>...]</p></div>
+<div class="cmdsynopsis"><p><code class="command">gfhost</code>   -c  [-P <em class="replaceable"><code>path</code></em>]  -a <em class="replaceable"><code>architecture</code></em>   -p <em class="replaceable"><code>port-number</code></em>  [-n <em class="replaceable"><code>number-of-CPUs</code></em>] [-f <em class="replaceable"><code>flags</code></em>]  <em class="replaceable"><code>hostname</code></em> </p></div>
+<div class="cmdsynopsis"><p><code class="command">gfhost</code>   -m  [-P <em class="replaceable"><code>path</code></em>] [-a <em class="replaceable"><code>architecture</code></em>] [-p <em class="replaceable"><code>port-number</code></em>] [-n <em class="replaceable"><code>number-of-CPUs</code></em>] [-f <em class="replaceable"><code>flags</code></em>]  <em class="replaceable"><code>hostname</code></em> </p></div>
+<div class="cmdsynopsis"><p><code class="command">gfhost</code>   -d  [-P <em class="replaceable"><code>path</code></em>]  <em class="replaceable"><code>hostname</code></em>... </p></div>
+<div class="cmdsynopsis"><p><code class="command">gfhost</code>   -R  [-P <em class="replaceable"><code>path</code></em>]</p></div>
+</div>
+<div class="refsect1">
+<a name="description"></a><h2>DESCRIPTION</h2>
+<p><span class="command"><strong>gfhost</strong></span> displays the
+information of filesystem nodes.  It also registers a new filesystem
+node, and modifies and deletes the registered information.
+</p>
+<p>
+The function of <span class="command"><strong>gfhost</strong></span> is
+determined by the option, -c, -m, -d, -H, -l, -M, and -R.
+These functions are mutually exclusive, and only one option
+among them can be specified.
+If none of them is specified, filesystem nodes will be listed, which
+is the default function of <span class="command"><strong>gfhost</strong></span>.
+</p>
+</div>
+<div class="refsect1">
+<a name="functions"></a><h2>FUNCTIONS</h2>
+<p>
+  The Gfarm filesystem manages filesystem nodes at the gfmd metadata
+  server.  The -c option registers a new filesystem node.  The -m
+  option modifies the registered information.  The -d option removes
+  an entry of the filesystem node and related file metadata.  The -R
+  option restores the dumped information of filesystem nodes, which is
+  obtained by the -M option.  These operations require gfarmadm
+  privilege.
+</p>
+<p>
+  The -H, -l, -M, or no functional option is specified,
+  <span class="command"><strong>gfhost</strong></span> displays filesystem node
+  information.
+  The -M lists the registered information of filesystem nodes at the
+  gfmd metadata server.  Other options
+  access <span class="command"><strong>gfsd</strong></span> filesystem daemon to
+  obtain more information and also to check the accessibility to a
+  filesystem node.  The -i, -j, -U and -v options are available.
+</p>
+<p>
+  When hostnames of filesystem nodes are not specified,
+  all registered hosts will be
+  displayed, but you can limit the type of hosts displayed 
+  by the -a and/or -D option.
+  By default, hosts are displayed in alphabetical order, but you can
+  change this by the -L, -p, or -r option, although the -L option is
+  effective with -H or -l option.
+</p>
+<p>
+  The following is a list of the functions of the <span class="command"><strong>gfhost</strong></span>
+  command. You shouldn't specify more than one function at a time.
+</p>
+<div class="variablelist"><dl class="variablelist">
+<dt><span class="term">&lt;none&gt;</span></dt>
+<dd><p>
+	When no function is specified,
+	<span class="command"><strong>gfhost</strong></span> accesses to <span class="command"><strong>gfsd</strong></span>,
+	and displays the host names which are currently available.
+	They are displayed in alphabetical order, by default.
+      </p></dd>
+<dt><span class="term"><code class="option">-c</code></span></dt>
+<dd><p>
+	Creates a host entry of a filesystem node that is specified
+	by the argument.
+	The -a option is mandatory, which specifies
+	the architecture of the filesystem node.
+	The -p option is mandatory, which specifies
+	the port number of <span class="command"><strong>gfsd</strong></span> on
+	the filesystem node.
+	The -n option is optional, which specifies the number of CPUs
+	of the filesystem node.  When it is omitted, 1 CPU is
+	assumed.
+	The -f option is optional, which specifies the flag of the
+	file system node.  When it is omitted, 0 is assumed.
+      </p></dd>
+<dt><span class="term"><code class="option">-d</code></span></dt>
+<dd><p>
+	Deletes a host entry.  All file metadata is also
+	asynchronously updated to delete invalid replica entries for
+	the removed filesystem node, and to create file replicas if
+	required, automatically.
+      </p></dd>
+<dt><span class="term"><code class="option">-l</code></span></dt>
+<dd>
+<p>
+	Displays in a long format, which consists of the CPU load
+	average, authentication method, architecture, the number of
+	CPUs, hostname, port number, flags, and the IP address.
+      </p>
+<p>
+	If the host cannot be accessed due to a machine down or a
+	network problem, etc., x.xx/x.xx/x.xx will be displayed in
+	the CPU load average field.
+	If the host is up, but <span class="command"><strong>gfsd</strong></span> on the host
+	cannot be accessed, -.--/-.--/-.-- will be displayed.
+      </p>
+<p>
+	In the field of the authentication method,
+	`G' means the GSI authentication and the encryption,
+	`g' means only authentication is performed by GSI and
+	actual communication is unprotected plain data (gsi_auth),
+	`s' means the gfarm sharedsecret authentication,
+	`x' means that the authentication fails,
+	and `-' means that the authentication wasn't actually tried.
+	With the -U option, there is no authentication method field.
+      </p>
+<p>
+	In the field of the flags, refer to the -f option.
+      </p>
+<p>
+	Hostnames are displayed in alphabetical order, by default.
+      </p>
+</dd>
+<dt><span class="term"><code class="option">-H</code></span></dt>
+<dd>
+<p>
+	Displays filesystem nodes with the CPU load average and the
+	authentication method.
+	This function also displays the IP address used to
+	access to <span class="command"><strong>gfsd</strong></span> in parentheses just after the hostname.
+      </p>
+<p>
+	For the field of the CPU load average and the authentication
+	method, refer to the -l option.
+      </p>
+<p>
+	Hostnames are displayed in alphabetical order, by default.
+      </p>
+</dd>
+<dt><span class="term"><code class="option">-M</code></span></dt>
+<dd><p>
+	Dumps the metadata information of the registered filesystem
+	nodes.
+	Hostnames are displayed in alphabetical order, by default.
+      </p></dd>
+<dt><span class="term"><code class="option">-m</code></span></dt>
+<dd><p>
+	Modifies the registered metadata information of the filesystem
+	node.
+	The -a, -p, -n, and/or -f option modify the current value
+	of each option.
+      </p></dd>
+<dt><span class="term"><code class="option">-R</code></span></dt>
+<dd><p>
+	Restores the metadata information read from standard input.
+	The format of the metadata is same as the format
+	that the -M function displays.
+      </p></dd>
+<dt><span class="term"><code class="option">-?</code></span></dt>
+<dd><p>Prints usage.</p></dd>
+</dl></div>
+</div>
+<div class="refsect1">
+<a name="options"></a><h2>OPTIONS</h2>
+<div class="variablelist"><dl class="variablelist">
+<dt><span class="term"><code class="option">-a</code> <em class="parameter"><code>architecture</code></em></span></dt>
+<dd><p>
+	This option specifies the CPU architecture using a format like
+	sparc-sun-solaris8 or i386-redhat8.0-linux, etc.
+	If this option is used with the -c or -m function, this means
+	the architecture used to add/modify the metadata information.
+	If this option is used with -H, -l, -M function or default function,
+	this limits hosts to the specified architecture.
+      </p></dd>
+<dt><span class="term"><code class="option">-D</code> <em class="parameter"><code>domain-name</code></em></span></dt>
+<dd><p>
+	This option is used with the -H, -l, -M function or the default
+	function to limit hosts to the specified domain.
+      </p></dd>
+<dt><span class="term"><code class="option">-i</code></span></dt>
+<dd><p>
+	There is an "address_use" directive in %%SYSCONFDIR%%/gfarm2.conf and
+	$HOME/.gfarm2rc to give priorities of network addresses
+	for gfarm access.
+	This directive works with the <span class="command"><strong>gfhost</strong></span> command,
+	but will be ignored, if you specified the -i option with
+	<span class="command"><strong>gfhost</strong></span>.
+      </p></dd>
+<dt><span class="term"><code class="option">-j</code> <em class="parameter"><code>concurrency</code></em></span></dt>
+<dd><p>
+	This option specifies the concurrency used for access to
+	<span class="command"><strong>gfsd</strong></span>.
+	The default value is 10.
+      </p></dd>
+<dt><span class="term"><code class="option">-L</code></span></dt>
+<dd><p>
+	Sorts by load average order. This option is effective only with the
+	-H and -l functions.
+      </p></dd>
+<dt><span class="term"><code class="option">-n</code> <em class="parameter"><code>number-of-CPUs</code></em></span></dt>
+<dd><p>
+	This option is used with the -c or -m function, and specifies the
+	number of CPUs of the host.
+      </p></dd>
+<dt><span class="term"><code class="option">-p</code> <em class="parameter"><code>port-number</code></em></span></dt>
+<dd><p>
+	This option is used with -c or -m function, and specifies
+	the port number of <span class="command"><strong>gfsd</strong></span> on the host.
+      </p></dd>
+<dt><span class="term"><code class="option">-f</code> <em class="parameter"><code>flags</code></em></span></dt>
+<dd><p>
+	This option is used with -c or -m function, and specifies
+	the flags of <span class="command"><strong>gfsd</strong></span> on the host.
+	Values of flags are constructed by a bitwise-or of the
+	following list.
+      </p></dd>
+<dt><span class="term"><code class="option">-P</code> <em class="parameter"><code>path</code></em></span></dt>
+<dd><p>
+	This option specifies a pathname or a Gfarm URL to identify
+	a metadata server which will be accessed by this command.
+	If not specified, "/" is used as the default value.
+      </p></dd>
+<dt><span class="term"><code class="option">-r</code></span></dt>
+<dd><p>
+	Reverses the order of sort.
+      </p></dd>
+<dt><span class="term"><code class="option">-u</code></span></dt>
+<dd><p>
+	Plain order. This option stops sorting on the -H, -l, -M function
+	or the default function.
+
+	With the -M function, command argument order (if any), or
+	the order that the metadata server answers is used for display.
+
+	With the -H, -l function or the default function, the result
+	is displayed in the order that each <span class="command"><strong>gfsd</strong></span> answers.
+      </p></dd>
+<dt><span class="term"><code class="option">-U</code></span></dt>
+<dd><p>
+	Suppresses authentication attempts by TCP, and only queries
+	load average by UDP.
+	This option only makes sense if you specified the -H or -l function,
+	or if you didn't specify any function. This option
+	makes the gfhost command run faster.
+	If the -H or -l function is specified, this option makes the 
+	authentication method field disappear.
+      </p></dd>
+<dt><span class="term"><code class="option">-v</code></span></dt>
+<dd><p>
+	The -H, -l function and the default function don't produce error
+	reports on <span class="command"><strong>gfsd</strong></span> accesses;
+	these error reports will be produced by this option.
+      </p></dd>
+</dl></div>
+</div>
+<div class="refsect1">
+<a name="see-also"></a><h2>SEE ALSO</h2>
+<p>
+  <span class="citerefentry"><span class="refentrytitle">gfarm2.conf</span>(5)</span>,
+  <span class="citerefentry"><span class="refentrytitle">gfsd</span>(8)</span>
+</p>
+</div>
+</div></body>
+</html>
