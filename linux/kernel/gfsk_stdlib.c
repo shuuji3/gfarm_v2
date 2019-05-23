@@ -44,9 +44,9 @@ fopen(const char *path, const char *mode)
 	int	i, err = -EINVAL;
 	FILE	*fp = NULL;
 	if (!path) {
-		gflog_error(GFARM_MSG_UNFIXED, "no path");
+		gflog_error(GFARM_MSG_1004985, "no path");
 	} else if (*mode != 'r') {
-		gflog_error(GFARM_MSG_UNFIXED,
+		gflog_error(GFARM_MSG_1004986,
 			"support only read mode but '%s'", mode);
 	} else {
 		for (i = 0; i < GFSK_FBUF_MAX; i++) {
@@ -163,6 +163,36 @@ strtol(const char *nptr, char **endptr, int base)
 		resl = res * sign;
 
 	return (resl);
+}
+unsigned long long
+strtoull(const char *nptr, char **endptr, int base)
+{
+	unsigned long long res;
+	int	ret;
+
+	if (endptr)
+		*endptr = (char *)nptr;
+	if ((ret = strict_strtoull(nptr, base, &res))) {
+		errno = -ret;
+		res = ULONG_MAX;
+	} else if (endptr) {
+		if (base == 16 && *nptr == '0'
+		&& (*(nptr+1) == 'x' || *(nptr+1) == 'X'))
+			nptr += 2;
+		while (isxdigit(*nptr))
+			nptr++;
+		*endptr = (char *)nptr;
+	}
+	return (res);
+}
+
+long long
+strtoll(const char *nptr, char **endptr, int base)
+{
+	if (*nptr == '-')
+		return (-strtoull(nptr + 1, endptr, base));
+	else
+		return (strtoull(nptr, endptr, base));
 }
 void
 swab(const void *from, void *to, ssize_t n)

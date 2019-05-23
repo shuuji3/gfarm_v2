@@ -22,16 +22,36 @@
 #include "group.h"
 #include "mdhost.h"
 #include "inode.h"
+#include "file_copy.h"
 #include "dir.h"
+#define USE_EVENT_WAITER
+#include "gfmd.h"
 #include "db_journal_test.h"
 #include "db_journal_apply.h"
 
 /* XXX FIXME - dummy definitions to link successfully without gfmd.o */
+void
+event_waiter_list_init(struct event_waiter_list *list)
+{
+	abort();
+}
 struct thread_pool *sync_protocol_get_thrpool(void) { return NULL; }
-int protocol_service(struct peer *peer, gfp_xdr_xid_t xid, size_t *sizep)
-{ return 0; }
-void resuming_enqueue(void *entry) {}
-void gfmd_terminate(void) {}
+gfarm_error_t
+event_waiter_alloc(struct peer *peer,
+	gfarm_error_t (*action)(struct peer *, void *, int *, gfarm_error_t),
+	void *arg, struct event_waiter_list *list)
+{
+	return (GFARM_ERR_NO_MEMORY);
+}
+gfarm_error_t
+event_waiter_with_timeout_alloc(struct peer *peer, int timeout,
+	gfarm_error_t (*action)(struct peer *, void *, int *, gfarm_error_t),
+	void *arg, struct event_waiter_list *list)
+{
+	return (GFARM_ERR_NO_MEMORY);
+}
+void event_waiters_signal(struct event_waiter_list *list, gfarm_error_t e) {}
+void gfmd_terminate(const char *diag) {}
 int gfmd_port;
 
 static char *program_name = "db_journal_test";
@@ -273,6 +293,7 @@ t_write_cyclic(void)
 		&self_jf, GFARM_JOURNAL_RDWR));
 	reader = journal_file_main_reader(self_jf);
 	writer = journal_file_writer(self_jf);
+	(void)writer; /* shutup gcc warning - set but not used */
 	setup_write();
 	for (i = 0; i < 3; ++i) {
 		ui = t_new_user_info(
@@ -673,6 +694,7 @@ t_write_add_op(void *arg)
 
 	setup_write();
 	writer = journal_file_writer(self_jf);
+	(void)writer; /* shutup gcc warning - set but not used */
 	for (i = 0; i < GFARM_ARRAY_LENGTH(names); ++i) {
 		ui = t_new_user_info(
 		    names[i].username, names[i].realname);
@@ -749,7 +771,7 @@ t_write_blocked(void)
 	 * Note that the writer now starts writing more data.
 	 *
 	 *     |user1|user2|user3|  |
-	 *                 r     
+	 *                 r
 	 */
 	TEST_ASSERT_I("t_write_blocked_num_rec_read",
 	    2, t_write_blocked_num_rec_read);
@@ -3021,7 +3043,7 @@ t_apply_xattr_add_cached(void)
 {
 	struct inode *i;
 	struct db_xattr_arg m;
-	const char *attrname = "gfarm.ncopy";
+	const char *attrname = GFARM_EA_NCOPY;
 	const char *value = "2";
 	void *value1;
 	size_t value_len;
@@ -3075,7 +3097,7 @@ t_apply_xattr_modify_cached(void)
 {
 	struct inode *i;
 	struct db_xattr_arg m;
-	const char *attrname = "gfarm.ncopy";
+	const char *attrname = GFARM_EA_NCOPY;
 	const char *value = "3";
 	void *value1;
 	size_t value_len;
@@ -3125,7 +3147,7 @@ t_apply_xattr_remove_cached(void)
 {
 	struct inode *i;
 	struct db_xattr_arg m;
-	const char *attrname = "gfarm.ncopy";
+	const char *attrname = GFARM_EA_NCOPY;
 	void *value;
 	size_t value_len;
 
@@ -3151,7 +3173,7 @@ t_apply_xattr_removeall(void)
 	struct inode *i;
 	struct db_xattr_arg m;
 	const char *attrname1 = "attrname";
-	const char *attrname2 = "gfarm.ncopy";
+	const char *attrname2 = GFARM_EA_NCOPY;
 	const char *value1 = "value";
 	const char *value2 = "2";
 	void *value;
@@ -3555,6 +3577,9 @@ t_apply(void)
 	char msg[BUFSIZ];
 	int i;
 
+	giant_init();
+	config_var_init();
+
 	unlink_test_file(filepath);
 	TEST_ASSERT_NOERR("journal_file_open",
 	    journal_file_open(filepath, TEST_FILE_MAX_SIZE, 0,
@@ -3605,13 +3630,20 @@ t_apply(void)
 int
 main(int argc, char **argv)
 {
+	gfarm_error_t e;
 	int c, op = 0;
 
 	/* XXX: settings in gfmd.conf doesn't work in this case */
 	char *config  = getenv("GFARM_CONFIG_FILE");
 
 	debug_mode = 1;
-	gfarm_server_initialize(config, &argc, &argv);
+	e = gfarm_server_initialize(config, &argc, &argv);
+	if (e != GFARM_ERR_NO_ERROR) {
+		fprintf(stderr, "%s: gfarm_server_initialize: %s\n",
+		    argv[0], gfarm_error_string(e));
+		fprintf(stderr, "%s: aborting\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
 	gflog_set_priority_level(LOG_DEBUG);
 	gflog_set_message_verbose(99);
 

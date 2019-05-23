@@ -10,20 +10,28 @@
 #include <libgen.h>
 #include <limits.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <errno.h>
 #include <assert.h>
 #include <ctype.h>
 
 #include <gfarm/gfarm.h>
 
+#include "gfutil.h"
+#include "hash.h"
+
 #include "gfarm_foreach.h"
 #include "gfarm_path.h"
+#include "fsngroup_info.h"
+#include "gfm_proto.h"
 #include "gfm_client.h"
 #include "lookup.h"
 #include "metadb_server.h"
-#include "repattr.h"
+#include "gfs_replica_fix.h"
 
 #define ISBLANK(c)	((c) == ' ' || (c) == '\t')
+
+#define SLEEP_TIME	1
 
 static char *program_name = "gfncopy";
 
@@ -171,7 +179,7 @@ gfarm2fs_realurl(const char *path, char **url_p, char **root_url_p)
 
 	metadb_len = strlen(metadb);
 	port_len = port_size(port);
-	/* gfarm://host:port/*/
+	/* gfarm://host:port/ */
 	root_url_len = 8 + metadb_len + 1 + port_len + 1;
 	GFARM_MALLOC_ARRAY(root_url, root_url_len);
 	if (root_url == NULL) {
@@ -249,9 +257,6 @@ get_xattr(const char *url, char *key, char **value_p)
 	return (e);
 }
 
-#define XATTR_NCOPY	"gfarm.ncopy"
-#define XATTR_REPATTR	GFARM_REPATTR_NAME
-
 static gfarm_error_t
 get_replica_spec(
 	const char *url, const char *root_url, int *ncopy_p, char **repattr_p)
@@ -270,7 +275,7 @@ get_replica_spec(
 		else
 			e_repattr = GFARM_ERR_NO_SUCH_OBJECT;
 	} else {
-		e_repattr = get_xattr(root_url, XATTR_REPATTR, &repattr);
+		e_repattr = get_xattr(root_url, GFARM_EA_REPATTR, &repattr);
 		if (e_repattr == GFARM_ERR_NO_ERROR ||
 		    e_repattr == GFARM_ERR_NO_SUCH_OBJECT) {
 			support_repattr = 1;
@@ -302,7 +307,7 @@ get_replica_spec(
 
 		if (strcmp(tmpurl, root_url) == 0)
 			is_root = 1;
-		e_ncopy = get_xattr(tmpurl, XATTR_NCOPY, &ncopy_str);
+		e_ncopy = get_xattr(tmpurl, GFARM_EA_NCOPY, &ncopy_str);
 		if (e_ncopy == GFARM_ERR_NO_ERROR) {
 			ncopy = atoi(ncopy_str);
 			free(ncopy_str);
@@ -313,7 +318,8 @@ get_replica_spec(
 			return (e_ncopy);
 		}
 		if (support_repattr) {
-			e_repattr = get_xattr(tmpurl, XATTR_REPATTR, &repattr);
+			e_repattr =
+			    get_xattr(tmpurl, GFARM_EA_REPATTR, &repattr);
 			if (e_repattr == GFARM_ERR_NO_ERROR) {
 				found = 1;
 			} else if (e_repattr != GFARM_ERR_NO_SUCH_OBJECT) {
@@ -348,29 +354,6 @@ get_replica_spec(
 	return (found ? GFARM_ERR_NO_ERROR : GFARM_ERR_NO_SUCH_OBJECT);
 }
 
-static int
-max_ncopy_repattr(int ncopy, const char *repattr)
-{
-	int n_repattr = 0;
-
-	if (repattr != NULL) {
-		gfarm_error_t e;
-		gfarm_repattr_t *reps = NULL;
-		size_t nreps = 0;
-		int i;
-
-		e = gfarm_repattr_reduce(repattr, &reps, &nreps);
-		if (e == GFARM_ERR_NO_ERROR) {
-			for (i = 0; i < nreps; i++)
-				n_repattr += gfarm_repattr_amount(reps[i]);
-			gfarm_repattr_free_all(nreps, reps);
-		} else
-			VERB("gfarm_repattr_reduce(%s): %s",
-			    repattr, gfarm_error_string(e));
-	}
-	return (ncopy > n_repattr ? ncopy : n_repattr);
-}
-
 static gfarm_error_t
 count_replica(const char *url, int flags, int *np)
 {
@@ -389,65 +372,9 @@ count_replica(const char *url, int flags, int *np)
 }
 
 static gfarm_error_t
-count_incomplete(const char *url, int *np)
-{
-	return (count_replica(
-	    url, GFS_REPLICA_INFO_INCLUDING_INCOMPLETE_COPY, np));
-}
-
-static gfarm_error_t
 count_valid(const char *url, int *np)
 {
 	return (count_replica(url, 0, np));
-}
-
-static int
-count_writable_nodes(const char *root_url)
-{
-	gfarm_error_t e;
-	static char *cached_root_url = NULL;
-	static int cached_num = 0;
-	int available_nhosts, nhosts, *ports;
-	char **hosts;
-	struct gfarm_host_sched_info *available_hosts;
-
-	if (cached_root_url != NULL && strcmp(cached_root_url, root_url) == 0)
-		return (cached_num);
-
-	e = gfarm_schedule_hosts_domain_all(
-	    root_url, "",  &available_nhosts, &available_hosts);
-	if (e != GFARM_ERR_NO_ERROR) {
-		ERR("no available gfsd: %s", gfarm_error_string(e));
-		return (0);
-	}
-	nhosts = available_nhosts;
-	GFARM_MALLOC_ARRAY(hosts, nhosts);
-	GFARM_MALLOC_ARRAY(ports, nhosts);
-	if (hosts == NULL || ports == NULL) {
-		ERR("no memory");
-		nhosts = 0;
-		goto free_available_hosts;
-	}
-	e = gfarm_schedule_hosts_acyclic_to_write(
-	    root_url, available_nhosts, available_hosts,
-	    &nhosts, hosts, ports);
-	if (e != GFARM_ERR_NO_ERROR) {
-		ERR("gfarm_schedule_hosts_acyclic_to_write failed: %s",
-		    gfarm_error_string(e));
-		nhosts = 0;
-		goto free_hosts_ports;
-	}
-	cached_num = nhosts;
-	cached_root_url = strdup(root_url);
-	/* ignore: cached_root_url == NULL */
-
-free_hosts_ports:
-	free(hosts);
-	free(ports);
-free_available_hosts:
-	gfarm_host_sched_info_free(available_nhosts, available_hosts);
-
-	return (nhosts);
 }
 
 static void
@@ -455,18 +382,19 @@ print_replica_spec_main(int ncopy, const char *repattr)
 {
 	if (ncopy >= 0) {
 		if (opt_verb)
-			printf("%s=", XATTR_NCOPY);
+			printf("%s=", GFARM_EA_NCOPY);
 		printf("%d\n", ncopy);
 	}
 
 	if (repattr != NULL) {
 		if (opt_verb)
-			printf("%s=", XATTR_REPATTR);
+			printf("%s=", GFARM_EA_REPATTR);
 		printf("%s\n", repattr);
 	}
 }
 
-static int opt_timeout = 30; /* sec. */
+
+static time_t opt_timeout = 30; /* sec. */
 
 static gfarm_error_t
 wait_for_replication(
@@ -474,7 +402,10 @@ wait_for_replication(
 {
 	gfarm_error_t e;
 	char *repattr = NULL;
-	int ncopy, n_nodes, n_desire, req_ok, n_req, n_retry, n;
+	int ncopy;
+	gfarm_uint64_t *iflagsp = val, oflags;
+	struct timeval limit, now, t;
+	time_t timeout;
 
 	if (!GFARM_S_ISREG(st->st_mode)) {
 		VERB("%s: not a file (ignored)", url);
@@ -485,78 +416,50 @@ wait_for_replication(
 		return (GFARM_ERR_NO_ERROR);
 	}
 
-	e = get_replica_spec(url, root_url, &ncopy, &repattr);
-	if (e == GFARM_ERR_NO_SUCH_OBJECT) {
-		/* ignore: xattr is not set */
-		return (GFARM_ERR_NO_ERROR);
-	} else if (e != GFARM_ERR_NO_ERROR)
-		return (e);
+	if (opt_verb) {
+		e = get_replica_spec(url, root_url, &ncopy, &repattr);
+		if (e == GFARM_ERR_NO_SUCH_OBJECT) {
+			/* ignore: xattr is not set */
+			return (GFARM_ERR_NO_ERROR);
+		} else if (e != GFARM_ERR_NO_ERROR)
+			return (e);
 
-	if (opt_verb)
 		print_replica_spec_main(ncopy, repattr);
-
-	/*
-	 * This behavior depends on gfmd of Gfarm version 2.6 (since r8351).
-	 */
-	n_nodes = count_writable_nodes(root_url);
-	n_desire = max_ncopy_repattr(ncopy, repattr);
-	if (n_desire > n_nodes) {
-		VERB(
-		    "%s: the desired number of replicas "
-		    "is greater than the number of writable nodes: "
-		    "n_desire=%d, n_nodes=%d", url, n_desire, n_nodes);
-		n_desire = n_nodes;
+		free(repattr);
 	}
 
-	req_ok = 0;
-	n_req = 0;
-	n_retry = 0;
+	gettimeofday(&now, NULL);
+	limit = now;
+	limit.tv_sec += opt_timeout;
 	for (;;) {
-		if (req_ok == 0) {
-			/* check starting replication */
-			e = count_incomplete(url, &n);
-			if (e != GFARM_ERR_NO_ERROR) {
-				free(repattr);
-				return (e);
-			} else if (n >= n_desire) {
-				req_ok = 1;
-			} else {
-				if (n_req >= opt_timeout) {
-					ERR("%s: replication timeout", url);
-					e = GFARM_ERR_OPERATION_TIMED_OUT;
-					free(repattr);
-					return (e);
-				}
-				n_req++;
-				VERB("%s: waiting for requesting: "
-				    "retry=%d/%d, incomplete=%d/%d",
-				    url, n_req, opt_timeout, n, n_desire);
-				sleep(1);
-			}
-		} else {
-			/* wait complete replication */
-			e = count_valid(url, &n);
-			if (e != GFARM_ERR_NO_ERROR) {
-				free(repattr);
-				return (e);
-			} else if (n >= n_desire) {
-				VERB("%s: satisfied: valid=%d/%d",
-				    url, n, n_desire);
-				break;
-			}
-			if (n_retry >= 60) { /* 60 sec. */
-				req_ok = 0; /* check again */
-			} else {
-				n_retry++;
-				VERB("%s: waiting for replication: "
-				    "%d sec., valid=%d/%d",
-				    url, n_retry, n, n_desire);
-				sleep(1);
+		t = limit;
+		gfarm_timeval_sub(&t, &now);
+		timeout = t.tv_sec;
+		if (t.tv_usec != 0)
+			timeout++;
+
+		e = gfs_replica_fix(url, *iflagsp, timeout, &oflags);
+		if (e == GFARM_ERR_RESOURCE_TEMPORARILY_UNAVAILABLE) {
+			gettimeofday(&now, NULL);
+			now.tv_sec += SLEEP_TIME;
+			if (gfarm_timeval_cmp(&limit, &now) > 0) {
+				gfarm_sleep(SLEEP_TIME);
+				continue;
 			}
 		}
+		if (e != GFARM_ERR_NO_ERROR) {
+			fprintf(stderr, "%s: %s\n", url,
+			    gfarm_error_string(e));
+		}
+		if (oflags &
+		    GFM_PROTO_REPLICA_FIX_OFLAG_REPLICATION_SHORTAGE) {
+			fprintf(stderr, "%s: %s\n", url,
+			    "available filesystem node is not enough");
+			e = GFARM_ERR_NO_FILESYSTEM_NODE;
+		}
+		break;
 	}
-	free(repattr);
-	return (GFARM_ERR_NO_ERROR);
+	return (e);
 }
 
 static gfarm_error_t
@@ -682,11 +585,11 @@ set_ncopy(
 		return (GFARM_ERR_INVALID_ARGUMENT);
 	}
 
-	e = gfncopy_setxattr(url, XATTR_NCOPY, str, strlen(str), set_flags);
+	e = gfncopy_setxattr(url, GFARM_EA_NCOPY, str, strlen(str), set_flags);
 	if (e != GFARM_ERR_NO_ERROR) {
 		if (opt_verb)
 			ERR("%s: setxattr(%s): %s",
-			    url, XATTR_NCOPY, gfarm_error_string(e));
+			    url, GFARM_EA_NCOPY, gfarm_error_string(e));
 		else
 			fprintf(stderr, "%s\n", gfarm_error_string(e));
 	}
@@ -710,12 +613,12 @@ set_repattr(
 		return (GFARM_ERR_INVALID_ARGUMENT);
 	}
 
-	e = gfncopy_setxattr(url, XATTR_REPATTR, repattr,
+	e = gfncopy_setxattr(url, GFARM_EA_REPATTR, repattr,
 	    strlen(repattr) + 1, set_flags);
 	if (e != GFARM_ERR_NO_ERROR) {
 		if (opt_verb)
 			ERR("%s: setxattr(%s): %s",
-			    url, XATTR_REPATTR, gfarm_error_string(e));
+			    url, GFARM_EA_REPATTR, gfarm_error_string(e));
 		else
 			fprintf(stderr, "%s\n", gfarm_error_string(e));
 	}
@@ -738,23 +641,23 @@ remove_replica_spec(
 		return (GFARM_ERR_INVALID_ARGUMENT);
 	}
 
-	e = gfncopy_removexattr(url, XATTR_NCOPY);
+	e = gfncopy_removexattr(url, GFARM_EA_NCOPY);
 	if (e == GFARM_ERR_NO_SUCH_OBJECT) {
 		VERB("%s: removexattr %s: %s",
-		    url, XATTR_NCOPY, gfarm_error_string(e));
+		    url, GFARM_EA_NCOPY, gfarm_error_string(e));
 		e = GFARM_ERR_NO_ERROR;
 	} else if (e != GFARM_ERR_NO_ERROR)
 		ERR("%s: removexattr(%s): %s",
-		    url, XATTR_NCOPY, gfarm_error_string(e));
+		    url, GFARM_EA_NCOPY, gfarm_error_string(e));
 
-	e2 = gfncopy_removexattr(url, XATTR_REPATTR);
+	e2 = gfncopy_removexattr(url, GFARM_EA_REPATTR);
 	if (e2 == GFARM_ERR_NO_SUCH_OBJECT) {
 		VERB("%s: removexattr %s: %s",
-		    url, XATTR_REPATTR, gfarm_error_string(e2));
+		    url, GFARM_EA_REPATTR, gfarm_error_string(e2));
 		e2 = GFARM_ERR_NO_ERROR;
 	} else if (e2 != GFARM_ERR_NO_ERROR)
 		ERR("%s: removexattr(%s): %s",
-		    url, XATTR_REPATTR, gfarm_error_string(e2));
+		    url, GFARM_EA_REPATTR, gfarm_error_string(e2));
 
 	return (e == GFARM_ERR_NO_ERROR ? e2 : e);
 }
@@ -834,10 +737,9 @@ handle_arg1(
 	gfncopy_func func,
 	int argc, char **argv, int enable_recursive, int file_only, void *val)
 {
-	if (argc != 1) {
+	if (argc != 1)
 		usage();
-		return (1);
-	}
+
 	return (do_func(func, argv[0], enable_recursive, file_only, val));
 }
 
@@ -848,10 +750,8 @@ handle_args(
 {
 	gfarm_int64_t n_error = 0;
 
-	if (argc <= 0) {
+	if (argc <= 0)
 		usage();
-		return (1);
-	}
 
 	while (argc > 0) {
 		n_error += do_func(
@@ -875,6 +775,7 @@ main(int argc, char **argv)
 	gfarm_error_t e;
 	int c, opt_nofollow = 0;
 	gfarm_int64_t n_error = 0;
+	gfarm_uint64_t fix_flags = 0;
 	char *repattr = NULL, *ncopy_str = NULL;
 
 	if (argc > 0)
@@ -886,7 +787,7 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
-	while ((c = getopt(argc, argv, "s:S:CMrcwt:vh?")) != -1) {
+	while ((c = getopt(argc, argv, "s:S:CMrckwt:vh?")) != -1) {
 		switch (c) {
 		case 's':
 			if (opt_mode != MODE_NONE)
@@ -901,16 +802,14 @@ main(int argc, char **argv)
 			repattr = optarg;
 			break;
 		case 'C':
-			if (set_flags == 0)
-				set_flags = GFS_XATTR_CREATE;
-			else
+			if (set_flags != 0)
 				usage();
+			set_flags = GFS_XATTR_CREATE;
 			break;
 		case 'M':
-			if (set_flags == 0)
-				set_flags = GFS_XATTR_REPLACE;
-			else
+			if (set_flags != 0)
 				usage();
+			set_flags = GFS_XATTR_REPLACE;
 			break;
 		case 'r':
 			if (opt_mode != MODE_NONE)
@@ -922,10 +821,19 @@ main(int argc, char **argv)
 				usage();
 			opt_mode = MODE_COUNT;
 			break;
-		case 'w':
-			if (opt_mode != MODE_NONE)
+		case 'k': /* kick */
+			if (opt_mode != MODE_NONE && opt_mode != MODE_WAIT)
 				usage();
 			opt_mode = MODE_WAIT;
+			fix_flags |=
+			    GFM_PROTO_REPLICA_FIX_IFLAG_REPLICATION_REQUEST;
+			break;
+		case 'w':
+			if (opt_mode != MODE_NONE && opt_mode != MODE_WAIT)
+				usage();
+			opt_mode = MODE_WAIT;
+			fix_flags |=
+			    GFM_PROTO_REPLICA_FIX_IFLAG_REPLICATION_WAIT;
 			break;
 		case 't':
 			opt_timeout = atoi(optarg);
@@ -948,8 +856,8 @@ main(int argc, char **argv)
 		opt_mode = MODE_GET;
 
 	gfs_stat_cache_enable(1);
-	gfarm_xattr_caching_pattern_add(XATTR_NCOPY);
-	gfarm_xattr_caching_pattern_add(XATTR_REPATTR);
+	gfarm_xattr_caching_pattern_add(GFARM_EA_NCOPY);
+	gfarm_xattr_caching_pattern_add(GFARM_EA_REPATTR);
 
 	if (opt_nofollow || opt_mode == MODE_WAIT) {
 		gfncopy_stat = gfs_lstat_cached;
@@ -984,11 +892,10 @@ main(int argc, char **argv)
 		break;
 	case MODE_WAIT:
 		n_error += handle_args(
-		    wait_for_replication, argc, argv, 1, 1, NULL);
+		    wait_for_replication, argc, argv, 1, 1, &fix_flags);
 		break;
 	default:
 		usage();
-		exit(1);
 	}
 
 	e = gfarm_terminate();

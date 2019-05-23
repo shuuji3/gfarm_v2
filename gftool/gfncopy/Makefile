@@ -22,9 +22,11 @@ include $(top_srcdir)/makes/subdir.mk
 ###
 
 $(OBJS): $(DEPGFARMINC) \
+	$(GFUTIL_SRCDIR)/hash.h \
 	$(GFARMLIB_SRCDIR)/gfarm_foreach.h \
 	$(GFARMLIB_SRCDIR)/gfarm_path.h \
+	$(GFARMLIB_SRCDIR)/fsngroup_info.h \
 	$(GFARMLIB_SRCDIR)/gfm_client.h \
 	$(GFARMLIB_SRCDIR)/lookup.h \
 	$(GFARMLIB_SRCDIR)/metadb_server.h \
-	$(GFARMLIB_SRCDIR)/repattr.h
+	$(GFARMLIB_SRCDIR)/gfs_replica_fix.h

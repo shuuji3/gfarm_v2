@@ -17,12 +17,15 @@
 struct callout {
 	struct callout *prev, *next;
 
+	struct timespec target_time;
+
 #define CALLOUT_PENDING		1
 #define CALLOUT_FIRED		2
 #define CALLOUT_INVOKING	4
 	int state;
 
-	struct timespec target_time;
+	pthread_cond_t callout_completed;
+	int halting;
 
 	struct thread_pool *thrpool;
 	void *(*func)(void *);
@@ -53,36 +56,65 @@ timespec_cmp(const struct timespec *t1, const struct timespec *t2)
 	return (0);
 }
 
+static void
+callout_ack(struct callout *c)
+{
+	struct callout_module *cm = &callout_module;
+
+	gfarm_mutex_lock(&cm->mutex, module_name, "ack lock");
+	c->state &= ~CALLOUT_INVOKING;
+	if (c->halting > 0)
+		gfarm_cond_broadcast(&c->callout_completed,
+		    module_name, "ack");
+	gfarm_mutex_unlock(&cm->mutex, module_name, "ack unlock");
+}
+
+static void *
+callout_trampoline(void *arg)
+{
+	struct callout_module *cm = &callout_module;
+	struct callout *c = arg;
+	void *(*func)(void *);
+	void *closure;
+
+	gfarm_mutex_lock(&cm->mutex, module_name, "trampoline lock");
+	func = c->func;
+	closure = c->closure;
+	gfarm_mutex_unlock(&cm->mutex, module_name, "trampoline unlock");
+
+	(*func)(closure);
+
+	callout_ack(c);
+	return (NULL);
+}
+
 void *
 callout_main(void *arg)
 {
 	struct callout_module *cm = arg;
 	struct callout *c;
 	struct thread_pool *thrpool;
-	void *(*func)(void *);
-	void *closure;
 	int rv;
-	struct timespec now;
+	struct timespec now, target;
 
-#ifdef __GNUC__ /* shut up stupid warning by gcc */
-	thrpool = NULL;
-	closure = NULL;
-#endif
 	for (;;) {
 		gfarm_mutex_lock(&cm->mutex, module_name, "main lock");
 		c = cm->pendings.next;
-		if (c == &cm->pendings)
+		if (c == &cm->pendings) {
 			rv = pthread_cond_wait(&cm->have_things_to_run,
 			    &cm->mutex);
-		else
+		} else {
+			/* c may be freed during pthread_cond_timedwait() */
+			target = c->target_time; /* so copy it */
 			rv = pthread_cond_timedwait(&cm->have_things_to_run,
-			    &cm->mutex, &c->target_time);
+			    &cm->mutex, &target);
+		}
 		if (rv != 0 && rv != ETIMEDOUT) {
 			gflog_fatal(GFARM_MSG_1001490, "s: %s cond wait: %s",
 			    module_name, strerror(rv));
 		}
 
-		func = NULL;
+		thrpool = NULL;
 
 		/* cm->pendings may be changed while cond_wait */
 		c = cm->pendings.next;
@@ -98,23 +130,13 @@ callout_main(void *arg)
 				c->state &= ~CALLOUT_PENDING;
 				c->state |= (CALLOUT_FIRED | CALLOUT_INVOKING);
 				thrpool = c->thrpool;
-				func = c->func;
-				closure = c->closure;
 			}
 		}
 		gfarm_mutex_unlock(&cm->mutex, module_name, "main lock");
 
-		if (func != NULL) {
-			if (thrpool == NULL)
-				(*func)(closure);
-			else
-				thrpool_add_job(thrpool, func, closure);
-		}
+		if (thrpool != NULL)
+			thrpool_add_job(thrpool, callout_trampoline, c);
 	}
-#ifdef __GNUC__ /* shut up stupid warning by gcc */
-	/*NOTREACHED*/
-	return (NULL);
-#endif
 }
 
 /* This function is equivalent to callout_startup(9) */
@@ -151,6 +173,8 @@ callout_new(void)
 	c->prev = c;
 	c->next = c;
 	c->state = 0;
+	gfarm_cond_init(&c->callout_completed, module_name, "new");
+	c->halting = 0;
 	c->func = NULL;
 	c->closure = NULL;
 	return (c);
@@ -164,7 +188,8 @@ callout_new(void)
 void
 callout_free(struct callout *c)
 {
-	assert((c->state & CALLOUT_PENDING) == 0);
+	assert((c->state & (CALLOUT_PENDING|CALLOUT_INVOKING)) == 0);
+	gfarm_cond_destroy(&c->callout_completed, module_name, "free");
 	free(c);
 }
 
@@ -190,11 +215,10 @@ callout_schedule_common(struct callout *n, int microseconds)
 	}
 
 	/*
-	 * Since currently all callouts are scheduled with same interval
-	 * (i.e. gfarm_metadb_heartbeat_interval), searching from the tail
-	 * is most efficient.
-	 * XXX If we use another interval for something, this implementation
-	 * should be changed to use buckets for efficiency.
+	 * searching from the tail.
+	 *
+	 * XXX this implementation should be changed to use buckets
+	 * for efficiency.
 	 */
 	for (c = cm->pendings.prev; c != &cm->pendings;
 	     c = c->prev) {
@@ -222,7 +246,6 @@ callout_schedule(struct callout *c, int microseconds)
 	gfarm_mutex_unlock(&cm->mutex, module_name, "schedule unlock");
 }
 
-/* if thrpool == NULL, use the callout_main thread to call the func. */
 void
 callout_reset(struct callout *c, int microseconds,
 	struct thread_pool *thrpool, void *(*func)(void *), void *closure)
@@ -237,7 +260,6 @@ callout_reset(struct callout *c, int microseconds,
 	gfarm_mutex_unlock(&cm->mutex, module_name, "reset unlock");
 }
 
-/* if thrpool == NULL, use the callout_main thread to call the func. */
 void
 callout_setfunc(struct callout *c,
 	struct thread_pool *thrpool, void *(*func)(void *), void *closure)
@@ -272,6 +294,43 @@ callout_stop(struct callout *c)
 	return (expired);
 }
 
+int
+callout_halt(struct callout *c, pthread_mutex_t *interlock)
+{
+	struct callout_module *cm = &callout_module;
+	int expired;
+
+	gfarm_mutex_lock(&cm->mutex, module_name, "halt lock");
+	if ((c->state & CALLOUT_PENDING) != 0) {
+		/* remove the head of the list */
+		c->prev->next = c->next;
+		c->next->prev = c->prev;
+		/* clear the pointers to be sure */
+		c->next = c;
+		c->prev = c;
+	}
+	expired = (c->state & CALLOUT_FIRED) != 0;
+	c->state &= ~(CALLOUT_PENDING | CALLOUT_FIRED);
+
+	if ((c->state & CALLOUT_INVOKING) != 0) {
+		if (interlock != NULL)
+			gfarm_mutex_unlock(interlock,
+			    module_name, "interlock unlock");
+		while ((c->state & CALLOUT_INVOKING) != 0) {
+			++c->halting;
+			gfarm_cond_wait(&c->callout_completed, &cm->mutex,
+			    module_name, "waiting for completion");
+			--c->halting;
+		}
+		if (interlock != NULL)
+			gfarm_mutex_lock(interlock,
+			    module_name, "interlock lock");
+	}
+
+	gfarm_mutex_unlock(&cm->mutex, module_name, "halt unlock");
+	return (expired);
+}
+
 #ifdef NOT_USED
 int
 callout_invoking(struct callout *c)
@@ -283,15 +342,5 @@ callout_invoking(struct callout *c)
 	invoking = (c->state & CALLOUT_INVOKING) != 0;
 	gfarm_mutex_unlock(&cm->mutex, module_name, "invoking unlock");
 	return (invoking);
-}
-
-void
-callout_ack(struct callout *c)
-{
-	struct callout_module *cm = &callout_module;
-
-	gfarm_mutex_lock(&cm->mutex, module_name, "ack lock");
-	c->state &= ~CALLOUT_INVOKING;
-	gfarm_mutex_unlock(&cm->mutex, module_name, "ack unlock");
 }
 #endif /* NOT_USED */
