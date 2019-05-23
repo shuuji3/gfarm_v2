@@ -1,0 +1,356 @@
+fq_hostname()
+{
+	hostname -f
+}
+
+dns_domainname()
+{
+	dnsdomainname
+}
+
+memory_size()
+{
+	# kilo bytes -> mega bytes
+	awk '$1 == "MemTotal:" {print int($2/1024)}' /proc/meminfo
+}
+
+number_of_cpus()
+{
+	grep "^processor" /proc/cpuinfo | wc | awk '{ print $1 }'
+}
+
+set_linux_rc_type()
+{
+	if [ -n "${LINUX_RC_TYPE-}" ]; then
+		return
+	fi
+
+	# if [ -x /sbin/rc-update ] || [ -x /usr/sbin/rc-update ]; then
+	#	LINUX_RC_TYPE=gentoo; return
+	if [ -x /bin/systemctl ]; then
+		#
+		# RHEL 7 adopts 'systemd'.  The legacy rc script framework
+		# and commands such as '/sbin/chkconfig' are still available
+		# for backward compatibility, but it cannot work correctly
+		# in case of the private mode.
+		#
+		if [ X"$CONFIG_PREFIX" = X ]; then
+			LINUX_RC_TYPE=systemd
+		else
+			LINUX_RC_TYPE=default
+		fi
+	elif [ -x /sbin/update-rc.d -o -x /usr/sbin/update-rc.d ]; then
+		LINUX_RC_TYPE=debian; return
+	elif [ -x /sbin/chkconfig -o -x /usr/sbin/chkconfig ] &&
+	     [ -x /sbin/service -o -x /usr/sbin/service ] &&
+	     [ -f /etc/rc.d/init.d/functions ]; then
+		LINUX_RC_TYPE=redhat
+	elif [ -x /sbin/chkconfig -o -x /usr/sbin/chkconfig ] &&
+	     [ -f /etc/rc.status ]; then
+		LINUX_RC_TYPE=suse
+	else
+		LINUX_RC_TYPE=default
+	fi
+}
+
+sysdep_defaults_systemd()
+{
+	: ${RC_DIR:="/etc/systemd/system"}
+	: ${SLAPD_BDB_NCACHE:="1"} # 0/1: contiguous memory
+
+	: ${RC_BACKEND_IN="$config_dir/linux/$LINUX_RC_TYPE/$RC_BACKEND_BASENAME.service.in"}
+	: ${RC_GFMD_IN="$config_dir/linux/$LINUX_RC_TYPE/gfmd.service.in"}
+	: ${RC_AGENT_IN="$config_dir/linux/$LINUX_RC_TYPE/gfarm_agent.service.in"}
+	: ${RC_GFSD_IN="$config_dir/linux/$LINUX_RC_TYPE/gfsd.service.in"}
+
+	: ${RC_BACKEND="/etc/systemd/system/$RC_BACKEND_BASENAME.service"}
+	: ${RC_GFMD="/etc/systemd/system/gfmd.service"}
+	: ${RC_AGENT="/etc/systemd/system/gfarm_agent.service"}
+	: ${RC_GFSD="/etc/systemd/system/$GFSD_SERVICE_NAME.service"}
+}
+
+sysdep_defaults_generic()
+{
+	# Actual pathname may be /etc/rc.d/init.d on RedHat and derived,
+	# but there is always symbolic link from /etc/init.d to there.
+	: ${RC_DIR:="$CONFIG_PREFIX/etc/init.d"}
+	: ${SLAPD_BDB_NCACHE:="1"} # 0/1: contiguous memory
+
+	case $LINUX_RC_TYPE in
+	debian)	if [ -f /etc/ldap/schema/core.schema ]; then
+			: ${OPENLDAP_ETC:=/etc/ldap}
+		fi
+		;;
+	redhat)	: ${RC_LOCK_DIR:="$CONFIG_PREFIX/var/lock/subsys"}
+		;;
+	esac
+
+	: ${RC_BACKEND_IN="$config_dir/linux/$LINUX_RC_TYPE/$RC_BACKEND_BASENAME.in"}
+	: ${RC_GFMD_IN="$config_dir/linux/$LINUX_RC_TYPE/gfmd.in"}
+
+	: ${RC_AGENT_IN="$config_dir/linux/$LINUX_RC_TYPE/gfarm_agent.in"}
+
+	: ${RC_GFSD_IN="$config_dir/linux/$LINUX_RC_TYPE/gfsd.in"}
+
+	if [ ! -f "$RC_BACKEND_IN" ]; then
+		RC_BACKEND_IN="$config_dir/linux/default/$RC_BACKEND_BASENAME.in"
+	fi
+	if [ ! -f "$RC_GFMD_IN" ]; then
+		RC_GFMD_IN="$config_dir/linux/default/gfmd.in"
+	fi
+	if [ ! -f "$RC_AGENT_IN" ]; then
+		RC_AGENT_IN="$config_dir/linux/default/gfarm_agent.in"
+	fi
+	if [ ! -f "$RC_GFSD_IN" ]; then
+		RC_GFSD_IN="$config_dir/linux/default/gfsd.in"
+	fi
+}
+
+sysdep_defaults()
+{
+	set_linux_rc_type
+
+	case $LINUX_RC_TYPE in
+	systemd)
+		sysdep_defaults_systemd;;
+	*)	sysdep_defaults_generic;;
+	esac
+}
+
+config_sysdep()
+{
+	case $LINUX_RC_TYPE in
+	redhat)	sed -e "s|@config_gfarm_lock_dir@|$RC_LOCK_DIR|" ${1+"$@"}
+		;;
+	*)	# no conversion
+		cat ${1+"$@"}
+		;;
+	esac
+}
+
+mkcnf_gfarm_sysdep()
+{
+	case $LINUX_RC_TYPE in
+	redhat)	create_directory "${RC_LOCK_DIR}"
+		;;
+	esac
+}
+
+mkcnf_gfmd_sysdep()
+{
+	mkcnf_gfarm_sysdep
+}
+
+mkcnf_gfsd_sysdep()
+{
+	mkcnf_gfarm_sysdep
+}
+
+service_add_debian()
+{
+	# local service
+
+	service=$1
+	if [ -w / -a X"$CONFIG_PREFIX" = X ]; then
+		update-rc.d $service defaults >/dev/null ||
+			ABORT "cannot add "$service" service"
+		echo added "$service" service
+	else
+		echo add "$service" service: skipped
+	fi
+}
+
+service_add_by_chkconfig()
+{
+	# local service
+
+	service=$1
+
+	if [ -w / -a X"$CONFIG_PREFIX" = X ]; then
+		chkconfig "$service" --add ||
+			ABORT "cannot add $service service"
+		echo added "$service" service
+	else
+		echo add "$service" service: skipped
+	fi
+}
+
+service_add_by_systemd()
+{
+	# local service
+
+	service=$1.service
+
+	if [ -w / -a X"$CONFIG_PREFIX" = X ]; then
+		systemctl enable "$service" ||
+			ABORT "cannot enable $service"
+		echo enabled "$service"
+	else
+		echo enable "$service": skipped
+	fi
+}
+
+service_add_default()
+{
+	# local service
+
+	service=$1
+
+	if [ -w / -a X"$CONFIG_PREFIX" = X ]; then
+		echo how to add "$service" service is unknown: skipped
+	else
+		echo add "$service" service: skipped
+	fi
+}
+
+service_ctl_debian()
+{
+	# local service ctl
+
+	run_or_echo=
+	if [ X"$1" = X-n ]; then
+		run_or_echo=echo
+		shift
+	fi
+
+	service=$1
+	ctl=$2
+	shift 2
+
+	if [ -w / -a X"$CONFIG_PREFIX" = X \
+			-a -x "`which invoke-rc.d 2>/dev/null`" ]; then
+		$run_or_echo invoke-rc.d $service $ctl ${1+"$@"}
+	else
+		$run_or_echo "$RC_DIR/$service" $ctl ${1+"$@"}
+	fi || ABORT "cannot $ctl $service $@"
+}
+
+service_ctl_redhat()
+{
+	# local service ctl
+
+	run_or_echo=
+	if [ X"$1" = X-n ]; then
+		run_or_echo=echo
+		shift
+	fi
+
+	service=$1
+	ctl=$2
+	shift 2
+
+	if [ -w / -a X"$CONFIG_PREFIX" = X ]; then
+		$run_or_echo service "$service" $ctl ${1+"$@"}
+	else
+		$run_or_echo "$RC_DIR/$service" $ctl ${1+"$@"}
+	fi || ABORT "cannot $ctl $service $@"
+}
+
+service_ctl_systemd()
+{
+	# local service ctl
+
+	run_or_echo=
+	if [ X"$1" = X-n ]; then
+		run_or_echo=echo
+		shift
+	fi
+
+	service=$1.service
+	ctl=$2
+	shift 2
+
+	if [ -w / -a X"$CONFIG_PREFIX" = X ]; then
+		$run_or_echo systemctl $ctl "$service"
+	else
+		$run_or_echo "$RC_DIR/$service" $ctl ${1+"$@"}
+	fi || ABORT "cannot $ctl $service $@"
+}
+
+service_ctl_default()
+{
+	# local service ctl
+
+	run_or_echo=
+	if [ X"$1" = X-n ]; then
+		run_or_echo=echo
+		shift
+	fi
+
+	service=$1
+	ctl=$2
+	shift 2
+
+	$run_or_echo "$RC_DIR/$service" $ctl ${1+"$@"} ||
+		ABORT "cannot $ctl $service $@"
+}
+
+service_reg()
+{
+	run_or_echo=
+	if [ X"$1" = X-n ]; then
+		run_or_echo=echo
+		shift
+	fi
+
+	case $LINUX_RC_TYPE in
+	systemd)
+		$run_or_echo systemctl daemon-reload ||
+			ABORT "systemctl daemon-reload: failed"
+		;;
+	esac
+}
+
+service_add()
+{
+	case $LINUX_RC_TYPE in
+	debian)	service_add_debian $1;;
+	redhat)	service_add_by_chkconfig $1;;
+	suse)	service_add_by_chkconfig $1;;
+	systemd)
+		service_add_by_systemd $1;;
+	*)	service_add_default $1;;
+	esac
+}
+
+service_remove()
+{
+	case $LINUX_RC_TYPE in
+	systemd)
+		opt=
+		if [ X"$1" = X-n ]; then
+			opt="-n"
+			shift
+		fi
+
+		service=$1
+		shift
+
+		service_ctl_systemd $opt $service disable ${1+"$@"} ||
+			ABORT "service_ctl_systemd $opt $service disable ${1+"$@"}: failed"
+		;;
+	esac
+}
+
+service_ctl()
+{
+	case $LINUX_RC_TYPE in
+	debian)	service_ctl_debian ${1+"$@"};;
+	redhat)	service_ctl_redhat ${1+"$@"};;
+	suse)	service_ctl_default ${1+"$@"};;
+	systemd)
+		service_ctl_systemd ${1+"$@"};;
+	*)	service_ctl_default ${1+"$@"};;
+	esac
+}
+
+create_run_script()
+{
+
+	mkcnf ${1+"$@"}
+	case $LINUX_RC_TYPE in
+	systemd)
+		chmod 0644 "$1" || ABORT "cannot chmod 0644 $1";;
+	*)	chmod +x "$1" || ABORT "cannot chmod +x $1";;
+	esac
+}

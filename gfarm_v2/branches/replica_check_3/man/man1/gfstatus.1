@@ -1,0 +1,126 @@
+'\" t
+.\"     Title: gfstatus
+.\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
+.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
+.\"      Date: 24 Oct 2018
+.\"    Manual: Gfarm
+.\"    Source: Gfarm
+.\"  Language: English
+.\"
+.TH "GFSTATUS" "1" "24 Oct 2018" "Gfarm" "Gfarm"
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+gfstatus \- display Gfarm configuration status
+.SH "SYNOPSIS"
+.HP \w'\fBgfstatus\fR\ 'u
+\fBgfstatus\fR [\-P\ \fIpath\fR] [\-d]
+.HP \w'\fBgfstatus\fR\ 'u
+\fBgfstatus\fR [\-P\ \fIpath\fR] [\-d | \-M] [\-l | \-L]
+.HP \w'\fBgfstatus\fR\ 'u
+\fBgfstatus\fR [\-P\ \fIpath\fR] [\-d | \-M] \fIconfiguration_name\fR...
+.HP \w'\fBgfstatus\fR\ 'u
+\fBgfstatus\fR \-Mm [\-P\ \fIpath\fR] [\-d] \fIconfiguration_directive\fR...
+.HP \w'\fBgfstatus\fR\ 'u
+\fBgfstatus\fR \-V
+.SH "DESCRIPTION"
+.PP
+When no argument is specified, and neither \-l nor \-L option is specified,
+\fBgfstatus\fR
+displays information about the Gfarm file system\&.
+.PP
+When \-l option is specified, configuration names are listed\&. When \-L option is specified, configuration names and their values are listed\&. Both \-l and \-L options can be combined with the \-M option to choose whether gfmd configuration or client configuration is listed\&. NOTE: Currently, only limited set of configuration names can be listed\&.\&.
+.PP
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	$ gfstatus \-L
+	$ gfstatus \-LM
+.fi
+.if n \{\
+.RE
+.\}
+.PP
+When any configuration name is specified as an argument,
+\fBgfstatus\fR
+displays the current setting of the configuration\&. If \-M option is specified, it asks gfmd about the setting, otherwise it displays the setting on localhost\&. NOTE: Currently, only limited set of configuration names can be specified\&.
+.PP
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	$ gfstatus \-M digest
+.fi
+.if n \{\
+.RE
+.\}
+.PP
+When \-Mm option is specified, the
+\fBgfstatus\fR
+command treats its arguments as configuration directives which are same syntax with gfarm2\&.conf, and modifies the setting on gfmd\&. NOTE: Currently, only limited set of directives can be specified\&.
+.PP
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+	$ gfstatus \-Mm \'digest sha1\'
+.fi
+.if n \{\
+.RE
+.\}
+.SH "OPTIONS"
+.PP
+\fB\-d\fR
+.RS 4
+Displays debug messages\&.
+.RE
+.PP
+\fB\-l\fR
+.RS 4
+Lists configuration names\&. This option can be used with the \-M option\&.
+.RE
+.PP
+\fB\-l\fR
+.RS 4
+Lists configuration names and their values\&. This option can be used with the \-M option\&.
+.RE
+.PP
+\fB\-m\fR
+.RS 4
+Modifies configuration setting\&. This option should be used with the \-M option\&.
+.RE
+.PP
+\fB\-M\fR
+.RS 4
+Performs specified operation against gfmd\&.
+.RE
+.PP
+\fB\-P\fR \fIpath\fR
+.RS 4
+Specifies a path name to specify a metadata server instead of the root metadata server\&.
+.RE
+.PP
+\fB\-V\fR
+.RS 4
+Displays Gfarm version\&.
+.RE
+.PP
+\fB\-?\fR
+.RS 4
+Displays a list of command options\&.
+.RE

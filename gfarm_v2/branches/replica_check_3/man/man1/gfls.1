@@ -1,0 +1,117 @@
+'\" t
+.\"     Title: gfls
+.\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
+.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
+.\"      Date: 11 Nov 2016
+.\"    Manual: Gfarm
+.\"    Source: Gfarm
+.\"  Language: English
+.\"
+.TH "GFLS" "1" "11 Nov 2016" "Gfarm" "Gfarm"
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+gfls \- list contents of Gfarm directory
+.SH "SYNOPSIS"
+.HP \w'\fBgfls\fR\ 'u
+\fBgfls\fR [\fIoptions\fR] [\fIpath\fR...]
+.SH "DESCRIPTION"
+.PP
+List information of files or contents of directories specified by
+\fIpath\fR\&.
+.SH "OPTIONS"
+.PP
+\fB\-a\fR
+.RS 4
+Do not hide entries starting with ``\&.\'\'\&.
+.RE
+.PP
+\fB\-A\fR
+.RS 4
+Do not list ``\&.\'\' and ``\&.\&.\'\'\&.
+.RE
+.PP
+\fB\-C\fR
+.RS 4
+Multi\-column output\&. This is the default output format\&.
+.RE
+.PP
+\fB\-D\fR
+.RS 4
+Display dirset name of the directory quota feature\&.
+.RE
+.PP
+\fB\-d\fR
+.RS 4
+List directory entries instead of the contents\&.
+.RE
+.PP
+\fB\-E\fR \fIseconds\fR
+.RS 4
+Specifies seconds to hold attribute cache\&. If 0 is specified, attributes won\'t be cached\&.
+.RE
+.PP
+\fB\-F\fR
+.RS 4
+Append indicator (one of */=@|) to entries\&.
+.RE
+.PP
+\fB\-h\fR
+.RS 4
+Display numbers in human readable format by adding a prefix multiplier symbol like "M" (mega)\&. Since this option uses powers of 1024, "M" means 1,048,576\&.
+.RE
+.PP
+\fB\-i\fR
+.RS 4
+Display inode number\&.
+.RE
+.PP
+\fB\-l\fR
+.RS 4
+List in long format, including mode, owner, group, size in bytes, time of last modification for each file\&.
+.RE
+.PP
+\fB\-r\fR
+.RS 4
+Reverse the order while sorting\&.
+.RE
+.PP
+\fB\-R\fR
+.RS 4
+Recursively lists subdirectories encountered\&.
+.RE
+.PP
+\fB\-S\fR
+.RS 4
+Sort by file size\&.
+.RE
+.PP
+\fB\-t\fR
+.RS 4
+Sort by time stamp instead of by name\&.
+.RE
+.PP
+\fB\-T\fR
+.RS 4
+With the
+\fB\-l\fR
+option, show complete date format\&.
+.RE
+.PP
+\fB\-1\fR
+.RS 4
+Prints one entry per line of output\&.
+.RE
+.PP
+\fB\-?\fR
+.RS 4
+displays a list of command options\&.
+.RE
